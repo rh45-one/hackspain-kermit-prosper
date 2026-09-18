@@ -119,7 +119,6 @@
   }
   html {
     color-scheme: light;
-    scroll-behavior: smooth;
   }
   body {
     @apply bg-background font-sans text-graphite antialiased;

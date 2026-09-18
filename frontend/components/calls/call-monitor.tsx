@@ -7,7 +7,6 @@ import { useFrontdesk } from "@/components/frontdesk-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { ObservatoryCharts } from "@/components/metrics/observatory-charts";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { CALL_CAPACITY, type LiveCall, type TurnState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -39,10 +38,14 @@ function CallCard({
   call: LiveCall;
   onHandover: (callId: string) => void;
 }) {
-  const bottom = useRef<HTMLDivElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
+    const scroller = transcriptRef.current;
+    if (!scroller) {
+      return;
+    }
+    scroller.scrollTop = scroller.scrollHeight;
   }, [call.transcript.length]);
 
   const ended = call.status === "ended";
@@ -71,7 +74,10 @@ function CallCard({
           <TurnMark turn={call.turn} />
         )}
       </div>
-      <ScrollArea className="h-44 rounded-[10px] border border-mist/80 bg-fog p-3">
+      <div
+        ref={transcriptRef}
+        className="h-44 overflow-y-auto rounded-[10px] border border-mist/80 bg-fog p-3"
+      >
         <div className="space-y-2">
           {call.transcript.length === 0 ? (
             <p className="text-[13px] text-quiet">Esperando audio…</p>
@@ -93,9 +99,8 @@ function CallCard({
               </p>
             ))
           )}
-          <div ref={bottom} />
         </div>
-      </ScrollArea>
+      </div>
       <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 text-[12px] sm:grid-cols-3">
         <div>
           <dt className="text-quiet">Nombre</dt>
