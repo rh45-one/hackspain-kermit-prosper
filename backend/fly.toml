@@ -1,0 +1,36 @@
+# fly.toml — Prosper voice agent. One machine, Madrid, always on.
+#
+# Always on is deliberate: a scale-to-zero cold start on this image is several
+# seconds of import time, and the first inbound call of the demo would be the
+# one that pays it.
+app = "prosper-clinicreflow"
+primary_region = "mad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATA_DIR = "/data"
+  PORT = "8080"
+  LOG_LEVEL = "INFO"
+  CALLER_TZ = "Europe/Madrid"
+
+[[mounts]]
+  source = "prosper_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  # One machine owns the volume and the in-process call state; never two.
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

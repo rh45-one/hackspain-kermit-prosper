@@ -69,7 +69,7 @@ async def index() -> str:
 @app.get("/ops/api/calls")
 async def calls() -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
-    for path in sorted(Path(settings.calls_dir).glob("*.jsonl"), reverse=True)[:30]:
+    for path in sorted(Path(settings().calls_dir).glob("*.jsonl"), reverse=True)[:30]:
         actions = 0
         for line in path.read_text(encoding="utf-8").splitlines():
             try:
@@ -83,7 +83,7 @@ async def calls() -> list[dict[str, object]]:
 
 @app.get("/ops/api/calls/{call_id}")
 async def call_detail(call_id: str) -> list[dict[str, object]]:
-    path = Path(settings.calls_dir) / f"{call_id}.jsonl"
+    path = Path(settings().calls_dir) / f"{call_id}.jsonl"
     if not path.exists():
         raise HTTPException(404, "call not found")
     events = []
@@ -98,16 +98,17 @@ async def call_detail(call_id: str) -> list[dict[str, object]]:
 @app.get("/ops/api/reflow")
 async def reflow() -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
-    rdir = Path(settings.data_dir) / "reflow"
+    rdir = Path(settings().data_dir) / "reflow"
     if not rdir.exists():
         return out
     for batch_path in sorted(rdir.glob("*.json")):
         batch = json.loads(batch_path.read_text(encoding="utf-8"))
+        appointments = []
         for appt in batch.get("appointments", []):
             decision = None
             dpath = rdir / batch_path.stem / f"{appt['appointment_id']}.json"
             if dpath.exists():
                 decision = json.loads(dpath.read_text(encoding="utf-8"))
-            appt = {**appt, "decision": decision}
-        out.append(batch)
+            appointments.append({**appt, "decision": decision})
+        out.append({**batch, "appointments": appointments})
     return out

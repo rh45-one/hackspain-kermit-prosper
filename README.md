@@ -43,6 +43,19 @@ make -C backend run
 make -C backend ops
 ```
 
+## Deploying
+
+One public host serves everything: `wss://<host>/ws` for the harness and
+`https://<host>/ops` for the jury, from a single process
+(`agent.serve`) on a single port. See [`docs/deployment.md`](docs/deployment.md)
+for the Fly.io (region `mad`) setup, cost and rollback.
+
+```sh
+make -C backend serve          # same single-port shape, locally
+make -C backend docker-build   # the deployed image
+make -C backend deploy         # fly deploy
+```
+
 ## Tests, lint and smoke checks
 
 All commands below are written to run from the repository root:
