@@ -40,7 +40,45 @@ from agent.voice.twilio import ProsperTwilioSerializer
 # Twilio Media Streams wire rate. 20 ms frames of 8 kHz µ-law.
 TELEPHONY_SAMPLE_RATE = 8000
 
-__all__ = ["TELEPHONY_SAMPLE_RATE", "build_worker", "phone_hint_greeting", "transport_params"]
+SUPPORTED_ENGINES = ("cascade", "gemini_live")
+
+__all__ = [
+    "SUPPORTED_ENGINES",
+    "TELEPHONY_SAMPLE_RATE",
+    "build_worker",
+    "phone_hint_greeting",
+    "resolve_voice_engine",
+    "transport_params",
+]
+
+
+def resolve_voice_engine(settings: Any) -> str:
+    """Validate and resolve the voice engine for ONE socket.
+
+    Fail-fast at socket startup: an unsupported value raises (Settings already
+    validates this, this guard covers programmatically built settings), and a
+    requested gemini_live without the google-genai dependency or the
+    GEMINI_API_KEY raises instead of silently running cascade. There is no
+    hidden mid-call fallback; switching engines is always a configuration
+    decision made before the call starts.
+    """
+    engine = str(getattr(settings, "voice_engine", "cascade"))
+    if engine not in SUPPORTED_ENGINES:
+        raise ValueError(f"unsupported VOICE_ENGINE {engine!r}; expected one of {SUPPORTED_ENGINES}")
+    if engine == "gemini_live":
+        from agent.voice.gemini_live import _gemini_api_key, gemini_live_available
+
+        if not gemini_live_available():
+            raise RuntimeError(
+                "VOICE_ENGINE=gemini_live requires the google-genai dependency "
+                '(uv add "pipecat-ai[google]"); refusing to start the socket in cascade mode silently'
+            )
+        if not _gemini_api_key(settings):
+            raise RuntimeError(
+                "VOICE_ENGINE=gemini_live requires GEMINI_API_KEY; refusing to start the socket "
+                "in cascade mode silently"
+            )
+    return engine
 
 
 def phone_hint_greeting(ctx: Any) -> str:
@@ -90,19 +128,58 @@ def build_worker(
     settings: Any,
     *,
     with_services: bool = True,
+    gemini_service_factory: Any = None,
 ) -> PipelineWorker:
     """Assemble one pipeline. One call per invocation.
 
-    ``with_services=False`` builds a transport-only pipeline (no Deepgram,
-    ElevenLabs, Helmcode or VAD) for offline smoke tests and handshakes.
+    The voice engine is resolved once per socket from VOICE_ENGINE and fixed
+    for the whole call: no mid-call switching ever happens. ``cascade`` is
+    the configured default and the permanent rollback target; ``gemini_live``
+    builds a speech-to-speech pipeline (Twilio bridge -> Gemini Live ->
+    Twilio bridge) with the same Prosper wire identity and the same exactly-
+    once flush.
+
+    ``with_services=False`` builds a transport-only pipeline (no LLM/TTS/VAD)
+    for offline smoke tests and handshakes.
     """
+    engine = resolve_voice_engine(settings)
+    ctx.audit("engine_selected", {"engine": engine})
     toolbox = ToolBox(ctx, settings)
 
     parts: list[Any] = [transport.input()]
     context: LLMContext | None = None
     assistant_aggregator = None
+    audio_converter: Any = None
 
-    if with_services:
+    if with_services and engine == "gemini_live":
+        from agent.audio.converter import TelephonyGeminiConverter
+        from agent.voice.gemini_live import (
+            GeminiInputBridge,
+            GeminiOutputBridge,
+            create_gemini_live_service,
+        )
+
+        audio_converter = TelephonyGeminiConverter()
+        service = create_gemini_live_service(
+            settings,
+            toolbox,
+            service_cls=gemini_service_factory,
+        )
+        if service is None:  # pragma: no cover - resolve_voice_engine already gated this
+            raise RuntimeError("Gemini Live service could not be created for an accepted engine")
+        # Caller tap sits between transport and service so the service's
+        # upstream user TranscriptionFrames are recorded (feeding Jev's
+        # latest-turn snapshot); the assistant tap records the bot text.
+        # No context aggregators: the Gemini Live service consumes
+        # LLMMessagesAppendFrame directly (pipecat's no-aggregator path).
+        parts += [
+            TranscriptTap(ctx, "caller"),
+            GeminiInputBridge(ctx, audio_converter),
+            service,
+            GeminiOutputBridge(ctx, audio_converter),
+            TranscriptTap(ctx, "assistant"),
+        ]
+    elif with_services:
         stt = DeepgramSTTService(
             api_key=settings.deepgram_api_key,
             sample_rate=TELEPHONY_SAMPLE_RATE,
@@ -166,6 +243,9 @@ def build_worker(
     async def _end_call(reason: str) -> None:
         ctx.mark_stopped()
         ctx.audit("call_ended", {"reason": reason, "elapsed_s": round(ctx.elapsed_seconds(), 1)})
+        if audio_converter is not None:
+            ctx.audit("audio_bridge_metrics", audio_converter.counters())
+        await toolbox.aclose()  # per-socket sidecar resources (Jev client)
         # Posts a cancel on the worker bus; the runner (outside the pipeline
         # task tree) performs the actual teardown, so no deadlock here.
         await worker.cancel()
@@ -178,7 +258,14 @@ def build_worker(
         # personalises the greeting and never enters the confirmation registry.
         await toolbox.prepare_phone_hint()
         ctx.audit("greeting_prepared", {"hint_used": ctx.phone_hint_match is not None})
-        if context is not None:
+        if engine == "gemini_live":
+            # Gemini Live consumes the append frame directly (no aggregators).
+            from pipecat.frames.frames import LLMMessagesAppendFrame
+
+            await worker.queue_frames(
+                [LLMMessagesAppendFrame(messages=[{"role": "system", "content": phone_hint_greeting(ctx)}])]
+            )
+        elif context is not None:
             context.add_message({"role": "developer", "content": phone_hint_greeting(ctx)})
             await worker.queue_frames([LLMRunFrame()])
 

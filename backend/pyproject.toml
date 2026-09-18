@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "HackSpain 2026 Prosper track - ClinicReflow voice scheduling agent"
 requires-python = ">=3.12"
 dependencies = [
-    "pipecat-ai[silero,deepgram,openai,elevenlabs]>=0.0.70",
+    "pipecat-ai[deepgram,elevenlabs,google,openai,silero]>=0.0.70",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "httpx>=0.27",

@@ -34,6 +34,10 @@ class CallContext:
     patient_candidates: list[dict[str, Any]] = field(default_factory=list)
     confirmed_patient: dict[str, Any] | None = None
 
+    # Latest finalized caller utterance (server-owned; the only text Jev's
+    # assess_current_turn is allowed to read). Written by add_transcript.
+    latest_caller_turn: str | None = None
+
     # Per-call registries: tokens handed to the LLM, real values kept here.
     slot_registry: dict[str, dict[str, Any]] = field(default_factory=dict)
     appointment_registry: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -46,6 +50,9 @@ class CallContext:
     # Transcript + audit
     transcript: list[dict[str, str]] = field(default_factory=list)
     _audit_path: Path | None = None
+
+    # Set when the call ends so in-flight sidecar work (Jev) aborts promptly.
+    cancel_token: asyncio.Event = field(default_factory=asyncio.Event)
 
     # Set by the serializer once the harness `start` event is captured; the
     # pipeline waits on it (bounded) before using the from_number hint.
@@ -101,6 +108,9 @@ class CallContext:
 
     def add_transcript(self, role: str, text: str) -> None:
         self.transcript.append({"role": role, "text": text})
+        if role == "caller":
+            # Finalized caller text: the ONLY transcript Jev may ever see.
+            self.latest_caller_turn = text
         self.audit("transcript", {"role": role, "text": text})
 
     # ---- registries ------------------------------------------------------
@@ -132,6 +142,7 @@ class CallContext:
     def mark_stopped(self) -> None:
         if not self.stopped:
             self.stopped = True
+            self.cancel_token.set()  # abort in-flight Jev work
             self.audit("socket_stop", {"elapsed_s": round(time.monotonic() - self.started_at, 1)})
 
     def elapsed_seconds(self) -> float:

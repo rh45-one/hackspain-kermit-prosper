@@ -4,6 +4,14 @@ The LLM converses; these tools decide. Every value the model passes that
 references clinic data must have come from a previous tool result (slot
 tokens, appointment ids, patient ids), making invented ids structurally
 impossible. Tools return compact JSON the model can narrate.
+
+On the Gemini path the toolbox additionally exposes the zero-argument
+``assess_current_turn`` advisory tool: it reads ONLY the CallContext's latest
+finalized caller utterance, redacts it locally (known patient names plus the
+core regex scrub) and asks the Jev sidecar for a typed assessment. Jev is
+advisory by construction: it never authorizes, vetoes, selects ids/slots or
+touches the clinic API; every tool keeps authorizing independently against
+the per-call registries.
 """
 from __future__ import annotations
 
@@ -21,6 +29,67 @@ if TYPE_CHECKING:
 MAX_SLOTS_IN_RESULT = 6
 MAX_REGISTRY_SLOTS = MAX_SLOTS_IN_RESULT * 3
 MADRID = ZoneInfo("Europe/Madrid")
+
+# Transcript turns handed to the Jev sidecar: ONLY the latest finalized
+# caller utterance (coordinator contract), never the full conversation.
+JEV_CONTEXT_KEYS = ("phase", "identity_status", "patient_confirmed")
+
+
+def _build_jev_client(settings: Any) -> Any | None:
+    """One advisory Jev client per socket, configured from settings.
+
+    Returns None when the decision layer is absent (boot-order safety); every
+    caller treats that exactly like an abstention.
+    """
+    try:
+        from agent.decision.client import JevClient
+    except ImportError:
+        return None
+    try:
+        kwargs: dict[str, Any] = {
+            "api_key": getattr(settings, "typesafe_api_key", None),
+            "timeout_seconds": float(getattr(settings, "jev_timeout_seconds", 0.300)),
+            "min_confidence": float(getattr(settings, "jev_min_confidence", 0.5)),
+        }
+        if getattr(settings, "typesafe_base_url", None):
+            kwargs["base_url"] = settings.typesafe_base_url
+        if getattr(settings, "jev_model", None):
+            kwargs["model"] = settings.jev_model
+        return JevClient(**kwargs)
+    except (TypeError, ValueError):
+        return None
+
+
+def _scrub_known_names(text: str, ctx: Any) -> str:
+    """Replace locally known patient names with the redaction marker.
+
+    Applied on top of the decision layer's core regex redaction: the people
+    this call already touched must never reach the sidecar, even when the
+    caller repeats them inside an utterance.
+    """
+    from agent.decision.models import REDACTED
+
+    scrubbed = text
+    seen: set[str] = set()
+    sources = [ctx.confirmed_patient, ctx.phone_hint_match, *ctx.patient_candidates]
+    for record in sources:
+        if not record:
+            continue
+        parts = [str(record.get(k, "") or "") for k in ("given_name", "first_surname", "second_surname")]
+        full = " ".join(p for p in parts if p)
+        for candidate in (*[p for p in parts if len(p) >= 3], full):
+            key = candidate.casefold()
+            if candidate and key not in seen:
+                seen.add(key)
+                import re
+
+                scrubbed = re.sub(
+                    re.escape(candidate),
+                    REDACTED,
+                    scrubbed,
+                    flags=re.IGNORECASE,
+                )
+    return scrubbed
 
 # Fields safe to hand to the LLM or keep in per-call state. National id and
 # phone never leave the clinic client: they are the protected fields problem
@@ -46,9 +115,18 @@ class ToolBox:
     def __init__(self, ctx: CallContext, settings: Any) -> None:
         self.ctx = ctx
         self.settings = settings
+        self.engine = str(getattr(settings, "voice_engine", "cascade"))
         self.client = deps.try_clinic_client(settings)
         self.cache = deps.try_catalogue_cache()
         self.resolver = deps.try_date_resolver()
+        # Advisory sidecar: one isolated client per socket, closed at teardown.
+        self.jev = _build_jev_client(settings)
+
+    async def aclose(self) -> None:
+        """Release per-socket sidecar resources (idempotent)."""
+        if self.jev is not None:
+            await self.jev.close()
+            self.jev = None
 
     # ---- helpers ---------------------------------------------------------
     async def _call(self, coro: Any, tool: str) -> dict[str, Any]:
@@ -479,6 +557,67 @@ class ToolBox:
         self.ctx.audit("action_queued", {"route": "escalate", "reason": reason})
         await params.result_callback({"escalated": True})
 
+    # ---- Jev advisory (Gemini path only) ----------------------------------
+    async def assess_current_turn(self, params: FunctionCallParams) -> None:
+        """Advisory assessment of the caller's latest finalized utterance.
+
+        Zero-argument by contract: everything it reads comes from the
+        CallContext (the latest finalized caller text, never model-supplied),
+        it is redacted locally, and Jev's typed answer or explicit abstention
+        is returned. Run it before high-risk/write tools when available; its
+        output NEVER authorizes or vetoes anything - the registry-validated
+        tools decide. On abstention (timeout, error, low confidence) simply
+        continue with the deterministic tools and ask the caller to clarify
+        when appropriate.
+        """
+        decision = await self._jev_assessment()
+        await params.result_callback(decision)
+
+    async def _jev_assessment(self) -> dict[str, Any]:
+        """Invoke redaction + Jev; return a PII-free advisory dict."""
+        from agent.decision.models import AbstentionReason, TurnDecision, TurnDecisionInput
+
+        if self.jev is None:
+            decision = TurnDecision(abstained=True, abstention_reason=AbstentionReason.MISSING_KEY)
+            self.ctx.audit("jev_assessment", decision.as_audit_dict())
+            return self._jev_result(decision)
+        latest = self.ctx.latest_caller_turn
+        if not latest:
+            decision = TurnDecision(abstained=True, abstention_reason=AbstentionReason.EMPTY_STATE)
+            self.ctx.audit("jev_assessment", decision.as_audit_dict())
+            return self._jev_result(decision)
+        # Local scrub of known names plus the decision layer's core regex
+        # redaction (phones, ids, dates) applied here as defense in depth;
+        # JevClient.build_payload runs the same redaction again before
+        # anything leaves the host.
+        from agent.decision.redaction import redact_text
+
+        scrubbed = redact_text(_scrub_known_names(latest, self.ctx))
+        snapshot = TurnDecisionInput.from_messages(
+            [{"role": "caller", "text": scrubbed}],
+            context={
+                "phase": "scheduling",
+                "identity_status": "confirmed" if self.ctx.confirmed_patient else "unconfirmed",
+                "patient_confirmed": self.ctx.confirmed_patient is not None,
+            },
+        )
+        try:
+            decision = await self.jev.assess(snapshot, cancel=self.ctx.cancel_token)
+        except Exception:  # noqa: BLE001 - sidecar must never crash the call
+            decision = TurnDecision(abstained=True, abstention_reason=AbstentionReason.TRANSPORT_ERROR)
+        # Metadata only: intent/confidence/latency/usage. Never the transcript.
+        self.ctx.audit("jev_assessment", decision.as_audit_dict())
+        return self._jev_result(decision)
+
+    @staticmethod
+    def _jev_result(decision: Any) -> dict[str, Any]:
+        result = decision.as_audit_dict()
+        result["message"] = (
+            "Advisory only: it never authorizes or blocks an action. On abstention, "
+            "continue with the deterministic tools and clarify with the caller if needed."
+        )
+        return result
+
     # ---- reflow seam (ClinicReflow) --------------------------------------
     async def get_reflow_context(self, params: FunctionCallParams, appointment_id: str) -> None:
         """Load a reflow negotiation case: the affected appointment and its alternatives.
@@ -527,7 +666,7 @@ class ToolBox:
 
     # ---- registration ----------------------------------------------------
     def tools(self) -> list[Any]:
-        return [
+        registered = [
             self.lookup_patient,
             self.confirm_patient,
             self.list_my_appointments,
@@ -541,3 +680,6 @@ class ToolBox:
             self.get_reflow_context,
             self.commit_reflow_decision,
         ]
+        if self.engine == "gemini_live":
+            registered.append(self.assess_current_turn)
+        return registered

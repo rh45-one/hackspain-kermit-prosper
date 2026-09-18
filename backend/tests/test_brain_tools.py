@@ -238,12 +238,46 @@ async def test_unresolved_phrase_searches_from_tomorrow(box):
     assert (call["date_to"] - call["date_from"]).days == 13  # 14-day API limit
 
 
-async def test_resolved_phrase_targets_one_day(box):
+@pytest.fixture
+def frozen_madrid_clock(monkeypatch):
+    """Freeze the clock ``find_availability`` reads so "tomorrow" is fixed.
+
+    The resolver rolls Sundays and the published closure to the next open day,
+    so an assertion against the raw wall-clock "tomorrow" is only correct on
+    some weekdays. The frozen clock keeps the test deterministic on any date.
+    """
+
+    def _freeze(moment: datetime) -> None:
+        class _FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return moment if tz is None else moment.astimezone(tz)
+
+        monkeypatch.setattr("agent.brain.tools.datetime", _FrozenDatetime)
+
+    return _freeze
+
+
+@pytest.mark.parametrize(
+    ("frozen", "expected"),
+    [
+        # Mid-week: tomorrow is already an open day and is used unchanged.
+        (datetime(2026, 9, 16, 12, 0, tzinfo=MADRID), date(2026, 9, 17)),
+        # Saturday: tomorrow is Sunday, so it rolls forward to Monday.
+        (datetime(2026, 9, 19, 12, 0, tzinfo=MADRID), date(2026, 9, 21)),
+        # Saturday before the Fiesta Nacional closure: Sunday and the closure
+        # roll forward to Tuesday 13 October.
+        (datetime(2026, 10, 10, 12, 0, tzinfo=MADRID), date(2026, 10, 13)),
+    ],
+)
+async def test_resolved_phrase_targets_one_day(box, frozen_madrid_clock, frozen, expected):
+    frozen_madrid_clock(frozen)
     params = await confirm_marta(box)
-    tomorrow = datetime.now(MADRID).date() + timedelta(days=1)
     await box.find_availability(params, when_phrase="tomorrow")
     call = box.client.availability_calls[-1]
-    assert call["date_from"] == call["date_to"] == tomorrow
+    # "tomorrow" is exactly one day, and it is always an open clinic day.
+    assert call["date_from"] == call["date_to"] == expected
+    assert box.resolver.is_open_day(call["date_from"])
 
 
 async def test_part_of_day_filter(box):
@@ -528,3 +562,130 @@ async def test_phone_hint_skipped_without_api_credentials(box, ctx):
 
     assert client.calls == []
     assert ctx.phone_hint_match is None
+
+
+# ---- Jev advisory tool: assess_current_turn (Gemini path) --------------------
+class FakeJev:
+    """Stands in for JevClient; captures the snapshot it is handed."""
+
+    def __init__(self, decision: Any | None = None, error: Exception | None = None) -> None:
+        self._decision = decision
+        self._error = error
+        self.snapshots: list[Any] = []
+
+    async def assess(self, snapshot: Any, cancel: Any = None) -> Any:
+        self.snapshots.append(snapshot)
+        if self._error is not None:
+            raise self._error
+        return self._decision
+
+    async def close(self) -> None:
+        pass
+
+
+def jev_decision(**overrides: Any) -> Any:
+    from agent.decision.models import TurnDecision, TurnIntent
+
+    base: dict[str, Any] = {
+        "intent": TurnIntent.CANCEL_APPOINTMENT,
+        "medical_emergency": False,
+        "needs_clarification": False,
+        "confidence": 0.9,
+        "abstained": False,
+        "abstention_reason": None,
+        "model": "jev-1.13.0",
+        "latency_ms": 12.0,
+    }
+    base.update(overrides)
+    return TurnDecision(**base)
+
+
+async def test_assess_current_turn_reads_only_the_latest_caller_turn(box, ctx):
+    ctx.latest_caller_turn = "Quiero cancelar mi cita del jueves"
+    box.jev = FakeJev(jev_decision())
+    params = FakeParams()
+
+    await box.assess_current_turn(params)
+
+    snapshot = box.jev.snapshots[-1]
+    assert [t.text for t in snapshot.transcript] == ["Quiero cancelar mi cita del jueves"]
+    assert len(snapshot.transcript) == 1  # latest turn only, never the whole call
+    result = params.result
+    assert result["advisory"] is True
+    assert result["abstained"] is False
+    assert result["intent"] == "cancel_appointment"
+
+
+async def test_assess_current_turn_scrubs_known_patient_names(box, ctx):
+    ctx.latest_caller_turn = "Hola, soy Marta Ruiz, quiero cancelar"
+    ctx.confirmed_patient = {"given_name": "Marta", "first_surname": "Ruiz", "second_surname": "Gómez"}
+    box.jev = FakeJev(jev_decision())
+
+    await box.assess_current_turn(FakeParams())
+
+    snapshot = box.jev.snapshots[-1]
+    text = snapshot.transcript[0].text
+    assert "Marta" not in text and "Ruiz" not in text
+    assert "[REDACTED]" in text
+
+
+async def test_assess_current_turn_abstains_without_caller_text(box, ctx):
+    box.jev = FakeJev(jev_decision())
+    params = FakeParams()
+
+    await box.assess_current_turn(params)
+
+    assert box.jev.snapshots == []  # sidecar never called on empty state
+    assert params.result["abstained"] is True
+    assert params.result["abstention_reason"] == "empty_state"
+
+
+async def test_assess_current_turn_sidecar_crash_cannot_break_the_call(box, ctx):
+    ctx.latest_caller_turn = "cancelar por favor"
+    box.jev = FakeJev(error=TimeoutError("jev down"))
+    params = FakeParams()
+
+    await box.assess_current_turn(params)
+
+    assert params.result["abstained"] is True
+    assert params.result["abstention_reason"] == "transport_error"
+    # The deterministic tools remain fully usable after the abstention.
+    assert ctx.queued_actions == []
+
+
+async def test_assess_current_turn_result_and_audit_are_pii_free(box, ctx):
+    ctx.latest_caller_turn = "soy marta, mi telefono es 612345678"
+    ctx.confirmed_patient = {"given_name": "Marta", "first_surname": "Ruiz"}
+    box.jev = FakeJev(jev_decision())
+    params = FakeParams()
+
+    await box.assess_current_turn(params)
+
+    blob = str(params.result) + await audit_blob(ctx)
+    assert "612345678" not in blob
+    # The sidecar never sees the raw phone either.
+    assert "612345678" not in str(box.jev.snapshots[-1].transcript[0].text)
+    # The audited decision carries metadata only, never utterance text.
+    blob = await audit_blob(ctx)
+    assert "soy" not in blob
+
+
+async def test_assess_current_turn_registered_only_for_gemini_engine(box, ctx):
+    box.engine = "cascade"
+    assert all(t.__name__ != "assess_current_turn" for t in box.tools())
+    box.engine = "gemini_live"
+    assert any(t.__name__ == "assess_current_turn" for t in box.tools())
+
+
+async def test_toolbox_aclose_closes_the_sidecar(box, ctx):
+    closed = {"n": 0}
+
+    class ClosableJev(FakeJev):
+        async def close(self) -> None:
+            closed["n"] += 1
+
+    box.jev = ClosableJev()
+    await box.aclose()
+    await box.aclose()  # idempotent
+    assert closed["n"] == 1
+    assert box.jev is None

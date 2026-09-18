@@ -39,6 +39,24 @@ class Settings(BaseSettings):
     elevenlabs_tts_model: str = "eleven_turbo_v2_5"
     cartesia_api_key: str = ""
 
+    # Voice engine selection: cascade (STT->LLM->TTS) or gemini_live. cascade
+    # is the configured default and the permanent rollback; gemini_live only
+    # becomes the default after the offline acceptance + live gate.
+    voice_engine: str = "cascade"
+
+    # Gemini Live audio host (VOICE_ENGINE=gemini_live). The pinned model is
+    # not an extended-thinking variant; see agent.voice.gemini_live.
+    gemini_api_key: str = ""
+    gemini_live_model: str = "gemini-3.8-live"
+    gemini_voice_id: str = ""
+
+    # TypeSafe Jev structured-decision sidecar (advisory only).
+    typesafe_api_key: str = ""
+    typesafe_base_url: str = "https://api.typesafe.ai"
+    jev_model: str = "jev-1.13.0"
+    jev_timeout_seconds: float = 0.300
+    jev_min_confidence: float = 0.5
+
     # Server
     voice_ws_host: str = "0.0.0.0"
     voice_ws_port: int = 7860
@@ -50,6 +68,15 @@ class Settings(BaseSettings):
     submit_window_seconds: int = 30
     data_dir: str = "./data"
     log_level: str = "INFO"
+
+    @field_validator("voice_engine")
+    @classmethod
+    def _validate_voice_engine(cls, value: str) -> str:
+        """Fail fast on an unsupported engine: never run in a guessed mode."""
+        allowed = {"cascade", "gemini_live"}
+        if value not in allowed:
+            raise ValueError(f"VOICE_ENGINE must be one of {sorted(allowed)}; got {value!r}")
+        return value
 
     @field_validator("data_dir")
     @classmethod
