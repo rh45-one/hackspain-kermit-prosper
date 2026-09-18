@@ -1,0 +1,20 @@
+scenario_id: cc-001
+problem_id: change_and_cancel
+version: 1
+description: >
+  Cancelación simple: la paciente cancela su cita del 24 de septiembre.
+  El appointment_id solo sale de GET /patients/{id}/appointments.
+reference_now: "2026-09-18T10:00:00+02:00"
+from_number: "+34612345678"
+language: es
+patient_context:
+  patient_id: P00042
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Necesito cancelar la cita que tengo el día 24 con la doctora Sáez."
+    hold_ms: 4000
+accepted_outcomes:
+  - - action: CANCEL
+      appointment_id: A00101
+notes: >
+  A00101 es la única cita upcoming de P00042 (review con PR01 en Centro el
+  24/09 a las 16:30). Cancelar A00009 falla: es pasada.

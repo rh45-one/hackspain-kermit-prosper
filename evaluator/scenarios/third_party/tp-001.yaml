@@ -1,0 +1,30 @@
+scenario_id: tp-001
+problem_id: third_party
+version: 1
+description: >
+  Tercero: una madre llama por su hijo. Mover la cita de Pablo (P00047),
+  no la suya propia - reservar para el caller es el modo de fallo típico.
+reference_now: "2026-09-18T10:00:00+02:00"
+from_number: "+34612345678"   # es el teléfono de la madre (P00042) y figura en la ficha del hijo
+language: es
+patient_context:
+  caller_patient_id: P00042
+  patient_id: P00047
+turns:
+  - text: >
+      Hola, soy Marta Ruiz, llamo por mi hijo Pablo Ruiz Gómez. Tiene cita
+      con la pediatra el viernes que viene pero no podemos ir; ¿podéis
+      pasarla al lunes a primera hora?
+    hold_ms: 4000
+accepted_outcomes:
+  - - action: RESCHEDULE
+      appointment_id: A00102
+      provider_id: PR04
+      location_id: norte
+      slot: "2026-09-21T09:30:00+02:00"
+      policy_id: sanitas
+notes: >
+  A00102: paediatric_review de P00047 con PR04 en Norte el 25/09. Pedir
+  "lunes a primera hora" desde el viernes 18 → lunes 21, primer hueco de
+  PR04 (Norte, desde 09:30). La llamada viene del 612345678: ese número
+  pertenece a la madre Y está en la ficha del hijo.

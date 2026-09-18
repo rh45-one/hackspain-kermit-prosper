@@ -1,0 +1,32 @@
+scenario_id: np-001
+problem_id: the_new_patient
+version: 1
+description: >
+  Alta de paciente: el caller no está en el directorio. La respuesta es el
+  REGISTER completo - cada campo cuenta y la letra del DNI se re-deriva.
+  Declina la cita si se la ofrecen; un BOOK adicional invalida el caso.
+from_number: null   # caller id oculto
+language: es
+reference_now: "2026-09-18T10:00:00+02:00"
+patient_context:
+  on_file: false
+turns:
+  - text: >
+      Hola, no soy paciente todavía y quiero darme de alta. Me llamo Ana
+      García López, segundo apellido Ruiz, DNI 45678901-G. Nací el 12 de
+      enero de 1990. Mi teléfono es el 655 444 333 y mi email ana.garcia
+      arroba gmail punto com. Estoy con Sanitas. No, no quiero cita ahora.
+    hold_ms: 4000
+accepted_outcomes:
+  - - action: REGISTER
+      given_name: Ana
+      first_surname: García
+      second_surname: Ruiz
+      national_id: "45678901G"
+      date_of_birth: "1990-01-12"
+      phone: "655444333"
+      email: "ana.garcia@gmail.com"
+      insurer: sanitas
+notes: >
+  El DNI de la paciente ya lo da con su letra; una letra que no cuadre con
+  los dígitos es 422 en el receptor (como en el oficial).

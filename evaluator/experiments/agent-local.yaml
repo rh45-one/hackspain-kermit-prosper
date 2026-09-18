@@ -1,0 +1,22 @@
+# Plantilla para evaluar el agente real en local.
+# El agente es un sistema externo: arráncalo aparte (o pon start_command)
+# apuntando PROSPER_API_BASE_URL a la clínica local que este runner levanta.
+name: agent-local
+rules_version: "scoring-2.0-draft"
+reference_now: "2026-09-18T10:00:00+02:00"
+clinic_dataset: ../data/clinic_dataset.json
+clinic_port: 8090
+submit_key: pk-local-eval
+repetitions: 3
+candidates:
+  - name: baseline
+    kind: external
+    ws_url: ws://localhost:7860/ws
+    version: "backend@HEAD"
+    # Opcional: el runner lo arranca y espera el puerto.
+    # start_command: "cd ../backend && PROSPER_API_BASE_URL=http://localhost:8090 PROSPER_API_KEY=pk-local-eval uv run python -m agent.voice.server"
+    env:
+      PROSPER_API_BASE_URL: http://localhost:8090
+      PROSPER_API_KEY: pk-local-eval
+scenarios:
+  - ../scenarios/**/*.yaml

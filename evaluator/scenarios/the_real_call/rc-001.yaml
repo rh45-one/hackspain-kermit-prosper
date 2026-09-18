@@ -1,0 +1,31 @@
+scenario_id: rc-001
+problem_id: the_real_call
+version: 1
+description: >
+  Multi-acción: la abuela cancela su cita del 24 y reserva una nueva de
+  general a primera hora del lunes. Las dos acciones deben ser correctas.
+reference_now: "2026-09-18T10:00:00+02:00"
+from_number: "+34612345678"
+language: es
+patient_context:
+  patient_id: P00042
+  insurer: sanitas
+turns:
+  - text: >
+      Hola, soy Marta Ruiz Gómez. Mira, dos cosas: no puedo ir a la cita del
+      24 con la doctora Sáez, así que canceladla, y en su lugar quiero una
+      de general a primera hora del lunes.
+    hold_ms: 5000
+accepted_outcomes:
+  - - action: CANCEL
+      appointment_id: A00101
+    - action: BOOK
+      patient_id: P00042
+      provider_id: PR01
+      location_id: centro
+      appointment_type_id: review
+      slot: "2026-09-21T09:00:00+02:00"
+      policy_id: sanitas
+notes: >
+  La lista completa de acciones debe coincidir tras normalización: cancelar
+  sin reservar, o reservar sin cancelar, falla el caso entero.
