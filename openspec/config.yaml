@@ -1,0 +1,36 @@
+schema: spec-driven
+
+context: |
+  HackSpain 2026 — Prosper track. Team "Kermit". Product: ClinicReflow
+  (clinic that reorganizes itself when a doctor fails) + the Prosper voice
+  agent that scores on the leaderboard.
+
+  Tech stack:
+  - Python 3.12, uv, pipecat (Twilio Media Streams WebsocketServerTransport
+    + TwilioFrameSerializer), FastAPI (ops console), pytest.
+  - Voice: Deepgram (STT, es/en multi; nova), ElevenLabs or Cartesia (TTS).
+  - LLM: Helmcode managed inference (OpenAI-compatible, base
+    https://api.helmcode.com/v1). Models: glm5.3 (default brain),
+    deepseek-v4-flash (fast), glm5.3-flash. 600M tokens paid by Helmcode perk.
+  - Clinic EHR: Prosper platform API (read-only), X-Api-Key auth.
+  - Tunnel: ngrok static domain, EU region. Deployment = local server +
+    tunnel kept up the whole weekend; everything run via make targets.
+
+  Conventions:
+  - Everything per-socket (10-20 concurrent calls); no shared mutable state.
+  - The LLM never does date math: a deterministic resolver owns calendars.
+  - The LLM never invents ids: tools only accept values returned by the
+    clinic API. Prompts are versioned artifacts in src/agent/brain/prompts.
+  - Never read national ids or phone numbers aloud (adversarial problem).
+  - English code/comments; product UX speaks the caller's language.
+
+  Scoring reality: binary per case, exact-match after normalization,
+  submissions within 30s of socket close, 3-minute call cap, silence fails.
+  Leaderboard checkpoints Saturday 11:00 and 22:00; final jury demo Sunday.
+
+rules:
+  proposal:
+    - Keep proposals under 400 words
+    - Always include a Non-goals section
+  tasks:
+    - Break tasks into chunks deliverable in under 2 hours

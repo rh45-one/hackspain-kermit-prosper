@@ -1,0 +1,22 @@
+{
+  "appointments": [
+    {
+      "appointment_id": "A00101",
+      "patient_id": "P00042",
+      "provider_id": "PR01",
+      "location_id": "centro",
+      "appointment_type_id": "review",
+      "start_time": "2026-09-24T16:30:00+02:00",
+      "duration_minutes": 15
+    },
+    {
+      "appointment_id": "A00009",
+      "patient_id": "P00042",
+      "provider_id": "PR01",
+      "location_id": "centro",
+      "appointment_type_id": "first_visit",
+      "start_time": "2025-03-11T10:00:00+01:00",
+      "duration_minutes": 30
+    }
+  ]
+}

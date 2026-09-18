@@ -1,0 +1,67 @@
+{
+  "providers": [
+    {
+      "id": "PR01",
+      "name": "Dra. Ana Sáez",
+      "specialty_id": "general",
+      "languages": ["español", "catalán"],
+      "accepted_insurers": ["sanitas", "asisa"],
+      "locations": ["centro", "norte"],
+      "on_leave_until": null
+    },
+    {
+      "id": "PR02",
+      "name": "Dra. Marta Iglesias",
+      "specialty_id": "dermatology",
+      "languages": ["español"],
+      "accepted_insurers": ["sanitas"],
+      "locations": ["centro"],
+      "on_leave_until": "2026-09-30"
+    }
+  ],
+  "appointment_type": {
+    "id": "review",
+    "name": "Review",
+    "duration_minutes": 15,
+    "new_patient_requirement": "visited before",
+    "guidance": "Follow-up for an existing patient."
+  },
+  "slots": [
+    {
+      "provider_id": "PR01",
+      "provider_name": "Dra. Ana Sáez",
+      "specialty_id": "general",
+      "location_id": "centro",
+      "appointment_type_id": "review",
+      "start_time": "2026-09-21T09:30:00+02:00",
+      "duration_minutes": 15,
+      "payable_with": ["sanitas", "asisa"]
+    },
+    {
+      "provider_id": "PR01",
+      "provider_name": "Dra. Ana Sáez",
+      "specialty_id": "general",
+      "location_id": "norte",
+      "appointment_type_id": "review",
+      "start_time": "2026-09-21T16:00:00+02:00",
+      "duration_minutes": 15,
+      "payable_with": ["sanitas", "asisa"]
+    },
+    {
+      "provider_id": "PR02",
+      "provider_name": "Dra. Marta Iglesias",
+      "specialty_id": "dermatology",
+      "location_id": "centro",
+      "appointment_type_id": "dermatology_review",
+      "start_time": "2026-09-22T10:00:00+02:00",
+      "duration_minutes": 15,
+      "payable_with": ["sanitas"]
+    }
+  ],
+  "blocked": [
+    {
+      "provider_id": "PR02",
+      "restriction": "r-referral-derm"
+    }
+  ]
+}

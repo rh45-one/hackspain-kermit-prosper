@@ -1,0 +1,38 @@
+# Secrets — never commit real credentials.
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Python virtual environments.
+.venv/
+backend/.venv/
+venv/
+env/
+
+# Python caches / build artifacts.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Runtime call data and recordings (may contain caller PII).
+backend/data/calls/*
+!backend/data/calls/.gitkeep
+backend/data/reflow/*
+!backend/data/reflow/.gitkeep
+*.raw
+*.wav
+*.mp3
+*.ulaw
+
+# OS / editor noise.
+.DS_Store
+.idea/
+.vscode/

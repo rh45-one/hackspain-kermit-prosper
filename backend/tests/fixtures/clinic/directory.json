@@ -1,0 +1,36 @@
+{
+  "matches": [
+    {
+      "patient_id": "P00042",
+      "given_name": "Marta",
+      "first_surname": "Ruiz",
+      "second_surname": "Gómez",
+      "national_id": "12345678Z",
+      "date_of_birth": "1988-03-14",
+      "phone": "612345678",
+      "sex": "F",
+      "has_visited_before": true,
+      "insurer": "sanitas",
+      "referrals": ["dermatology"],
+      "note": "Seen eleven times. Every visit so far has been at Centro.",
+      "match_score": 0.98,
+      "matched_fields": ["name", "date_of_birth"]
+    },
+    {
+      "patient_id": "P00043",
+      "given_name": "Marta",
+      "first_surname": "Ruiz",
+      "second_surname": "Gómez",
+      "national_id": "87654321X",
+      "date_of_birth": "1992-07-02",
+      "phone": "600111222",
+      "sex": "F",
+      "has_visited_before": false,
+      "insurer": "asisa",
+      "referrals": [],
+      "note": "New patient.",
+      "match_score": 0.71,
+      "matched_fields": ["name"]
+    }
+  ]
+}
