@@ -86,7 +86,7 @@ function CallCard({
               <p
                 key={`${call.callId}-${index}`}
                 className={cn(
-                  "rounded-md px-2.5 py-1.5 text-[13px] leading-[1.45]",
+                  "animate-in fade-in slide-in-from-bottom-1 rounded-md px-2.5 py-1.5 text-[13px] leading-[1.45] duration-300",
                   line.role === "agent"
                     ? "bg-canvas-white text-graphite"
                     : "border-l-2 border-ember-orange bg-ivory text-steel",
@@ -160,7 +160,10 @@ export function CallMonitor() {
       <div className="mb-[var(--section-gap)]">
         <ObservatoryCharts />
       </div>
-      <div className="mb-5 flex items-end justify-between gap-5">
+      <div
+        data-reveal=""
+        className="mb-5 flex items-end justify-between gap-5"
+      >
         <div>
           <p className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
             Actividad en tiempo real
@@ -174,6 +177,8 @@ export function CallMonitor() {
         </p>
       </div>
       <div
+        data-reveal=""
+        data-delay="1"
         className="grid grid-cols-1 gap-4 rounded-[20px] border border-mist bg-ash/70 p-3 sm:p-5 xl:grid-cols-2 2xl:grid-cols-3"
       >
         {slots.map((call, index) =>

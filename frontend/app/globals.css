@@ -95,7 +95,12 @@
   --card-padding: clamp(1.25rem, 3vw, 2.25rem);
   --shadow-sm: 0 1px 2px rgb(29 33 31 / 0.04), 0 8px 24px rgb(29 33 31 / 0.035);
   --shadow-md: 0 1px 2px rgb(29 33 31 / 0.05), 0 18px 48px rgb(29 33 31 / 0.07);
-  --transition-ui: 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  --motion-fast: 140ms;
+  --motion-ui: 220ms;
+  --motion-reveal: 520ms;
+  --ease-ui: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-ui: var(--motion-ui) var(--ease-ui);
 }
 
 .dark {
@@ -172,6 +177,109 @@
   box-shadow: var(--shadow-sm);
 }
 
+@keyframes chart-line-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes chart-point-in {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@layer components {
+  .motion-ready [data-reveal][data-reveal-ready="true"] {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+    transition:
+      opacity var(--motion-reveal) var(--ease-out),
+      transform var(--motion-reveal) var(--ease-out);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .motion-ready [data-reveal="fade"][data-reveal-ready="true"] {
+    transform: none;
+  }
+
+  .motion-ready [data-reveal][data-visible="true"] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  [data-delay="1"] {
+    --reveal-delay: 70ms;
+  }
+
+  [data-delay="2"] {
+    --reveal-delay: 140ms;
+  }
+
+  [data-delay="3"] {
+    --reveal-delay: 210ms;
+  }
+
+  [data-visible="true"] [data-chart-line="primary"] {
+    animation: chart-line-draw 780ms var(--ease-out) 120ms both;
+  }
+
+  [data-visible="true"] [data-chart-line="secondary"] {
+    animation: chart-line-draw 780ms var(--ease-out) 200ms both;
+  }
+
+  [data-chart-point] {
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  [data-visible="true"] [data-chart-point] {
+    animation: chart-point-in 260ms var(--ease-out) both;
+    animation-delay: calc(340ms + var(--point-index, 0) * 34ms);
+  }
+
+  [data-chart-ring] {
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 800ms var(--ease-out) 150ms;
+  }
+
+  [data-visible="true"] [data-chart-ring] {
+    stroke-dashoffset: var(--ring-offset);
+  }
+
+  [data-outcome-fill] {
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 560ms var(--ease-out);
+  }
+
+  [data-visible="true"] [data-outcome-fill] {
+    transform: scaleX(1);
+  }
+
+  [data-outcome-row]:nth-child(2) [data-outcome-fill] {
+    transition-delay: 70ms;
+  }
+
+  [data-outcome-row]:nth-child(3) [data-outcome-fill] {
+    transition-delay: 140ms;
+  }
+
+  [data-outcome-row]:nth-child(4) [data-outcome-fill] {
+    transition-delay: 210ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -180,5 +288,17 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  [data-chart-line],
+  [data-chart-point],
+  [data-outcome-fill] {
+    opacity: 1 !important;
+    transform: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+
+  [data-chart-ring] {
+    stroke-dashoffset: var(--ring-offset) !important;
   }
 }

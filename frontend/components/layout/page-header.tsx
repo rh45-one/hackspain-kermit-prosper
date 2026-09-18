@@ -10,7 +10,10 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <header className={className ?? "mb-10 sm:mb-14"}>
+    <header
+      data-reveal=""
+      className={className ?? "mb-10 sm:mb-14"}
+    >
       {kicker ? (
         <p className="mb-3 flex items-center gap-2.5 font-heading text-[11px] leading-none tracking-[0.08em] text-brass uppercase sm:mb-4">
           <span className="h-px w-5 bg-brass/70" />

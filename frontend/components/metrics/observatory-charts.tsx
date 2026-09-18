@@ -1,5 +1,7 @@
 "use client";
 
+import { type CSSProperties, type PointerEvent, useState } from "react";
+
 import { useFrontdesk } from "@/components/frontdesk-provider";
 import {
   bargeInCount,
@@ -11,11 +13,11 @@ import {
 } from "@/lib/metrics";
 import { CALL_CAPACITY } from "@/lib/types";
 
-const EMBER = "#ff682c";
-const BRASS = "#816729";
-const MIST = "#e8e8e8";
-const GRAPHITE = "#202020";
-const QUIET = "#828282";
+const EMBER = "#e76432";
+const BRASS = "#806b36";
+const MIST = "#dcdfd9";
+const GRAPHITE = "#1d211f";
+const QUIET = "#777e78";
 
 function linePath(
   values: number[],
@@ -43,13 +45,45 @@ function LoadChart() {
   const max = CALL_CAPACITY;
   const sockets = HOURLY_LOAD.map((point) => point.sockets);
   const submissions = HOURLY_LOAD.map((point) => point.submissions);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  const selectedIndex = hoveredIndex ?? pinnedIndex;
+
+  function xAt(index: number) {
+    return padX + (index / (HOURLY_LOAD.length - 1)) * innerWidth;
+  }
+
+  function yAt(value: number) {
+    return height - (value / max) * height;
+  }
+
+  function pointFromPointer(event: PointerEvent<SVGSVGElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(
+      0,
+      Math.min(1, (event.clientX - bounds.left) / bounds.width),
+    );
+    return Math.round(ratio * (HOURLY_LOAD.length - 1));
+  }
+
+  const selected =
+    selectedIndex === null ? null : HOURLY_LOAD[selectedIndex];
+  const selectedX = selectedIndex === null ? 0 : xAt(selectedIndex);
+  const tooltipX =
+    selectedX > innerWidth / 2 ? selectedX - 126 : selectedX + 10;
 
   return (
     <svg
       viewBox={`0 0 ${innerWidth + padX * 2} ${height + 20}`}
-      className="h-auto w-full overflow-visible"
+      className="h-auto w-full touch-pan-y overflow-visible outline-none"
       role="img"
       aria-label="Sockets concurrentes y envíos por hora"
+      onPointerMove={(event) => setHoveredIndex(pointFromPointer(event))}
+      onPointerLeave={() => setHoveredIndex(null)}
+      onPointerDown={(event) => {
+        const index = pointFromPointer(event);
+        setPinnedIndex((current) => (current === index ? null : index));
+      }}
     >
       {[0.25, 0.5, 0.75, 1].map((share) => (
         <line
@@ -65,19 +99,78 @@ function LoadChart() {
       ))}
       <path
         d={linePath(sockets, max, innerWidth, height, padX)}
+        data-chart-line="primary"
+        pathLength="1"
         fill="none"
         stroke={EMBER}
         strokeWidth="2"
+        strokeDasharray="1"
         vectorEffect="non-scaling-stroke"
       />
       <path
         d={linePath(submissions, max, innerWidth, height, padX)}
+        data-chart-line="secondary"
+        pathLength="1"
         fill="none"
         stroke={BRASS}
         strokeWidth="1.5"
-        strokeDasharray="3 3"
+        strokeDasharray="0.012 0.012"
         vectorEffect="non-scaling-stroke"
       />
+      {HOURLY_LOAD.map((point, index) => (
+        <circle
+          key={`point-${point.hour}`}
+          data-chart-point=""
+          cx={xAt(index)}
+          cy={yAt(point.sockets)}
+          r={selectedIndex === index ? 3.5 : 2}
+          fill={selectedIndex === index ? "#fffefb" : EMBER}
+          stroke={EMBER}
+          strokeWidth={selectedIndex === index ? 2 : 0}
+          style={{ "--point-index": index } as CSSProperties}
+          tabIndex={0}
+          role="button"
+          aria-label={`${point.hour}:00, ${point.sockets} sockets, ${point.submissions} envíos`}
+          onFocus={() => setPinnedIndex(index)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setPinnedIndex(index);
+            }
+          }}
+        />
+      ))}
+      {selected ? (
+        <g className="pointer-events-none">
+          <line
+            x1={selectedX}
+            x2={selectedX}
+            y1="0"
+            y2={height}
+            stroke={GRAPHITE}
+            strokeOpacity="0.18"
+            strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+          />
+          <g transform={`translate(${tooltipX} 5)`}>
+            <rect
+              width="116"
+              height="39"
+              rx="6"
+              fill="#fffefb"
+              stroke={MIST}
+              strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
+            />
+            <text x="9" y="15" fill={GRAPHITE} fontSize="9" fontWeight="600">
+              {selected.hour}:00
+            </text>
+            <text x="9" y="29" fill={QUIET} fontSize="8">
+              {selected.sockets} sockets · {selected.submissions} envíos
+            </text>
+          </g>
+        </g>
+      ) : null}
       {HOURLY_LOAD.map((point, index) =>
         index % 2 === 0 ? (
           <text
@@ -98,9 +191,8 @@ function LoadChart() {
 
 function CapacityRing({ active }: { active: number }) {
   const radius = 46;
-  const circumference = 2 * Math.PI * radius;
   const share = Math.min(active / CALL_CAPACITY, 1);
-  const offset = circumference * (1 - share);
+  const offset = 1 - share;
 
   return (
     <svg viewBox="0 0 120 120" className="mx-auto size-36" role="img" aria-label="Capacidad">
@@ -120,8 +212,10 @@ function CapacityRing({ active }: { active: number }) {
         stroke={EMBER}
         strokeWidth="5"
         strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
+        data-chart-ring=""
+        pathLength="1"
+        strokeDasharray="1"
+        style={{ "--ring-offset": offset } as CSSProperties}
         transform="rotate(-90 60 60)"
       />
       <text
@@ -143,6 +237,7 @@ function CapacityRing({ active }: { active: number }) {
 
 function OutcomeBars() {
   const mix = outcomeMix();
+  const [selected, setSelected] = useState<string | null>(null);
   const strokes: Record<string, string> = {
     BOOKED: BRASS,
     CANCELLED: GRAPHITE,
@@ -152,23 +247,43 @@ function OutcomeBars() {
 
   return (
     <ul className="space-y-3">
-      {mix.map((row) => (
-        <li key={row.key}>
-          <div className="mb-1 flex justify-between font-heading text-[13px] text-graphite">
-            <span>{row.key}</span>
-            <span className="text-quiet">{row.count}</span>
-          </div>
-          <div className="h-px bg-mist">
-            <div
-              className="h-px"
-              style={{
-                width: `${Math.max(row.share * 100, row.count ? 4 : 0)}%`,
-                background: strokes[row.key],
-              }}
-            />
-          </div>
+      {mix.map((row) => {
+        const active = selected === row.key;
+        return (
+        <li key={row.key} data-outcome-row="">
+          <button
+            type="button"
+            aria-pressed={active}
+            onClick={() => setSelected(active ? null : row.key)}
+            className="group w-full rounded-md px-1 py-1 text-left transition-colors duration-200 hover:bg-fog focus-visible:outline-none"
+          >
+            <span className="mb-1.5 flex justify-between font-heading text-[13px] text-graphite">
+              <span>{row.key}</span>
+              <span className="text-quiet tabular-nums">
+                {row.count}
+                <span
+                  className={`ml-1.5 inline-block overflow-hidden align-bottom text-[11px] transition-[max-width,opacity] duration-200 ${
+                    active ? "max-w-12 opacity-100" : "max-w-0 opacity-0"
+                  }`}
+                >
+                  {Math.round(row.share * 100)}%
+                </span>
+              </span>
+            </span>
+            <span className="block h-1 overflow-hidden rounded-full bg-mist">
+              <span
+                data-outcome-fill=""
+                className="block h-full rounded-full transition-[filter] duration-200 group-hover:brightness-90"
+                style={{
+                  width: `${Math.max(row.share * 100, row.count ? 4 : 0)}%`,
+                  background: strokes[row.key],
+                }}
+              />
+            </span>
+          </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
@@ -180,9 +295,12 @@ export function ObservatoryCharts() {
   const flushPct = Math.round(FLUSH_WITHIN_WINDOW * 100);
 
   return (
-    <div>
+    <div data-reveal="fade">
       <div className="grid gap-4 lg:grid-cols-3">
-        <article className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-3">
+        <article
+          data-reveal=""
+          className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-3"
+        >
           <p className="font-heading text-[17px] text-graphite">Carga de sockets</p>
           <p className="mt-1 text-[12px] text-quiet">
             Concurrentes <span className="text-ember-orange">—</span> envíos{" "}
@@ -192,14 +310,22 @@ export function ObservatoryCharts() {
             <LoadChart />
           </div>
         </article>
-        <article className="surface rounded-[18px] p-[var(--card-padding)]">
+        <article
+          data-reveal=""
+          data-delay="1"
+          className="surface rounded-[18px] p-[var(--card-padding)]"
+        >
           <p className="font-heading text-[17px] text-graphite">Capacidad</p>
           <CapacityRing active={activeCount} />
           <p className="text-center text-[12px] text-quiet">
             Techo 10 · el backend admite 10–20
           </p>
         </article>
-        <article className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-2">
+        <article
+          data-reveal=""
+          data-delay="2"
+          className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-2"
+        >
           <p className="font-heading text-[17px] text-graphite">
             Resultado del agente
           </p>
@@ -212,7 +338,11 @@ export function ObservatoryCharts() {
         </article>
       </div>
 
-      <dl className="mt-4 grid grid-cols-1 overflow-hidden rounded-[14px] border border-mist bg-canvas-white text-[12px] shadow-[var(--shadow-sm)] sm:grid-cols-3">
+      <dl
+        data-reveal=""
+        data-delay="2"
+        className="mt-4 grid grid-cols-1 overflow-hidden rounded-[14px] border border-mist bg-canvas-white text-[12px] shadow-[var(--shadow-sm)] sm:grid-cols-3"
+      >
         <div className="p-5 sm:border-r sm:border-mist">
           <dt className="font-heading tracking-[0.04em] text-quiet uppercase">Flush &lt; 30s</dt>
           <dd className="mt-1.5 font-heading text-[18px] text-graphite">

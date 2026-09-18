@@ -49,7 +49,7 @@ function AppointmentChip({ item }: { item: Appointment }) {
   return (
     <div
       className={cn(
-        "absolute inset-x-1 z-10 overflow-hidden rounded-md border border-black/5 px-1.5 py-1 text-[11px] leading-tight shadow-sm",
+        "animate-in fade-in zoom-in-95 absolute inset-x-1 z-10 overflow-hidden rounded-md border border-black/5 px-1.5 py-1 text-[11px] leading-tight shadow-sm duration-300",
         OUTCOME_STYLES[outcome].chip,
       )}
       style={{ top, height }}
@@ -73,7 +73,7 @@ function AppointmentChip({ item }: { item: Appointment }) {
 function Legend() {
   const keys: ReceptionOutcome[] = ["BOOKED", "CANCELLED", "REFUSED", "DIVERTED"];
   return (
-    <div className="flex flex-wrap gap-2">
+    <div data-reveal="" data-delay="1" className="flex flex-wrap gap-2">
       {keys.map((key) => (
         <span
           key={key}
@@ -131,7 +131,11 @@ export function AppointmentsCalendar() {
         <Legend />
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-2 sm:gap-3">
+      <div
+        data-reveal=""
+        data-delay="1"
+        className="mb-5 flex flex-wrap items-center gap-2 sm:gap-3"
+      >
         <Button
           variant="outline"
           onClick={() => setDayKey(addMadridDays(stepFrom, -step))}
@@ -172,8 +176,18 @@ export function AppointmentsCalendar() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="surface overflow-x-auto rounded-[18px]">
-          <div className={cn(mode === "week" && "min-w-[720px]")}>
+        <div
+          data-reveal=""
+          data-delay="1"
+          className="surface overflow-x-auto rounded-[18px]"
+        >
+          <div
+            key={`${mode}-${days.join("-")}`}
+            className={cn(
+              "animate-in fade-in duration-300",
+              mode === "week" && "min-w-[720px]",
+            )}
+          >
           <div
             className="grid border-b border-mist bg-ash/75"
             style={{
@@ -190,7 +204,7 @@ export function AppointmentsCalendar() {
                   setMode("day");
                 }}
                 className={cn(
-                  "border-l border-mist px-3 py-4 text-left transition-colors hover:bg-ivory/60",
+                  "border-l border-mist px-3 py-4 text-left transition-[background-color,transform] duration-200 hover:bg-ivory/60 active:scale-[0.98]",
                   day === dayKey && "bg-ivory",
                 )}
               >
@@ -243,7 +257,11 @@ export function AppointmentsCalendar() {
           </div>
           </div>
         </div>
-        <aside className="surface h-fit rounded-[18px] p-5 sm:p-7">
+        <aside
+          data-reveal=""
+          data-delay="2"
+          className="surface h-fit rounded-[18px] p-5 sm:p-7"
+        >
           <p className="mb-4 font-heading text-[16px] text-graphite">Ir a fecha</p>
           <Calendar
             className="bg-transparent p-0"

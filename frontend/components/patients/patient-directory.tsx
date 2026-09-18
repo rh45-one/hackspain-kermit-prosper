@@ -79,6 +79,8 @@ export function PatientDirectory() {
       </PageHeader>
 
       <section
+        data-reveal=""
+        data-delay="1"
         className="mb-8 rounded-[18px] border border-mist bg-ash/70 p-[var(--card-padding)] shadow-[var(--shadow-sm)] sm:mb-10"
       >
         <p className="font-heading text-[17px] text-graphite">Filtros</p>
@@ -121,7 +123,11 @@ export function PatientDirectory() {
         </div>
       </section>
 
-      <section className="surface overflow-hidden rounded-[18px]">
+      <section
+        data-reveal=""
+        data-delay="2"
+        className="surface overflow-hidden rounded-[18px]"
+      >
         <Table className="min-w-[760px]">
           <TableHeader>
             <TableRow className="border-mist hover:bg-transparent">
@@ -156,7 +162,7 @@ export function PatientDirectory() {
               rows.map((patient) => (
                 <TableRow
                   key={patient.patient_id}
-                  className="border-mist hover:bg-fog"
+                  className="animate-in fade-in border-mist duration-200 hover:bg-fog"
                 >
                   <TableCell>
                     <div className="font-heading text-[16px] text-graphite">

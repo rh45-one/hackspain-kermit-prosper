@@ -21,6 +21,7 @@ export function ObservatoryChrome() {
   const pathname = usePathname();
   const { settings, tunnelConfigured, capacityLabel, activeCount } = useFrontdesk();
   const [now, setNow] = useState("");
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const tick = () => setNow(formatMadrid(new Date(), "HH:mm:ss"));
@@ -29,15 +30,27 @@ export function ObservatoryChrome() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 8);
+    queueMicrotask(update);
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-40 border-b border-mist/90 bg-background/95 px-[var(--page-gutter)] backdrop-blur-md">
+    <header
+      className={cn(
+        "sticky top-0 z-40 border-b border-mist/90 bg-background/95 px-[var(--page-gutter)] backdrop-blur-md transition-[background-color,box-shadow] duration-300",
+        scrolled && "bg-background/98 shadow-[0_10px_30px_rgb(29_33_31/0.06)]",
+      )}
+    >
       <div className="mx-auto flex h-[72px] max-w-[var(--page-max-width)] items-center justify-between gap-5">
         <Link
           href="/calls"
-          className="group flex shrink-0 items-center gap-3 rounded-lg outline-none"
+          className="group flex shrink-0 items-center gap-3 rounded-lg outline-none active:scale-[0.99]"
           aria-label="ClinicReflow, ir al monitor"
         >
-          <span className="grid size-9 place-items-center rounded-[10px] bg-graphite text-canvas-white shadow-sm transition-transform duration-200 group-hover:-translate-y-0.5">
+          <span className="grid size-9 place-items-center rounded-[10px] bg-graphite text-canvas-white shadow-sm transition-transform duration-200 ease-out group-hover:-translate-y-0.5 group-active:translate-y-0">
             <Activity className="size-4" strokeWidth={1.8} />
           </span>
           <span>
@@ -58,7 +71,7 @@ export function ObservatoryChrome() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-lg px-3.5 py-2 font-heading text-[14px] leading-none text-steel transition-[color,background-color,box-shadow] duration-200 hover:bg-fog hover:text-graphite focus-visible:outline-none",
+                  "rounded-lg px-3.5 py-2 font-heading text-[14px] leading-none text-steel transition-[color,background-color,box-shadow,transform] duration-200 hover:bg-fog hover:text-graphite focus-visible:outline-none active:scale-[0.97]",
                   active && "bg-graphite text-canvas-white shadow-sm hover:bg-graphite hover:text-canvas-white",
                 )}
               >
@@ -103,11 +116,17 @@ export function ObservatoryChrome() {
               key={item.href}
               href={item.href}
               className={cn(
-                "relative flex min-w-0 items-center justify-center gap-1.5 px-1 py-3 font-heading text-[11px] leading-none text-quiet transition-colors hover:text-graphite focus-visible:outline-none sm:text-[12px]",
+                "group relative flex min-w-0 items-center justify-center gap-1.5 px-1 py-3 font-heading text-[11px] leading-none text-quiet transition-colors hover:text-graphite focus-visible:outline-none active:bg-ash/60 sm:text-[12px]",
                 active && "text-graphite after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-ember-orange",
               )}
             >
-              <Icon className="size-3.5 shrink-0" strokeWidth={1.8} />
+              <Icon
+                className={cn(
+                  "size-3.5 shrink-0 transition-transform duration-200 group-active:scale-90",
+                  active && "-translate-y-px",
+                )}
+                strokeWidth={1.8}
+              />
               {item.label}
             </Link>
           );

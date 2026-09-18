@@ -66,6 +66,8 @@ export function AgentSettingsForm() {
       </PageHeader>
 
       <section
+        data-reveal=""
+        data-delay="1"
         className="mb-[var(--section-gap)] rounded-[18px] border border-mist bg-ash/70 p-[var(--card-padding)] shadow-[var(--shadow-sm)]"
       >
         <h2 className="font-heading text-[clamp(1.65rem,4vw,2.25rem)] text-graphite">
@@ -124,7 +126,7 @@ export function AgentSettingsForm() {
         </div>
       </section>
 
-      <section className="mb-[var(--section-gap)]">
+      <section data-reveal="" className="mb-[var(--section-gap)]">
         <h2 className="font-heading text-[clamp(1.65rem,4vw,2.25rem)] text-graphite">
           Personalidad y voz
         </h2>
@@ -184,7 +186,10 @@ export function AgentSettingsForm() {
         </div>
       </section>
 
-      <section className="surface rounded-[18px] p-[var(--card-padding)]">
+      <section
+        data-reveal=""
+        className="surface rounded-[18px] p-[var(--card-padding)]"
+      >
         <h2 className="font-heading text-[clamp(1.65rem,4vw,2.25rem)] text-graphite">
           Contexto de datos
         </h2>
@@ -196,7 +201,7 @@ export function AgentSettingsForm() {
           {settings.knowledgeSources.map((source) => (
             <li
               key={source.id}
-              className="flex flex-col items-start justify-between gap-3 border-t border-mist pt-4 sm:flex-row sm:items-center"
+              className="animate-in fade-in slide-in-from-bottom-1 flex flex-col items-start justify-between gap-3 border-t border-mist pt-4 duration-300 sm:flex-row sm:items-center"
             >
               <div>
                 <p className="font-heading text-[16px] text-graphite">
@@ -295,8 +300,16 @@ export function AgentSettingsForm() {
         <p className="mt-10 text-[13px] text-quiet">
           Los orígenes se guardan en este navegador. No hay escritura al EHR.
         </p>
-        {error ? <p className="mt-3 text-ember-orange">{error}</p> : null}
-        {message ? <p className="mt-3 text-brass">{message}</p> : null}
+        {error ? (
+          <p className="animate-in fade-in slide-in-from-bottom-1 mt-3 text-ember-orange duration-200">
+            {error}
+          </p>
+        ) : null}
+        {message ? (
+          <p className="animate-in fade-in slide-in-from-bottom-1 mt-3 text-brass duration-200">
+            {message}
+          </p>
+        ) : null}
       </section>
     </div>
   );
