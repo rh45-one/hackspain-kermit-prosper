@@ -64,11 +64,16 @@ The browser does **not** speak Twilio Media Streams. The header shows
 whether the configured public `ws://` / `wss://` tunnel URL is set, plus
 capacity `n/10` active cards (backend still accepts 10–20 sockets).
 
-Calendar chips map closed action verbs to receptionist colours:
-`BOOK`/`REGISTER`/`RESCHEDULE` → BOOKED (green), `CANCEL` → CANCELLED
-(red), `NO_ACTION` → REFUSED (grey, reason shown), `ESCALATE` → DIVERTED
-(orange). Patient "triaje" is a reception flag derived from the latest
-agent action, not a clinical score. Handover is an ESCALATE seam in the UI.
+Visual language is Ventriloc (warm paper, PolySans/Inter Tight 400
+headings, Inter body, Ember + Brass only). Calendar chips map closed
+action verbs onto that palette: `BOOK`/`REGISTER`/`RESCHEDULE` → BOOKED
+(Brass), `CANCEL` → CANCELLED (Graphite), `NO_ACTION` → REFUSED (Slate,
+reason shown), `ESCALATE` → DIVERTED (Ember). Patient "triaje" is a
+reception flag derived from the latest agent action, not a clinical
+score. Handover is an ESCALATE seam in the UI. Shell is a floating pill
+nav, not a sidebar. `/calls` carries a Ventriloc metrics cluster (capacity
+ring, hourly sockets vs submissions, closed outcome mix) on mock series
+shaped like the audit log; Ember and Brass are the only chart strokes.
 
 ## Risks / Trade-offs
 

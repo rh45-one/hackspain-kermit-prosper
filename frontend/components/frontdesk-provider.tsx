@@ -60,8 +60,10 @@ export function FrontdeskProvider({ children }: { children: React.ReactNode }) {
   const [calls, setCalls] = useState<LiveCall[]>(() => cloneLiveCalls());
 
   useEffect(() => {
-    setSettings(loadSettings());
-    setHydrated(true);
+    queueMicrotask(() => {
+      setSettings(loadSettings());
+      setHydrated(true);
+    });
   }, []);
 
   useEffect(() => {

@@ -4,16 +4,9 @@ import { useEffect, useRef } from "react";
 import { Hand, PhoneOff } from "lucide-react";
 
 import { useFrontdesk } from "@/components/frontdesk-provider";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/layout/page-header";
+import { ObservatoryCharts } from "@/components/metrics/observatory-charts";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CALL_CAPACITY, type LiveCall, type TurnState } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -24,18 +17,18 @@ const TURN_LABEL: Record<TurnState, string> = {
   "barge-in": "Barge-in",
 };
 
-function TurnBadge({ turn }: { turn: TurnState }) {
+function TurnMark({ turn }: { turn: TurnState }) {
   return (
-    <Badge
-      variant="outline"
+    <span
       className={cn(
-        turn === "barge-in" && "border-orange-300 bg-orange-50 text-orange-800",
-        turn === "speaking" && "border-teal-200 bg-teal-50 text-teal-800",
-        turn === "listening" && "border-slate-200 bg-slate-50 text-slate-700",
+        "font-heading text-[13px] leading-none",
+        turn === "barge-in" && "text-ember-orange",
+        turn === "speaking" && "text-brass",
+        turn === "listening" && "text-quiet",
       )}
     >
       {TURN_LABEL[turn]}
-    </Badge>
+    </span>
   );
 }
 
@@ -55,91 +48,96 @@ function CallCard({
   const ended = call.status === "ended";
 
   return (
-    <Card className={cn("h-full", ended && "opacity-70")}>
-      <CardHeader className="border-b">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle className="font-mono text-sm">{call.callId}</CardTitle>
-            <CardDescription>
-              {call.socketId} · {call.virtualPhone}
-            </CardDescription>
-          </div>
-          {ended ? (
-            <Badge className="border-orange-200 bg-orange-100 text-orange-800">
-              DIVERTED
-            </Badge>
-          ) : (
-            <TurnBadge turn={call.turn} />
-          )}
+    <article
+      className={cn(
+        "flex h-full flex-col rounded-[16px] border border-mist bg-canvas-white p-5 shadow-[var(--shadow-sm)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] sm:p-7",
+        ended && "opacity-60",
+      )}
+    >
+      <div className="mb-5 flex items-start justify-between gap-5">
+        <div className="min-w-0">
+          <p className="truncate font-heading text-[15px] text-graphite">
+            {call.callId}
+          </p>
+          <p className="mt-1 text-[13px] text-quiet">
+            {call.socketId} · {call.virtualPhone}
+          </p>
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-3">
-        <ScrollArea className="h-40 rounded-md bg-slate-50 p-2">
-          <div className="space-y-2">
-            {call.transcript.length === 0 ? (
-              <p className="px-1 text-xs text-slate-400">Esperando audio…</p>
-            ) : (
-              call.transcript.map((line, index) => (
-                <p
-                  key={`${call.callId}-${index}`}
-                  className={cn(
-                    "rounded-md px-2 py-1 text-xs leading-relaxed",
-                    line.role === "agent"
-                      ? "bg-white text-slate-800"
-                      : "bg-teal-50 text-teal-950",
-                  )}
-                >
-                  <span className="mr-1 font-medium">
-                    {line.role === "agent" ? "IA" : "Paciente"}
-                  </span>
-                  {line.text}
-                </p>
-              ))
-            )}
-            <div ref={bottom} />
-          </div>
-        </ScrollArea>
-        <dl className="grid grid-cols-3 gap-2 text-xs">
-          <div className="rounded-md bg-slate-50 p-2">
-            <dt className="text-slate-500">Nombre</dt>
-            <dd className="truncate font-medium text-slate-900">
-              {call.entities.name ?? "—"}
-            </dd>
-          </div>
-          <div className="rounded-md bg-slate-50 p-2">
-            <dt className="text-slate-500">DNI</dt>
-            <dd className="truncate font-mono font-medium text-slate-900">
-              {call.entities.nationalId ?? "—"}
-            </dd>
-          </div>
-          <div className="rounded-md bg-slate-50 p-2">
-            <dt className="text-slate-500">Tipo</dt>
-            <dd className="truncate font-medium text-slate-900">
-              {call.entities.appointmentType ?? "—"}
-            </dd>
-          </div>
-        </dl>
-      </CardContent>
-      <CardFooter>
+        {ended ? (
+          <span className="shrink-0 font-heading text-[13px] text-ember-orange">
+            DIVERTED
+          </span>
+        ) : (
+          <TurnMark turn={call.turn} />
+        )}
+      </div>
+      <ScrollArea className="h-44 rounded-[10px] border border-mist/80 bg-fog p-3">
+        <div className="space-y-2">
+          {call.transcript.length === 0 ? (
+            <p className="text-[13px] text-quiet">Esperando audio…</p>
+          ) : (
+            call.transcript.map((line, index) => (
+              <p
+                key={`${call.callId}-${index}`}
+                className={cn(
+                  "rounded-md px-2.5 py-1.5 text-[13px] leading-[1.45]",
+                  line.role === "agent"
+                    ? "bg-canvas-white text-graphite"
+                    : "border-l-2 border-ember-orange bg-ivory text-steel",
+                )}
+              >
+                <span className="mr-1 font-heading text-[13px] text-quiet">
+                  {line.role === "agent" ? "IA" : "Paciente"}
+                </span>
+                {line.text}
+              </p>
+            ))
+          )}
+          <div ref={bottom} />
+        </div>
+      </ScrollArea>
+      <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 text-[12px] sm:grid-cols-3">
+        <div>
+          <dt className="text-quiet">Nombre</dt>
+          <dd className="mt-1 truncate text-graphite">
+            {call.entities.name ?? "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-quiet">DNI</dt>
+          <dd className="mt-1 truncate font-mono text-graphite">
+            {call.entities.nationalId ?? "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-quiet">Tipo</dt>
+          <dd className="mt-1 truncate text-graphite">
+            {call.entities.appointmentType ?? "—"}
+          </dd>
+        </div>
+      </dl>
+      <div className="mt-6">
         <Button
-          size="sm"
-          variant={ended ? "secondary" : "default"}
+          variant={ended ? "outline" : "default"}
           disabled={ended}
           onClick={() => onHandover(call.callId)}
         >
           {ended ? <PhoneOff /> : <Hand />}
           {ended ? "Control tomado" : "Tomar el control"}
         </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </article>
   );
 }
 
 function EmptySlot({ index }: { index: number }) {
   return (
-    <div className="flex h-full min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/60 text-slate-400">
-      <p className="text-xs tracking-wide uppercase">Hueco {index + 1}</p>
-      <p className="text-sm">Libre</p>
+    <div className="flex min-h-32 flex-col justify-between rounded-[16px] border border-dashed border-[#cfd3cc] bg-fog/70 p-5 text-quiet sm:p-7">
+      <span className="size-2 rounded-full bg-mist" />
+      <div>
+        <p className="font-mono text-[11px]">{String(index + 1).padStart(2, "0")}</p>
+        <p className="font-heading text-[13px]">Hueco libre</p>
+      </div>
     </div>
   );
 }
@@ -149,17 +147,30 @@ export function CallMonitor() {
   const slots = Array.from({ length: CALL_CAPACITY }, (_, index) => calls[index]);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-          Monitor de llamadas
-        </h2>
-        <p className="text-sm text-slate-500">
-          Hasta 10 sockets concurrentes. Transcripción y entidades en vivo
-          (datos simulados). {activeCount} activas ahora.
+    <div>
+      <PageHeader kicker="Observatorio en vivo" title="Monitor de llamadas">
+        Hasta diez sockets concurrentes. Transcripción y entidades en vivo,
+        datos simulados. {activeCount} activas ahora.
+      </PageHeader>
+      <div className="mb-[var(--section-gap)]">
+        <ObservatoryCharts />
+      </div>
+      <div className="mb-5 flex items-end justify-between gap-5">
+        <div>
+          <p className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
+            Actividad en tiempo real
+          </p>
+          <h2 className="mt-2 text-[clamp(1.6rem,3vw,2.25rem)] leading-none">
+            Canales de llamada
+          </h2>
+        </div>
+        <p className="hidden font-mono text-[11px] text-quiet sm:block">
+          {activeCount}/{CALL_CAPACITY} ocupados
         </p>
       </div>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+      <div
+        className="grid grid-cols-1 gap-4 rounded-[20px] border border-mist bg-ash/70 p-3 sm:p-5 xl:grid-cols-2 2xl:grid-cols-3"
+      >
         {slots.map((call, index) =>
           call ? (
             <CallCard key={call.callId} call={call} onHandover={takeControl} />

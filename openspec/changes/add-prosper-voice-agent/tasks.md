@@ -44,4 +44,5 @@
 - [x] 6.5 `/patients` directory: name + DNI/NIE filters (control letter), detail with history and derived triage
 - [x] 6.6 `/calendar` week/day view in Europe/Madrid with BOOKED / CANCELLED / REFUSED / DIVERTED colours
 - [x] 6.7 `/settings`: tunnel URL (`ws://`/`wss://` only), voice/prompt, knowledge-source uploads (CSV / SQL / API)
+- [x] 6.9 Observatory metrics on `/calls`: capacity ring, hourly load/submissions, closed outcome mix (mock-first)
 - [ ] 6.8 ClinicReflow demo seam: "doctor unavailable" → affected list → negotiation call → plan delta

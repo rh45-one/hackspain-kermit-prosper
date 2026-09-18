@@ -4,9 +4,11 @@
 
 ### Requirement: Staff dashboard shell
 The FrontDesk SHALL live in `frontend/` as a Next.js App Router app and SHALL
-present a sidebar (Monitor de Llamadas, Calendario, Pacientes, Configuración
-del Agente) plus a header that shows public-tunnel connection state and
-capacity as `n/10` active calls.
+present a Ventriloc observatory chrome: brand wordmark, a centered pill nav
+(Llamadas, Calendario, Pacientes, Agente), and a header that shows
+public-tunnel connection state and capacity as `n/10` active calls. The
+palette is achromatic paper (Graphite, Ash, Ivory) with Ember Orange and
+Brass as the only chromatic accents.
 
 #### Scenario: Receptionist lands
 - **WHEN** a staff member opens the app
@@ -55,9 +57,10 @@ score).
 ### Requirement: Appointment calendar in Europe/Madrid
 The `/calendar` view SHALL render week and day grids whose instants are
 converted to `Europe/Madrid`. Each appointment chip SHALL use receptionist
-colours mapped from the closed action verbs: `BOOK`/`REGISTER`/`RESCHEDULE`
-→ BOOKED (green), `CANCEL` → CANCELLED (red), `NO_ACTION` → REFUSED (grey,
-showing the closed-vocabulary reason), `ESCALATE` → DIVERTED (orange).
+colours mapped from the closed action verbs onto the Ventriloc palette:
+`BOOK`/`REGISTER`/`RESCHEDULE` → BOOKED (Brass on Ivory), `CANCEL` →
+CANCELLED (Graphite on Mist), `NO_ACTION` → REFUSED (Slate on Ash, showing
+the closed-vocabulary reason), `ESCALATE` → DIVERTED (Ember Orange).
 
 #### Scenario: Offset-aware slot
 - **WHEN** a slot is stored as `2026-09-24T16:30:00+02:00`
@@ -83,3 +86,18 @@ validation and MUST NOT be saved.
 #### Scenario: Valid tunnel
 - **WHEN** they submit `wss://a1b2c3d4.ngrok-free.app/ws`
 - **THEN** the value is stored and the header connection pill updates.
+
+### Requirement: Observatory metrics
+The `/calls` view SHALL show a mock-first metrics cluster derived from the
+same shapes as the call audit and appointment record: concurrent sockets
+versus capacity 10, submissions versus the 30-second flush window, and the
+closed outcome mix (BOOKED / CANCELLED / REFUSED / DIVERTED) with Ember
+Orange and Brass as the only chromatic chart strokes.
+
+#### Scenario: Capacity ring tracks live cards
+- **WHEN** the receptionist hands over a call
+- **THEN** the capacity ring decrements with the header `n/10`.
+
+#### Scenario: Refusal mix is closed-vocabulary
+- **WHEN** mock (or later audit) records include `NO_ACTION`
+- **THEN** the chart names the restriction reason, not a free-text label.

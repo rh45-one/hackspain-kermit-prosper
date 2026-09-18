@@ -6,10 +6,9 @@ import { es } from "react-day-picker/locale";
 import { fromZonedTime } from "date-fns-tz";
 
 import { useFrontdesk } from "@/components/frontdesk-provider";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MOCK_PATIENTS } from "@/lib/mock-data";
 import {
@@ -50,20 +49,22 @@ function AppointmentChip({ item }: { item: Appointment }) {
   return (
     <div
       className={cn(
-        "absolute inset-x-1 z-10 overflow-hidden rounded-md border px-1.5 py-1 text-[11px] leading-tight",
+        "absolute inset-x-1 z-10 overflow-hidden rounded-md border border-black/5 px-1.5 py-1 text-[11px] leading-tight shadow-sm",
         OUTCOME_STYLES[outcome].chip,
       )}
       style={{ top, height }}
     >
-      <div className="flex items-center justify-between gap-1 font-medium">
+      <div className="flex items-center justify-between gap-1 font-heading">
         <span>{formatMadrid(item.start_time, "HH:mm")}</span>
         <span>{OUTCOME_STYLES[outcome].label}</span>
       </div>
       <p className="truncate">{patientLabel(item.patient_id)}</p>
       {outcome === "REFUSED" && item.reason ? (
-        <p className="truncate text-[10px]">{REASON_LABELS[item.reason]}</p>
+        <p className="truncate text-[10px] text-quiet">
+          {REASON_LABELS[item.reason]}
+        </p>
       ) : (
-        <p className="truncate text-[10px]">{item.location_name}</p>
+        <p className="truncate text-[10px] text-quiet">{item.location_name}</p>
       )}
     </div>
   );
@@ -74,9 +75,15 @@ function Legend() {
   return (
     <div className="flex flex-wrap gap-2">
       {keys.map((key) => (
-        <Badge key={key} variant="outline" className={OUTCOME_STYLES[key].className}>
+        <span
+          key={key}
+          className={cn(
+            "rounded-full px-3 py-1 font-heading text-[11px]",
+            OUTCOME_STYLES[key].className,
+          )}
+        >
           {OUTCOME_STYLES[key].label}
-        </Badge>
+        </span>
       ))}
     </div>
   );
@@ -84,12 +91,15 @@ function Legend() {
 
 export function AppointmentsCalendar() {
   const { appointments } = useFrontdesk();
-  const [dayKey, setDayKey] = useState("2026-09-18");
+  const [dayKey, setDayKey] = useState(() => madridDayKey(new Date()));
   const [mode, setMode] = useState<"week" | "day">("week");
 
   useEffect(() => {
-    setDayKey(madridDayKey(new Date()));
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      queueMicrotask(() => setMode("day"));
+    }
   }, []);
+
   const week = madridWeekDays(dayKey);
   const selectedDate = useMemo(
     () => fromZonedTime(`${dayKey}T12:00:00`, CLINIC_TZ),
@@ -112,54 +122,64 @@ export function AppointmentsCalendar() {
   const stepFrom = mode === "week" ? week[0] : dayKey;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-            Calendario de citas
-          </h2>
-          <p className="text-sm text-slate-500">
-            Instants convertidos a Europe/Madrid. Un rechazo se ve en gris, con
-            la regla, sin abrir nada.
-          </p>
-        </div>
+    <div>
+      <div className="mb-10 flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
+        <PageHeader className="mb-0" kicker="Agenda Europe/Madrid" title="Calendario de citas">
+          Instants convertidos a Europe/Madrid. Un rechazo se lee en slate, con
+          la regla, sin abrir nada.
+        </PageHeader>
         <Legend />
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+
+      <div className="mb-5 flex flex-wrap items-center gap-2 sm:gap-3">
         <Button
           variant="outline"
-          size="sm"
           onClick={() => setDayKey(addMadridDays(stepFrom, -step))}
         >
           <ChevronLeft />
         </Button>
-        <p className="min-w-40 text-sm font-medium capitalize">
+        <p className="order-first w-full font-heading text-[18px] capitalize text-graphite sm:order-none sm:mx-1 sm:w-auto sm:min-w-40">
           {monthTitleEs(dayKey)}
         </p>
         <Button
           variant="outline"
-          size="sm"
           onClick={() => setDayKey(addMadridDays(stepFrom, step))}
         >
           <ChevronRight />
         </Button>
         <Button
           variant="ghost"
-          size="sm"
           onClick={() => setDayKey(madridDayKey(new Date()))}
         >
           Hoy
         </Button>
-        <Tabs value={mode} onValueChange={(value) => setMode(value as "week" | "day")}>
-          <TabsList>
-            <TabsTrigger value="week">Semana</TabsTrigger>
-            <TabsTrigger value="day">Día</TabsTrigger>
+        <Tabs className="ml-auto" value={mode} onValueChange={(value) => setMode(value as "week" | "day")}>
+          <TabsList className="bg-ash">
+            <TabsTrigger
+              value="week"
+              className="font-heading data-active:bg-canvas-white"
+            >
+              Semana
+            </TabsTrigger>
+            <TabsTrigger
+              value="day"
+              className="font-heading data-active:bg-canvas-white"
+            >
+              Día
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1fr_16rem]">
-        <Card className="overflow-hidden py-0">
-          <div className="grid border-b border-slate-200 bg-slate-50" style={{ gridTemplateColumns: `3rem repeat(${days.length}, minmax(0, 1fr))` }}>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="surface overflow-x-auto rounded-[18px]">
+          <div className={cn(mode === "week" && "min-w-[720px]")}>
+          <div
+            className="grid border-b border-mist bg-ash/75"
+            style={{
+              gridTemplateColumns: `3rem repeat(${days.length}, minmax(0, 1fr))`,
+            }}
+          >
             <div />
             {days.map((day) => (
               <button
@@ -170,14 +190,16 @@ export function AppointmentsCalendar() {
                   setMode("day");
                 }}
                 className={cn(
-                  "border-l border-slate-200 px-2 py-2 text-left",
-                  day === dayKey && "bg-teal-50",
+                  "border-l border-mist px-3 py-4 text-left transition-colors hover:bg-ivory/60",
+                  day === dayKey && "bg-ivory",
                 )}
               >
-                <p className="text-[11px] tracking-wide text-slate-500 uppercase">
+                <p className="font-heading text-[13px] uppercase text-quiet">
                   {weekdayShortEs(day)}
                 </p>
-                <p className="text-lg font-semibold text-slate-900">{dayNumber(day)}</p>
+                <p className="mt-1 font-heading text-[26px] leading-none text-graphite">
+                  {dayNumber(day)}
+                </p>
               </button>
             ))}
           </div>
@@ -186,7 +208,7 @@ export function AppointmentsCalendar() {
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="pr-2 text-right font-mono text-[11px] text-slate-400"
+                  className="pr-2 text-right font-mono text-[11px] text-quiet"
                   style={{ height: HOUR_HEIGHT }}
                 >
                   {String(hour).padStart(2, "0")}:00
@@ -195,18 +217,20 @@ export function AppointmentsCalendar() {
             </div>
             <div
               className="grid min-w-0 flex-1"
-              style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
+              style={{
+                gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))`,
+              }}
             >
               {days.map((day) => (
                 <div
                   key={day}
-                  className="relative border-l border-slate-100"
+                  className="relative border-l border-mist"
                   style={{ height: DAY_HEIGHT }}
                 >
                   {HOURS.map((hour) => (
                     <div
                       key={`${day}-${hour}`}
-                      className="absolute inset-x-0 border-t border-slate-100"
+                      className="absolute inset-x-0 border-t border-mist"
                       style={{ top: (hour - 8) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
                     />
                   ))}
@@ -217,25 +241,23 @@ export function AppointmentsCalendar() {
               ))}
             </div>
           </div>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Ir a fecha</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Calendar
-              mode="single"
-              locale={es}
-              weekStartsOn={1}
-              selected={selectedDate}
-              onSelect={(date) => {
-                if (date) {
-                  setDayKey(madridDayKey(date));
-                }
-              }}
-            />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+        <aside className="surface h-fit rounded-[18px] p-5 sm:p-7">
+          <p className="mb-4 font-heading text-[16px] text-graphite">Ir a fecha</p>
+          <Calendar
+            className="bg-transparent p-0"
+            mode="single"
+            locale={es}
+            weekStartsOn={1}
+            selected={selectedDate}
+            onSelect={(date) => {
+              if (date) {
+                setDayKey(madridDayKey(date));
+              }
+            }}
+          />
+        </aside>
       </div>
     </div>
   );

@@ -47,30 +47,29 @@ export const OUTCOME_STYLES: Record<
 > = {
   BOOKED: {
     label: "BOOKED",
-    className: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    chip: "bg-emerald-50 border-emerald-200 text-emerald-900",
+    className: "border-0 bg-ivory text-brass",
+    chip: "border-0 bg-ivory text-graphite",
   },
   CANCELLED: {
     label: "CANCELLED",
-    className: "bg-red-100 text-red-800 border-red-200",
-    chip: "bg-red-50 border-red-200 text-red-900",
+    className: "border-0 bg-mist text-graphite",
+    chip: "border-0 bg-mist text-graphite",
   },
   REFUSED: {
     label: "REFUSED",
-    className: "bg-slate-200 text-slate-700 border-slate-300",
-    chip: "bg-slate-100 border-slate-300 text-slate-800",
+    className: "border-0 bg-ash text-quiet",
+    chip: "border-0 bg-ash text-steel",
   },
   DIVERTED: {
     label: "DIVERTED",
-    className: "bg-orange-100 text-orange-800 border-orange-200",
-    chip: "bg-orange-50 border-orange-200 text-orange-900",
+    className: "border-0 bg-ivory text-ember-orange",
+    chip: "border-0 bg-ivory text-ember-orange",
   },
 };
 
-export function fullName(patient: Pick<
-  Patient,
-  "given_name" | "first_surname" | "second_surname"
->): string {
+export function fullName(
+  patient: Pick<Patient, "given_name" | "first_surname" | "second_surname">,
+): string {
   return [patient.given_name, patient.first_surname, patient.second_surname]
     .filter(Boolean)
     .join(" ");
@@ -103,18 +102,18 @@ export const TRIAGE_STYLES: Record<
 > = {
   rutinario: {
     label: "Rutinario",
-    className: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    className: "border-0 bg-ivory text-brass",
   },
   vigilancia: {
     label: "Vigilancia",
-    className: "bg-amber-100 text-amber-900 border-amber-200",
+    className: "border-0 bg-ash text-steel",
   },
   desviado: {
     label: "Desviado",
-    className: "bg-orange-100 text-orange-800 border-orange-200",
+    className: "border-0 bg-ivory text-ember-orange",
   },
   urgente: {
     label: "Urgente",
-    className: "bg-red-100 text-red-800 border-red-200",
+    className: "border-0 bg-graphite text-canvas-white",
   },
 };
