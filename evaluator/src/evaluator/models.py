@@ -135,17 +135,34 @@ def canonical_action(raw: dict[str, Any]) -> dict[str, Any]:
     return {"action": verb, **action}
 
 
+class NoiseSpec(BaseModel):
+    """Noise texture mixed over a caller turn (plan §15: 5 dB, SNR vs speech).
+
+    `file` is a µ-law 8 kHz asset relative to the scenario; `synth` asks the
+    harness to generate deterministic noise locally when no asset exists.
+    """
+
+    file: str | None = None
+    synth: str | None = None  # e.g. "brown" - local approximation, not official
+    snr_db: float = 5.0
+
+
 class Turn(BaseModel):
     """One scripted caller utterance for the voice (WS) path.
 
     `audio` (µ-law 8 kHz file, relative to the scenario) drives the voice
     path; `text` is the transcript of what the caller says. `hold_ms` bounds
     how long the caller stays silent after the turn.
+    `interrupt_on_agent_audio` makes this utterance barge in as soon as the
+    agent starts speaking (difficult-caller style interruption).
     """
 
     text: str | None = None
     audio: str | None = None
     hold_ms: int = 1500
+    noise: NoiseSpec | None = None
+    interrupt_on_agent_audio: bool = False
+    tts: bool = False  # synthesise `text` via the configured TTS provider
 
 
 class LeakCheck(BaseModel):
@@ -166,11 +183,27 @@ class CallerBehavior(BaseModel):
     max_repeats: int = 3  # unanswered turns before the caller gives up
 
 
+class LLMConfig(BaseModel):
+    """Optional LLM-driven caller (plan §11 second version).
+
+    Restricted: the prompt carries persona + facts + behaviour rules only -
+    never the oracle. Falls back to the rules patient on provider errors.
+    """
+
+    endpoint: str = "http://localhost:11434/v1/chat/completions"
+    model: str = "qwen2.5:3b"
+    key_env: str | None = None  # env var holding the API key, if any
+    seed: int | None = None
+    temperature: float = 0.4
+    max_tokens: int = 120
+
+
 class Caller(BaseModel):
     """Who calls and what they know - never the expected outcome.
 
     `opening` is the first utterance. `facts` holds everything the caller
     may truthfully reveal (name, ids, wishes). `behavior` tunes the rules.
+    `llm` switches the simulated patient to the restricted-LLM version.
     """
 
     persona: str = "patient"
@@ -178,6 +211,7 @@ class Caller(BaseModel):
     opening: str | None = None
     facts: dict[str, Any] = Field(default_factory=dict)
     behavior: CallerBehavior = Field(default_factory=CallerBehavior)
+    llm: LLMConfig | None = None
 
 
 class Outcome(BaseModel):
@@ -287,6 +321,9 @@ class CaseResult(BaseModel):
     turn_latencies_ms: list[float] = Field(default_factory=list)
     first_audio_ms: float | None = None
     cost: float | None = None  # None = unknown, never zero (plan §13)
+    usage: dict[str, Any] = Field(default_factory=dict)  # provider usage, if exposed
+    audio: dict[str, str] = Field(default_factory=dict)  # {"agent": path, "caller": path}
+    interrupts: list[dict[str, Any]] = Field(default_factory=list)  # barge-in events
     duration_s: float = 0.0
     errors: list[str] = Field(default_factory=list)
 
@@ -306,11 +343,22 @@ class CandidateConfig(BaseModel):
     kind: Literal["external", "double"] = "external"
     ws_url: str | None = None  # e.g. ws://localhost:7860/ws
     text_url: str | None = None  # optional text adapter endpoint
+    usage_url: str | None = None  # optional; GET {usage_url}/calls/{call_id} → {cost, usage}
     start_command: str | None = None  # optional; runner waits for ws_url
     env: dict[str, str] = Field(default_factory=dict)
     mode: Literal["correct", "mutate", "silent"] = "correct"  # double only
     port: int | None = None  # double only
     version: str = "unknown"
+
+
+class SwitchboardConfig(BaseModel):
+    """Concurrent-call diagnostic (problem 2): N simultaneous sessions.
+
+    Each parallel call runs a different scenario so cross-talk shows up as
+    a wrong verdict for that call. Diagnostic only - worth zero points.
+    """
+
+    concurrency: int = 5
 
 
 class ExperimentConfig(BaseModel):
@@ -322,6 +370,8 @@ class ExperimentConfig(BaseModel):
     submit_key: str = "pk-local-eval"  # X-Api-Key the local receiver expects
     repetitions: int = 1
     budget: dict[str, Any] = Field(default_factory=dict)  # plan §18 limits
+    switchboard: SwitchboardConfig | None = None
+    tts_command: str | None = None  # e.g. "espeak-ng"; absent = no voice synth
     candidates: list[CandidateConfig]
     scenarios: list[str]  # paths or globs, relative to the config file
 

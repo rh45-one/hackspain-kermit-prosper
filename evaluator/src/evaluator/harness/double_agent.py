@@ -5,16 +5,23 @@ and scoring, not the agent.
 
 Control channel (evaluator side, not part of the wire contract):
 
-    POST /control {"actions": [{"route": "book", "fields": {...}}]}
-    POST /control {"actions": null}          # next call submits nothing
+    POST /control {"call_id": "C-1", "actions": [{"route": "book", "fields": {...}}]}
+    POST /control {"actions": [...]}          # legacy FIFO, applies to next socket
+    POST /control {"actions": null}           # next call submits nothing
 
-The queued action list applies to the next accepted socket, FIFO.
+    GET  /usage/calls/{call_id}               # deterministic usage + cost
+
+Per-call control is required for concurrent runs: global FIFO queues let
+one socket consume another call's canned actions and contaminate results.
+Usage/cost is fabricated deterministically from what the double observed,
+so the runner's cost plumbing can be tested end-to-end.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
 import json
+import time
 from collections import deque
 from typing import Any
 
@@ -27,12 +34,15 @@ TONE_FRAME = bytes((i % 40) + 100 for i in range(160))  # quiet non-silence patt
 
 
 class _Control(BaseModel):
+    call_id: str | None = None
     actions: list[dict[str, Any]] | None = None  # [{"route": ..., "fields": {...}}]
 
 
 def create_app(submit_base: str, api_key: str = "pk-local-eval") -> FastAPI:
     app = FastAPI(title="Prosper evaluator - test double")
-    pending: deque[list[dict[str, Any]] | None] = deque()
+    pending_fifo: deque[list[dict[str, Any]] | None] = deque()
+    per_call: dict[str, list[dict[str, Any]] | None] = {}
+    usage: dict[str, dict[str, Any]] = {}
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -40,33 +50,63 @@ def create_app(submit_base: str, api_key: str = "pk-local-eval") -> FastAPI:
 
     @app.post("/control")
     def control(body: _Control) -> dict[str, str]:
-        pending.append(body.actions)
-        return {"state": "queued", "depth": str(len(pending))}
+        if body.call_id is not None:
+            per_call[body.call_id] = body.actions
+            return {"state": "queued", "call_id": body.call_id}
+        pending_fifo.append(body.actions)
+        return {"state": "queued", "depth": str(len(pending_fifo))}
 
-    async def _submit(call_id: str, actions: list[dict[str, Any]] | None) -> None:
+    @app.get("/usage/calls/{call_id}")
+    def get_usage(call_id: str) -> dict[str, Any]:
+        """Deterministic fabricated usage - enough to exercise cost plumbing."""
+        u = usage.get(call_id)
+        if u is None:
+            return {"call_id": call_id, "cost": None, "usage": {}}
+        # Fake but deterministic pricing: $0.005/min audio + $0.001/submission.
+        minutes = u["media_frames_out"] * 0.02 / 60
+        cost = round(minutes * 0.005 + u["submitted"] * 0.001, 6)
+        return {
+            "call_id": call_id,
+            "cost": cost,
+            "usage": {
+                "audio_seconds": round(u["media_frames_out"] * 0.02, 1),
+                "submissions": u["submitted"],
+                "provider": "double",
+            },
+        }
+
+    async def _submit(call_id: str, actions: list[dict[str, Any]] | None) -> int:
         if not actions:
-            return
+            return 0
+        sent = 0
         async with httpx.AsyncClient(base_url=submit_base.rstrip("/"), timeout=10) as client:
             for item in actions:
                 payload = {"call_id": call_id, **item.get("fields", {})}
-                await client.post(
+                resp = await client.post(
                     f"/api/v1/submit/{item['route']}",
                     json=payload,
                     headers={"X-Api-Key": api_key},
                 )
+                if resp.status_code < 400:
+                    sent += 1
+        return sent
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
         await websocket.accept()
         call_id: str | None = None
         seq = 0
-        actions = pending.popleft() if pending else []
+        # Resolve actions lazily at `start`, once call_id is known; fall
+        # back to the FIFO queue for back-compat with sequential runs.
+        actions: list[dict[str, Any]] | None = None
+        started_at = time.monotonic()
+        frames_out = 0
 
         async def _talkback() -> None:
-            # Emit low-level "audio" so the caller sees outbound media flowing.
-            nonlocal seq
+            nonlocal seq, frames_out
             while True:
                 seq += 1
+                frames_out += 1
                 await websocket.send_text(
                     json.dumps(
                         {
@@ -90,6 +130,10 @@ def create_app(submit_base: str, api_key: str = "pk-local-eval") -> FastAPI:
                 msg = json.loads(raw)
                 if msg.get("event") == "start":
                     call_id = msg["start"]["callSid"]
+                    if call_id in per_call:
+                        actions = per_call.pop(call_id)
+                    elif pending_fifo:
+                        actions = pending_fifo.popleft()
                 elif msg.get("event") == "stop":
                     break
         except WebSocketDisconnect:
@@ -97,7 +141,12 @@ def create_app(submit_base: str, api_key: str = "pk-local-eval") -> FastAPI:
         finally:
             talk.cancel()
             if call_id:
-                await _submit(call_id, actions)
+                submitted = await _submit(call_id, actions)
+                usage[call_id] = {
+                    "media_frames_out": frames_out,
+                    "submitted": submitted,
+                    "duration_s": round(time.monotonic() - started_at, 2),
+                }
 
     return app
 

@@ -9,6 +9,10 @@ harness.
 Latency is measured per caller turn: end of the caller's last outbound
 frame → the agent's first inbound media frame after it (plan §13,
 "fin del habla del paciente → primer audio audible de respuesta").
+
+Turns flagged `interrupt_on_agent_audio` barge in: the caller stops its
+own utterance the moment the agent starts speaking, like a real
+interruption (plan §15).
 """
 from __future__ import annotations
 
@@ -40,6 +44,14 @@ def silence(ms: int) -> list[bytes]:
 
 
 @dataclass
+class PlayTurn:
+    """One caller utterance to play on the wire."""
+
+    frames: list[bytes]
+    interrupt_on_agent_audio: bool = False
+
+
+@dataclass
 class CallEvidence:
     """What the harness observed on the wire, for the evidence trail."""
 
@@ -56,12 +68,17 @@ class CallEvidence:
     # never answered that turn before the next one started or the call ended.
     turn_latencies_ms: list[float | None] = field(default_factory=list)
     first_audio_ms: float | None = None  # connect → first inbound media frame
+    # Raw audio evidence: µ-law bytes both directions.
+    agent_audio: bytes = b""
+    caller_audio: bytes = b""
+    # Barge-in events: {"turn": i, "at_ms": x, "agent_tail_ms": y}.
+    interrupts: list[dict] = field(default_factory=list)
 
 
 async def dial(
     ws_url: str,
     call_id: str,
-    turns: list[list[bytes]],
+    turns: list[PlayTurn | list[bytes]],
     from_number: str | None = None,
     frame_interval_s: float = 0.02,
     open_timeout_s: float = 10.0,
@@ -70,12 +87,14 @@ async def dial(
 ) -> CallEvidence:
     """Play one call: handshake, stream `turns` in real time, then stop.
 
-    `turns` is a list of frame groups - one group per caller utterance.
+    `turns` is a list of `PlayTurn` (or bare frame lists, for back-compat).
     Waits up to `after_send_idle_s` for the agent's tail-end audio before
     sending `stop` - submissions during the open call are valid, so the
     caller does not need to linger beyond the caller-side content.
     """
+    play_turns = [t if isinstance(t, PlayTurn) else PlayTurn(list(t)) for t in turns]
     ev = CallEvidence(call_id=call_id, connected_at=time.monotonic())
+    last_inbound_at = [ev.connected_at]
     try:
         async with websockets.connect(ws_url, open_timeout=open_timeout_s) as ws:
             stream_sid = ev.stream_sid
@@ -110,11 +129,16 @@ async def dial(
                     event = msg.get("event")
                     if event == "media":
                         now = time.monotonic()
+                        last_inbound_at[0] = now
                         if ev.first_audio_ms is None:
                             ev.first_audio_ms = round((now - ev.connected_at) * 1000, 1)
                         ev.frames_received += 1
                         payload = msg.get("media", {}).get("payload", "")
                         ev.agent_bytes += len(payload)
+                        try:
+                            ev.agent_audio += base64.b64decode(payload)
+                        except ValueError:
+                            ev.agent_audio += b""  # malformed payload: count kept, bytes skipped
                         if awaiting_reply_at[0] is not None:
                             ev.turn_latencies_ms.append(
                                 round((now - awaiting_reply_at[0]) * 1000, 1)
@@ -126,11 +150,29 @@ async def dial(
             recv_task = asyncio.create_task(_recv())
             try:
                 seq = 1
-                for turn_frames in turns:
+                for turn_idx, turn in enumerate(play_turns):
                     if time.monotonic() - ev.connected_at > max_call_s:
                         ev.error = "caller-side max_call_s reached"
                         break
-                    for frame_bytes in turn_frames:
+                    received_at_turn_start = ev.frames_received
+                    barged = False
+                    for frame_bytes in turn.frames:
+                        if (
+                            turn.interrupt_on_agent_audio
+                            and ev.frames_received > received_at_turn_start
+                        ):
+                            # Agent started talking and the caller barges in:
+                            # drop the rest of this utterance.
+                            ev.interrupts.append(
+                                {
+                                    "turn": turn_idx,
+                                    "at_ms": round(
+                                        (time.monotonic() - ev.connected_at) * 1000, 1
+                                    ),
+                                }
+                            )
+                            barged = True
+                            break
                         seq += 1
                         await ws.send(
                             json.dumps(
@@ -148,13 +190,15 @@ async def dial(
                             )
                         )
                         ev.frames_sent += 1
+                        ev.caller_audio += frame_bytes
                         await asyncio.sleep(frame_interval_s)
-                    # Caller finished this utterance: the clock for the
-                    # agent's response latency starts now. If the previous
-                    # turn was never answered, record it as unanswered.
-                    if awaiting_reply_at[0] is not None:
-                        ev.turn_latencies_ms.append(None)
-                    awaiting_reply_at[0] = time.monotonic()
+                    # Caller finished (or interrupted) this utterance: the
+                    # clock for the agent's response latency starts now. If
+                    # the previous turn was never answered, mark it.
+                    if not barged:
+                        if awaiting_reply_at[0] is not None:
+                            ev.turn_latencies_ms.append(None)
+                        awaiting_reply_at[0] = time.monotonic()
                 # Let the agent finish speaking before hanging up.
                 await asyncio.sleep(after_send_idle_s)
             finally:
@@ -165,6 +209,12 @@ async def dial(
                     await recv_task
                 except asyncio.CancelledError:
                     pass
+            # How long the agent kept talking after the last barge-in
+            # (plan §15: dejar de hablar rápido no basta si reservó mal).
+            for intr in ev.interrupts:
+                intr["agent_tail_ms"] = round(
+                    (last_inbound_at[0] - ev.connected_at) * 1000 - intr["at_ms"], 1
+                )
     except Exception as exc:  # noqa: BLE001 - transport failure is evidence
         ev.error = f"{type(exc).__name__}: {exc}"
     return ev
