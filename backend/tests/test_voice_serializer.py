@@ -198,3 +198,22 @@ async def test_unknown_shapes_fall_back_to_stock(tmp_path, event):
     else:
         frame = await serializer.deserialize(json.dumps({"event": "dtmf", "dtmf": {"digit": "5"}}))
     assert frame is None or isinstance(frame, (InputAudioRawFrame, object))
+
+
+async def test_start_signals_start_received(tmp_path):
+    serializer, ctx = await make_serializer(tmp_path)
+
+    await send_start(serializer)
+
+    assert ctx.start_received.is_set()
+
+
+async def test_start_without_from_number_still_signals(tmp_path):
+    serializer, ctx = await make_serializer(tmp_path)
+
+    await send_start(serializer, with_phone=False)
+
+    # Withheld caller id still completes the start handshake; only the hint
+    # is absent.
+    assert ctx.start_received.is_set()
+    assert ctx.from_number is None

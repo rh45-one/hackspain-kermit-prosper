@@ -56,10 +56,12 @@ class ProsperTwilioSerializer(TwilioFrameSerializer):
             # Absent from_number means withheld caller id: a hint, never identity.
             self._ctx.from_number = params.get("from_number")
             self._stream_sid = self._ctx.stream_sid or ""
+            # Release the pipeline's bounded wait: start identity is complete.
+            self._ctx.mark_start_received()
             logger.info(
-                "call start captured: call_id={} from={}",
+                "call start captured: call_id={} from_number_present={}",
                 self._ctx.call_id,
-                self._ctx.from_number,
+                self._ctx.from_number is not None,
             )
             return None
         if event == "stop":

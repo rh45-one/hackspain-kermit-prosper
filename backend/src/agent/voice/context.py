@@ -1,12 +1,17 @@
 """Per-call state. One CallContext per socket; nothing shared across calls."""
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+# How long the pipeline waits for the harness `start` event after client
+# connect before giving up on the from_number hint.
+START_WAIT_SECONDS = 0.5
 
 
 def _utcnow() -> str:
@@ -42,6 +47,10 @@ class CallContext:
     transcript: list[dict[str, str]] = field(default_factory=list)
     _audit_path: Path | None = None
 
+    # Set by the serializer once the harness `start` event is captured; the
+    # pipeline waits on it (bounded) before using the from_number hint.
+    start_received: asyncio.Event = field(default_factory=asyncio.Event)
+
     def __post_init__(self) -> None:
         calls_dir = Path(self.data_dir) / "calls"
         calls_dir.mkdir(parents=True, exist_ok=True)
@@ -65,6 +74,22 @@ class CallContext:
             old_path.rename(new_path)
         self._audit_path = new_path
         self.audit("call_id_bound", {})
+
+    def mark_start_received(self) -> None:
+        """Signal that the harness `start` event has been captured."""
+        if not self.start_received.is_set():
+            self.start_received.set()
+            self.audit("start_received", {"from_number_present": self.from_number is not None})
+
+    async def wait_for_start(self, timeout: float = START_WAIT_SECONDS) -> bool:
+        """Wait up to `timeout` for the start event. True when it arrived."""
+        if self.start_received.is_set():
+            return True
+        try:
+            await asyncio.wait_for(self.start_received.wait(), timeout=timeout)
+            return True
+        except TimeoutError:
+            return False
 
     # ---- audit -----------------------------------------------------------
     def audit(self, event: str, data: dict[str, Any] | None = None) -> None:

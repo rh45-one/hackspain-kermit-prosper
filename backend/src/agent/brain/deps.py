@@ -2,9 +2,16 @@
 
 Worker modules may not exist yet during the build; tools degrade with an
 explicit error for the LLM instead of crashing the call.
+
+The CatalogueCache is process-wide: the instance warmed by the server's
+lifespan is the same instance every ToolBox reads, so the immutable
+catalogue is fetched exactly once per process. ``reset_catalogue_cache``
+exists for test isolation only.
 """
 from __future__ import annotations
 
+import asyncio
+import threading
 from typing import Any
 
 CLOSED_REASONS: frozenset[str] = frozenset(
@@ -63,6 +70,58 @@ def _import(path: str) -> Any:
     return getattr(importlib.import_module(module_name), attr)
 
 
+# ---- shared catalogue cache ----------------------------------------------
+# One cache per process. Created lazily and thread-safely; ``warm`` itself is
+# idempotent and atomic (it rebuilds every index locally, then publishes in a
+# single assignment), so concurrent warmers converge on a complete snapshot.
+_catalogue_cache: Any | None = None
+_catalogue_cache_lock = threading.Lock()
+_warm_lock = asyncio.Lock()
+
+
+def get_shared_catalogue_cache() -> Any | None:
+    """Return the process-wide CatalogueCache, creating it once."""
+    global _catalogue_cache
+    if _catalogue_cache is not None:
+        return _catalogue_cache
+    with _catalogue_cache_lock:
+        if _catalogue_cache is None:
+            try:
+                cache_cls = _import("agent.clinic.cache.CatalogueCache")
+            except (ImportError, AttributeError):
+                return None
+            _catalogue_cache = cache_cls()
+    return _catalogue_cache
+
+
+def try_catalogue_cache() -> Any | None:
+    """Return the shared CatalogueCache (previously a fresh instance per call)."""
+    return get_shared_catalogue_cache()
+
+
+def reset_catalogue_cache() -> None:
+    """Drop the shared cache. Test isolation only — never call in production."""
+    global _catalogue_cache
+    with _catalogue_cache_lock:
+        _catalogue_cache = None
+
+
+async def warm_shared_catalogue(client: Any) -> bool:
+    """Warm the shared cache once, even under concurrent callers.
+
+    Returns False only when the clinic layer is unavailable. A second warm of
+    an already-warmed cache performs no fetch.
+    """
+    cache = get_shared_catalogue_cache()
+    if cache is None:
+        return False
+    async with _warm_lock:
+        if cache.warmed:
+            return True
+        await cache.warm(client)
+        return True
+
+
 def try_clinic_client(settings: Any) -> Any | None:
     """Return a ProsperClient, or None when the clinic layer is not ready."""
     try:
@@ -70,13 +129,6 @@ def try_clinic_client(settings: Any) -> Any | None:
     except (ImportError, AttributeError):
         return None
     return client_cls(settings)
-
-
-def try_catalogue_cache() -> Any | None:
-    try:
-        return _import("agent.clinic.cache.CatalogueCache")()
-    except (ImportError, AttributeError):
-        return None
 
 
 def try_date_resolver() -> Any | None:

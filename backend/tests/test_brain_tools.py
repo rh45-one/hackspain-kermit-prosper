@@ -380,3 +380,151 @@ async def test_date_object_serialization(box):
     await box.find_availability(params, when_phrase="tomorrow")
     call = box.client.availability_calls[-1]
     assert isinstance(call["date_from"], date)
+
+
+# ---- phone hint: caller id is a hint, never identity ------------------------
+class PhoneHintClient:
+    """Directory stub with configurable matches; records phone lookups."""
+
+    def __init__(self, matches: list[dict[str, Any]] | Exception) -> None:
+        self._matches = matches
+        self.calls: list[dict[str, Any]] = []
+
+    async def search_directory(self, **kwargs: Any) -> DirectoryResponse:
+        self.calls.append(kwargs)
+        if isinstance(self._matches, Exception):
+            raise self._matches
+        return DirectoryResponse.model_validate({"matches": self._matches})
+
+
+def hint_fixture_matches() -> list[dict[str, Any]]:
+    return load_fixture("directory")["matches"]
+
+
+async def audit_blob(ctx) -> str:
+    return ctx._audit_path.read_text(encoding="utf-8")
+
+
+async def test_phone_hint_resolves_exactly_one_match(box, ctx):
+    client = PhoneHintClient(hint_fixture_matches()[:1])  # exactly one patient
+    box.client = client
+    ctx.from_number = "+34612345678"
+    ctx.mark_start_received()
+
+    await box.prepare_phone_hint()
+
+    assert client.calls == [{"phone": "+34612345678"}]
+    hint = ctx.phone_hint_match
+    assert hint is not None
+    assert hint["patient_id"] == "P00042"
+    assert hint["given_name"] == "Marta"
+    # Protected fields never reach the hint, however the API answered.
+    assert "national_id" not in hint
+    assert "phone" not in hint
+    assert "12345678Z" not in str(hint)
+    assert "612345678" not in str(hint)
+    # And the audit trail leaks nothing either.
+    blob = await audit_blob(ctx)
+    assert "612345678" not in blob
+    assert "12345678Z" not in blob
+
+
+async def test_phone_hint_never_enters_the_confirmation_registry(box, ctx):
+    """A phone match alone can never pass confirm_patient."""
+    client = PhoneHintClient(hint_fixture_matches())
+    box.client = client
+    ctx.from_number = "+34612345678"
+    ctx.mark_start_received()
+
+    await box.prepare_phone_hint()
+
+    assert ctx.patient_candidates == []  # registry untouched
+    params = FakeParams()
+    await box.confirm_patient(params, patient_id="P00042")
+    assert "patient_id not among lookup results" in params.result["error"]
+    assert ctx.confirmed_patient is None
+    assert ctx.queued_actions == []
+
+
+async def test_phone_hint_ambiguous_number_greets_generically(box, ctx):
+    client = PhoneHintClient(hint_fixture_matches())  # two patients share the line
+    box.client = client
+    ctx.from_number = "+34600000000"
+    ctx.mark_start_received()
+
+    await box.prepare_phone_hint()
+
+    assert ctx.phone_hint_match is None
+
+
+async def test_phone_hint_client_error_greets_generically(box, ctx):
+    client = PhoneHintClient(TimeoutError("api down"))
+    box.client = client
+    ctx.from_number = "+34612345678"
+    ctx.mark_start_received()
+
+    await box.prepare_phone_hint()
+
+    assert ctx.phone_hint_match is None
+    blob = await audit_blob(ctx)
+    assert '"outcome": "error"' in blob
+
+
+async def test_phone_hint_skipped_until_start_arrives(box, ctx):
+    """No start event within the bounded wait: no lookup, generic greeting."""
+    client = PhoneHintClient(hint_fixture_matches())
+    box.client = client
+    ctx.from_number = "+34612345678"
+    # start never arrives
+
+    await box.prepare_phone_hint()
+
+    assert client.calls == []
+    assert ctx.phone_hint_match is None
+
+
+async def test_phone_hint_waits_for_a_late_start(box, ctx):
+    """Start arriving inside the 500 ms window still yields the hint."""
+    import asyncio
+
+    client = PhoneHintClient(hint_fixture_matches()[:1])
+    box.client = client
+    ctx.from_number = "+34612345678"
+
+    async def late_start() -> None:
+        await asyncio.sleep(0.05)
+        ctx.mark_start_received()
+
+    task = asyncio.create_task(late_start())
+    await box.prepare_phone_hint()
+    await task
+
+    assert len(client.calls) == 1
+    assert ctx.phone_hint_match is not None
+
+
+async def test_phone_hint_skipped_without_caller_id(box, ctx):
+    client = PhoneHintClient(hint_fixture_matches())
+    box.client = client
+    ctx.mark_start_received()
+    # from_number stays None: withheld caller id
+
+    await box.prepare_phone_hint()
+
+    assert client.calls == []
+    assert ctx.phone_hint_match is None
+
+
+async def test_phone_hint_skipped_without_api_credentials(box, ctx):
+    """An offline host must never be pushed against the Prosper API."""
+    client = PhoneHintClient(hint_fixture_matches())
+    box.client = client
+    box.settings = FakeSettings()
+    box.settings.prosper_api_key = ""
+    ctx.from_number = "+34612345678"
+    ctx.mark_start_received()
+
+    await box.prepare_phone_hint()
+
+    assert client.calls == []
+    assert ctx.phone_hint_match is None

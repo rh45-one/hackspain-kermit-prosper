@@ -6,7 +6,6 @@ lost. 409 counts as accepted (idempotent retry per the call contract).
 """
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
@@ -55,11 +54,13 @@ async def flush_call(ctx: CallContext, settings: Any) -> None:
                 continue
             body = {k: v for k, v in action.items() if k != "route"}
             if submitter is None:
+                # Submission bodies may contain identity and contact data.
+                # Log only the route and field names, never caller values.
                 logger.error(
-                    "WOULD SUBMIT call={} route={} body={}",
+                    "WOULD SUBMIT call={} route={} fields={}",
                     ctx.call_id,
                     route,
-                    json.dumps(body, ensure_ascii=False),
+                    sorted(body),
                 )
                 continue
             try:

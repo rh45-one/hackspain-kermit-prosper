@@ -40,7 +40,36 @@ from agent.voice.twilio import ProsperTwilioSerializer
 # Twilio Media Streams wire rate. 20 ms frames of 8 kHz µ-law.
 TELEPHONY_SAMPLE_RATE = 8000
 
-__all__ = ["TELEPHONY_SAMPLE_RATE", "build_worker", "transport_params"]
+__all__ = ["TELEPHONY_SAMPLE_RATE", "build_worker", "phone_hint_greeting", "transport_params"]
+
+
+def phone_hint_greeting(ctx: Any) -> str:
+    """Developer context for the first turn.
+
+    With a resolved hint, at most the patient's given name is used: caller id
+    is a hint, never identification, so the model must still run
+    lookup_patient (name plus date of birth or national id) before
+    confirm_patient. Without a hint the greeting stays generic. Third-party
+    callers are explicitly accounted for: the person answering may not be
+    the patient.
+    """
+    given_name = (getattr(ctx, "phone_hint_match", None) or {}).get("given_name")
+    if given_name:
+        return (
+            f"The phone is ringing. Caller id suggests the caller may be {given_name}; "
+            f"greet them warmly by name. Caller id is only a hint, never identification: "
+            f"do not read, confirm or reveal any record detail until lookup_patient has "
+            f"matched their spoken name with their date of birth or national id and "
+            f"confirm_patient has succeeded. The person on the line may not be the "
+            f"patient; if their details do not match the hint, drop it silently and "
+            f"continue normally. Ask how you can help."
+        )
+    return (
+        "The phone is ringing. Greet the caller briefly in a polite "
+        "Spanish clinic manner and ask how you can help. If a chart "
+        "hint was provided, greet them personally without revealing "
+        "any detail they have not confirmed."
+    )
 
 
 def transport_params(ctx: CallContext, settings: Any) -> FastAPIWebsocketParams:
@@ -144,18 +173,13 @@ def build_worker(
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport: Any, client: Any) -> None:
         ctx.audit("client_connected", {})
+        # Caller-id hint: bounded wait for the harness `start` event, then a
+        # private directory search. Never authenticates anyone; the hint only
+        # personalises the greeting and never enters the confirmation registry.
+        await toolbox.prepare_phone_hint()
+        ctx.audit("greeting_prepared", {"hint_used": ctx.phone_hint_match is not None})
         if context is not None:
-            context.add_message(
-                {
-                    "role": "developer",
-                    "content": (
-                        "The phone is ringing. Greet the caller briefly in a polite "
-                        "Spanish clinic manner and ask how you can help. If a chart "
-                        "hint was provided, greet them personally without revealing "
-                        "any detail they have not confirmed."
-                    ),
-                }
-            )
+            context.add_message({"role": "developer", "content": phone_hint_greeting(ctx)})
             await worker.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_client_disconnected")

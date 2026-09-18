@@ -80,3 +80,55 @@ def test_transcript_is_recorded_and_audited(tmp_path):
     ]
     path = tmp_path / "data" / "calls" / f"{ctx.call_id}.jsonl"
     assert "Hola" in path.read_text(encoding="utf-8")
+
+
+# ---- start-received signal (from_number hint handshake) ---------------------
+
+
+async def test_wait_for_start_returns_true_once_marked(tmp_path):
+    ctx = CallContext(data_dir=str(tmp_path / "data"))
+
+    ctx.mark_start_received()
+
+    assert ctx.start_received.is_set()
+    assert await ctx.wait_for_start(timeout=0.1) is True
+
+
+async def test_wait_for_start_times_out_without_start(tmp_path):
+    ctx = CallContext(data_dir=str(tmp_path / "data"))
+
+    assert await ctx.wait_for_start(timeout=0.05) is False
+    assert not ctx.start_received.is_set()
+
+
+async def test_late_start_wakes_a_waiting_caller(tmp_path):
+    import asyncio
+
+    ctx = CallContext(data_dir=str(tmp_path / "data"))
+
+    async def late_start() -> None:
+        await asyncio.sleep(0.05)
+        ctx.mark_start_received()
+
+    task = asyncio.create_task(late_start())
+    assert await ctx.wait_for_start(timeout=1.0) is True
+    await task
+
+
+async def test_start_signal_is_per_context(tmp_path):
+    ctx_a = CallContext(data_dir=str(tmp_path / "a"))
+    ctx_b = CallContext(data_dir=str(tmp_path / "b"))
+
+    ctx_a.mark_start_received()
+
+    assert ctx_a.start_received is not ctx_b.start_received
+    assert not ctx_b.start_received.is_set()
+
+
+async def test_mark_start_received_is_idempotent(tmp_path):
+    ctx = CallContext(data_dir=str(tmp_path / "data"))
+
+    ctx.mark_start_received()
+    ctx.mark_start_received()
+
+    assert ctx.start_received.is_set()

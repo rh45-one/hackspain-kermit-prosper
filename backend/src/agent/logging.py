@@ -33,6 +33,12 @@ def setup_logging(level: str = "INFO") -> None:
     root.handlers = [handler]
     root.setLevel(level)
 
+    # httpx/httpcore INFO records include full request URLs. Directory lookups
+    # carry phone numbers, national IDs, names, and dates of birth as query
+    # parameters, so provider request logging must be suppressed by default.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 
 def get_logger(name: str, call_id: str | None = None) -> logging.LoggerAdapter:
     return logging.LoggerAdapter(logging.getLogger(name), {"call_id": call_id})

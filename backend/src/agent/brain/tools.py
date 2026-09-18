@@ -85,6 +85,41 @@ class ToolBox:
             return obj.model_dump(exclude_none=True)
         return {"value": str(obj)}
 
+    # ---- phone hint (caller id is a hint, never identity) -----------------
+    async def prepare_phone_hint(self) -> None:
+        """Privately resolve `start.customParameters.from_number` after connect.
+
+        Waits at most START_WAIT_SECONDS for the harness `start` event, then
+        searches the directory by phone. Exactly one match is stored in
+        `ctx.phone_hint_match` with protected fields stripped. Ambiguous,
+        errored, absent-number or offline cases leave the hint unset and the
+        call greets generically.
+
+        Guarantees: the hint never enters `patient_candidates`, so it can
+        never satisfy `confirm_patient`; the lookup uses the phone only
+        internally and neither the number nor any national id is stored or
+        audited.
+        """
+        if not await self.ctx.wait_for_start():
+            return  # start never arrived: no usable hint, generic greeting
+        if not self.ctx.from_number:
+            return  # caller id withheld
+        if self.client is None or not getattr(self.settings, "prosper_api_key", ""):
+            return  # no credentials: never push the API, greet generically
+        result = await self._call(
+            self.client.search_directory(phone=self.ctx.from_number),
+            "phone_hint",
+        )
+        if self._is_error(result):
+            self.ctx.audit("phone_hint", {"outcome": "error"})
+            return
+        if len(result.matches) != 1:
+            self.ctx.audit("phone_hint", {"outcome": "ambiguous", "match_count": len(result.matches)})
+            return
+        match = self._safe_patient(result.matches[0])
+        self.ctx.phone_hint_match = match
+        self.ctx.audit("phone_hint", {"outcome": "matched", "patient_id": match.get("patient_id")})
+
     # ---- tools -----------------------------------------------------------
     async def lookup_patient(
         self,
