@@ -30,15 +30,17 @@ import uvicorn
 from evaluator.clinic.dataset import Dataset
 from evaluator.clinic.server import create_app as create_clinic_app
 from evaluator.compare import categorize, compare, transcript_leaks
+from evaluator.harness import tts as tts_mod
+from evaluator.harness.audio import mix_with_noise, pcm_to_ulaw, synth_noise, ulaw_to_wav
 from evaluator.harness.double_agent import create_app as create_double_app
-from evaluator.harness.wsclient import dial, load_audio, silence
+from evaluator.harness.wsclient import PlayTurn, dial, load_audio, silence
 from evaluator.models import (
     CandidateConfig,
     CaseResult,
     ExperimentConfig,
     Scenario,
 )
-from evaluator.simulator.patient import RulesPatient
+from evaluator.simulator.llm_patient import make_patient
 
 VERB_TO_ROUTE = {
     "REGISTER": "register",
@@ -86,14 +88,47 @@ def _to_submit_bodies(outcome: list[dict[str, Any]], mutate: bool = False) -> li
     return out
 
 
-def _scenario_turns(scenario: Scenario, scenario_path: Path) -> list[list[bytes]]:
-    """Voice path: one frame group per scripted turn (audio or silence)."""
-    groups: list[list[bytes]] = []
+def _scenario_turns(
+    scenario: Scenario,
+    scenario_path: Path,
+    tts_command: str | None = None,
+) -> list[PlayTurn]:
+    """Voice path: one PlayTurn per scripted turn (audio, TTS, or silence).
+
+    Noise (`turn.noise`) is mixed in here so what goes on the wire is what
+    the agent hears - and what lands in the caller-side evidence file.
+    """
+    groups: list[PlayTurn] = []
     for turn in scenario.turns:
-        frames = load_audio(scenario_path.parent / turn.audio) if turn.audio else silence(2000)
+        if turn.audio:
+            frames = load_audio(scenario_path.parent / turn.audio)
+        elif turn.tts and turn.text and tts_command:
+            try:
+                frames = tts_mod.synthesize(
+                    turn.text, tts_command, lang=scenario.language,
+                    cache_dir=scenario_path.parent / ".tts-cache",
+                )
+            except Exception:  # noqa: BLE001 - missing TTS is a rig limit
+                frames = silence(2000)
+        else:
+            frames = silence(2000)
+
+        if turn.noise:
+            if turn.noise.file:
+                noise_frames = load_audio(scenario_path.parent / turn.noise.file)
+            else:
+                n = sum(len(f) for f in frames)
+                noise_frames = [
+                    pcm_to_ulaw(synth_noise(n, seed=hash(scenario.id) & 0xFFFF,
+                                            kind=turn.noise.synth or "brown"))
+                ]
+            frames = mix_with_noise(frames, noise_frames, snr_db=turn.noise.snr_db)
+
         frames.extend(silence(turn.hold_ms))
-        groups.append(frames)
-    return groups or [silence(8000)]
+        groups.append(
+            PlayTurn(frames, interrupt_on_agent_audio=turn.interrupt_on_agent_audio)
+        )
+    return groups or [PlayTurn(silence(8000))]
 
 
 async def _run_text_call(
@@ -124,7 +159,11 @@ async def _run_text_call(
             transcript.append(reply)
         return reply
 
-    patient = RulesPatient(scenario.caller, scenario.limits) if scenario.caller.opening else None
+    patient = (
+        make_patient(scenario.caller, scenario.limits, language=scenario.language)
+        if scenario.caller.opening
+        else None
+    )
     if patient is not None:
         reply = await send(patient.opening() or "")
         while reply is not None:
@@ -140,6 +179,46 @@ async def _run_text_call(
     return transcript, errors
 
 
+async def _gather_cases(calls: list[Any]) -> list[CaseResult]:
+    """Run concurrent calls; a crashed task becomes an invalid case, not a
+    dead experiment (harness failure ≠ agent failure)."""
+    outcomes = await asyncio.gather(*calls, return_exceptions=True)
+    results: list[CaseResult] = []
+    for outcome in outcomes:
+        if isinstance(outcome, CaseResult):
+            results.append(outcome)
+        else:
+            results.append(
+                CaseResult(
+                    case_id="switchboard/task-error",
+                    call_id="",
+                    scenario_id="",
+                    problem_id="switchboard",
+                    candidate="",
+                    repetition=0,
+                    verdict="invalid_evaluation",
+                    errors=[f"{type(outcome).__name__}: {outcome}"],
+                )
+            )
+    return results
+
+
+async def _fetch_usage(
+    usage_url: str | None, call_id: str, http: httpx.AsyncClient
+) -> tuple[float | None, dict[str, Any]]:
+    """Ask the candidate for this call's cost; unknown stays None (§13)."""
+    if not usage_url:
+        return None, {}
+    try:
+        resp = await http.get(f"{usage_url.rstrip('/')}/calls/{call_id}", timeout=5)
+        if resp.status_code != 200:
+            return None, {}
+        data = resp.json()
+        return data.get("cost"), data.get("usage", {})
+    except httpx.HTTPError:
+        return None, {}
+
+
 async def _run_case(
     scenario: Scenario,
     scenario_path: Path,
@@ -149,6 +228,8 @@ async def _run_case(
     submit_key: str,
     double_port: int | None,
     case_id: str,
+    evidence_dir: Path | None = None,
+    tts_command: str | None = None,
 ) -> CaseResult:
     call_id = uuid.uuid4().hex
     http = httpx.AsyncClient(base_url=clinic_url, timeout=10)
@@ -157,6 +238,9 @@ async def _run_case(
     errors: list[str] = []
     latencies: list[float] = []
     first_audio_ms: float | None = None
+    interrupts: list[dict[str, Any]] = []
+    audio: dict[str, str] = {}
+    ev = None  # set on the WS paths (double + external)
     started = time.monotonic()
     harness_failed = open_resp.status_code != 200
 
@@ -164,7 +248,8 @@ async def _run_case(
         if harness_failed:
             errors.append(f"clinic refused call open: HTTP {open_resp.status_code}")
         elif candidate.kind == "double":
-            # Tell the double what this call should submit.
+            # Tell the double what this call should submit - keyed by
+            # call_id so concurrent sockets never cross-contaminate.
             mode = candidate.mode
             if mode == "silent":
                 actions = None
@@ -174,11 +259,13 @@ async def _run_case(
             async with httpx.AsyncClient(
                 base_url=f"http://127.0.0.1:{double_port}", timeout=10
             ) as double_http:
-                await double_http.post("/control", json={"actions": actions})
+                await double_http.post(
+                    "/control", json={"call_id": call_id, "actions": actions}
+                )
             ev = await dial(
                 f"ws://127.0.0.1:{double_port}/ws",
                 call_id,
-                [silence(400)],  # the double ignores audio content
+                [PlayTurn(silence(400))],  # the double ignores audio content
                 from_number=scenario.from_number,
                 after_send_idle_s=0.5,
                 max_call_s=30.0,
@@ -188,7 +275,7 @@ async def _run_case(
         elif candidate.text_url:
             transcript, errors = await _run_text_call(scenario, candidate.text_url, call_id, http)
         else:
-            turns = _scenario_turns(scenario, scenario_path)
+            turns = _scenario_turns(scenario, scenario_path, tts_command=tts_command)
             ev = await dial(
                 candidate.ws_url or "",
                 call_id,
@@ -201,10 +288,26 @@ async def _run_case(
                 errors.append(ev.error)
             latencies = [x for x in ev.turn_latencies_ms if x is not None]
             first_audio_ms = ev.first_audio_ms
+            interrupts = ev.interrupts
     finally:
         await http.post(f"/eval/calls/{call_id}/close")
         record_resp = await http.get(f"/eval/calls/{call_id}/record")
+        cost, usage = await _fetch_usage(candidate.usage_url, call_id, http)
         await http.aclose()
+
+    # Wire evidence: whatever went over the socket in each direction,
+    # saved once per case (plan §20 - a failure should be auditable).
+    if evidence_dir is not None and ev is not None:
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        safe = case_id.replace("/", "_")
+        if ev.caller_audio:
+            p = evidence_dir / f"{safe}.caller.wav"
+            p.write_bytes(ulaw_to_wav(ev.caller_audio))
+            audio["caller"] = str(p.relative_to(evidence_dir.parent))
+        if ev.agent_audio:
+            p = evidence_dir / f"{safe}.agent.wav"
+            p.write_bytes(ulaw_to_wav(ev.agent_audio))
+            audio["agent"] = str(p.relative_to(evidence_dir.parent))
 
     record = record_resp.json() if record_resp.status_code == 200 else {}
     submitted = record.get("actions", [])
@@ -258,6 +361,10 @@ async def _run_case(
         transcript=transcript,
         turn_latencies_ms=latencies,
         first_audio_ms=first_audio_ms,
+        cost=cost,
+        usage=usage,
+        audio=audio,
+        interrupts=interrupts,
         duration_s=round(time.monotonic() - started, 2),
         errors=errors,
     )
@@ -346,6 +453,7 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
     run_id = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:6]}"
     out_dir = Path(out_root or config_dir / "results") / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
+    evidence_dir = out_dir / "evidence"
 
     clinic = serve_in_thread(
         create_clinic_app(dataset, api_key=config.submit_key), "127.0.0.1", config.clinic_port
@@ -385,9 +493,34 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
                             config.submit_key,
                             cand.port,
                             case_id,
+                            evidence_dir=evidence_dir,
+                            tts_command=config.tts_command,
                         )
                     )
                     results.append(result)
+
+        # Switchboard diagnostic (problem 2): N simultaneous calls, one
+        # scenario each, to expose state contamination between sessions.
+        if config.switchboard is not None:
+            n = config.switchboard.concurrency
+            for cand in config.candidates:
+                pool = scenarios[:n] or scenarios
+                calls = [
+                    _run_case(
+                        scenario,
+                        path,
+                        cand,
+                        0,
+                        clinic_url,
+                        config.submit_key,
+                        cand.port,
+                        f"{cand.name}/switchboard-{i}-{scenario.id}",
+                        evidence_dir=evidence_dir,
+                        tts_command=config.tts_command,
+                    )
+                    for i, (scenario, path) in enumerate(pool)
+                ]
+                results.extend(asyncio.run(_gather_cases(calls)))
 
         manifest = {
             "run_id": run_id,

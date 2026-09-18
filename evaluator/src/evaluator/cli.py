@@ -42,6 +42,11 @@ def main() -> None:
     p.add_argument("--dataset", required=True)
     p.add_argument("--scenarios", nargs="+", required=True, help="YAML paths or globs")
 
+    p = sub.add_parser("diff", help="compare two run directories (A -> B)")
+    p.add_argument("run_a", help="results dir of run A (the baseline)")
+    p.add_argument("run_b", help="results dir of run B (the candidate)")
+    p.add_argument("--json", action="store_true", help="emit machine-readable diff")
+
     args = parser.parse_args()
 
     if args.cmd == "clinic":
@@ -95,6 +100,17 @@ def main() -> None:
                 else:
                     print(f"{scenario.id}: ok")
         sys.exit(1 if bad else 0)
+    elif args.cmd == "diff":
+        from evaluator.report.diff import diff_runs, format_diff
+
+        result = diff_runs(args.run_a, args.run_b)
+        if args.json:
+            import dataclasses
+
+            json.dump(dataclasses.asdict(result), sys.stdout, indent=2, default=str)
+            print()
+        else:
+            print(format_diff(result))
 
 
 if __name__ == "__main__":

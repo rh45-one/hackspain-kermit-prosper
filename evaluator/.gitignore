@@ -1,5 +1,7 @@
 results/
 experiments/results/
+.tts-cache/
+**/.tts-cache/
 .venv/
 __pycache__/
 *.pyc

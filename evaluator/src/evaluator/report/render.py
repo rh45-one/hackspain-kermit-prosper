@@ -124,6 +124,16 @@ def render_report(run_dir: str | Path) -> Path:
             for d in c.get("field_diffs", [])
         )
         cats = ", ".join(c.get("categories", []))
+        # Evidence links: caller/agent audio + barge-in markers (plan §20).
+        evidence = []
+        audio = c.get("audio") or {}
+        if audio.get("caller"):
+            evidence.append(f'<a href="{_esc(audio["caller"])}">caller</a>')
+        if audio.get("agent"):
+            evidence.append(f'<a href="{_esc(audio["agent"])}">agente</a>')
+        n_interrupts = len(c.get("interrupts") or [])
+        if n_interrupts:
+            evidence.append(f"{n_interrupts} barge-in")
         detail_rows.append(
             "<tr>"
             f"<td>{_esc(c['candidate'])}</td>"
@@ -133,6 +143,7 @@ def render_report(run_dir: str | Path) -> Path:
             f"{_esc(verdict.upper())}{' / ' + _esc(c.get('failure_signal')) if c.get('failure_signal') else ''}</td>"
             f"<td>{_esc(cats)}</td>"
             f"<td>{_esc(diffs)}</td>"
+            f"<td>{' · '.join(evidence) if evidence else '-'}</td>"
             f"<td>{c['duration_s']}s</td>"
             "</tr>"
         )
@@ -171,7 +182,7 @@ Los puntos locales estiman el veredicto oficial; no lo certifican.
 </table>
 <h2>Detalle por caso</h2>
 <table><tr><th>candidato</th><th>escenario</th><th>rep</th><th>veredicto</th>
-<th>categorías</th><th>diferencias de campos</th><th>duración</th></tr>
+<th>categorías</th><th>diferencias de campos</th><th>evidencia</th><th>duración</th></tr>
 {"".join(detail_rows)}
 </table>
 </body></html>"""
