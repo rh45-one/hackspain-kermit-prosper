@@ -29,13 +29,16 @@ from evaluator.normalize import national_id_check_ok, norm_enum
 
 
 class _Call:
-    __slots__ = ("actions", "call_id", "closed_at", "opened_at")
+    __slots__ = ("actions", "attempts", "call_id", "closed_at", "opened_at")
 
     def __init__(self, call_id: str) -> None:
         self.call_id = call_id
         self.opened_at = time.monotonic()
         self.closed_at: float | None = None
         self.actions: list[dict[str, Any]] = []
+        # Every HTTP submit the receiver saw, accepted or not - evidence for
+        # the submission_error diagnostic category.
+        self.attempts: list[dict[str, Any]] = []
 
 
 class CallRegistry:
@@ -61,17 +64,25 @@ class CallRegistry:
         call = self.calls.get(call_id)
         if call is None:
             return 404, {"detail": "unknown call_id"}
+
+        def _fail(status: int, detail: str) -> tuple[int, dict]:
+            call.attempts.append(
+                {"route": route, "status": status, "detail": detail,
+                 "at": datetime.now(UTC).isoformat()}
+            )
+            return status, {"detail": detail}
+
         if call.closed_at is not None and time.monotonic() - call.closed_at > self.window_seconds:
-            return 410, {"detail": "submission window closed"}
+            return _fail(410, "submission window closed")
 
         # 422 malformed: required route fields must be present and non-empty.
         missing = [f for f in ROUTE_FIELDS[route] if body.get(f) in (None, "")]
         if missing:
-            return 422, {"detail": f"missing fields: {', '.join(missing)}"}
+            return _fail(422, f"missing fields: {', '.join(missing)}")
         if route == "register" and not national_id_check_ok(str(body["national_id"])):
-            return 422, {"detail": "national_id check letter does not match digits"}
+            return _fail(422, "national_id check letter does not match digits")
         if route in ("no-action", "escalate") and norm_enum(str(body["reason"])) not in OUTCOME_REASONS:
-            return 422, {"detail": "reason not in the closed vocabulary"}
+            return _fail(422, "reason not in the closed vocabulary")
 
         verb = ROUTE_TO_VERB[route]
         if route == "register":
@@ -84,7 +95,11 @@ class CallRegistry:
 
         # An identical action already accepted for this call is a retry.
         if any(canonical_action(a) == canonical_action(record_action) for a in call.actions):
-            return 409, {"detail": "identical action already recorded"}
+            return _fail(409, "identical action already recorded")
+        call.attempts.append(
+            {"route": route, "status": 200, "detail": "accepted",
+             "at": datetime.now(UTC).isoformat()}
+        )
         call.actions.append(record_action)
         return 200, {
             "call_id": call_id,
@@ -232,6 +247,7 @@ def create_app(dataset: Dataset, api_key: str = "pk-local-eval", window_seconds:
         return {
             "call_id": call_id,
             "actions": record,
+            "attempts": list(call.attempts),
             "closed": call.closed_at is not None,
         }
 

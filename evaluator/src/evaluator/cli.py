@@ -1,10 +1,11 @@
 """CLI: `python -m evaluator.cli <command>`.
 
 Commands:
-    clinic   serve the local clinic + submission receiver
-    double   serve the test-double agent
-    run      execute an experiment config end to end
-    score    score a recorded submission file against a scenario, offline
+    clinic    serve the local clinic + submission receiver
+    double    serve the test-double agent
+    run       execute an experiment config end to end
+    score     score a recorded submission file against a scenario, offline
+    validate  check that scenarios resolve against the clinic fixture
 """
 from __future__ import annotations
 
@@ -36,6 +37,10 @@ def main() -> None:
     p = sub.add_parser("score", help="score a submissions file against a scenario")
     p.add_argument("--scenario", required=True)
     p.add_argument("--record", required=True, help="JSON file: list of action dicts")
+
+    p = sub.add_parser("validate", help="check scenarios resolve against the fixture")
+    p.add_argument("--dataset", required=True)
+    p.add_argument("--scenarios", nargs="+", required=True, help="YAML paths or globs")
 
     args = parser.parse_args()
 
@@ -69,6 +74,27 @@ def main() -> None:
         }
         json.dump(verdict, sys.stdout, indent=2)
         print()
+    elif args.cmd == "validate":
+        import glob
+
+        from evaluator.clinic.dataset import Dataset
+        from evaluator.models import Scenario
+        from evaluator.runner.experiment import validate_scenario
+
+        dataset = Dataset.load(args.dataset)
+        bad = 0
+        for pattern in args.scenarios:
+            for path in sorted(glob.glob(pattern, recursive=True)):
+                scenario = Scenario.load(path)
+                problems = validate_scenario(scenario, dataset)
+                if problems:
+                    bad += 1
+                    print(f"{scenario.id}: INVALIDO")
+                    for p in problems:
+                        print(f"  - {p}")
+                else:
+                    print(f"{scenario.id}: ok")
+        sys.exit(1 if bad else 0)
 
 
 if __name__ == "__main__":

@@ -1,31 +1,32 @@
-id: sb-002
-problem_id: doctor_and_site
-version: 2
+id: lang-001
+problem_id: languages
+version: 1
 split: development
-language: es
+language: ca
 description: >
-  Doctora y sitio concretos: pide a la Dra. Sáez en Centro. Como pide
-  explícitamente proveedor+sede, no vale un fallback a otra sede.
+  Catalán: la paciente habla en catalán toda la llamada. La Dra. Sáez
+  (PR01) tiene catalán declarado - la reserva debe salir igual que en
+  español, sin pedir que cambie de idioma.
 clock: "2026-09-18T10:00:00+02:00"
 clinic_fixture: seed-v1
 caller:
   persona: paciente_habitual
   from_number: "+34612345678"
-  opening: "Hola, soy Marta Ruiz Gómez. Quiero pedir cita con la doctora Sáez en Centro, lo antes posible."
+  opening: "Bon dia, sóc la Marta Ruiz Gómez, DNI 12345678-Z. Voldria la primera visita que tinguin de medicina general."
   facts:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
     insurer: sanitas
-    has_visited_before: true
-    wants: "cita con la doctora Sáez en Centro lo antes posible"
-    prefer: "la doctora Sáez en Centro"
+    wants: "la primera visita disponible de medicina general"
   behavior:
     provide_identifier_when_asked: true
     accept_first_offer: true
 turns:
-  - text: "Hola, soy Marta Ruiz Gómez. Quiero pedir cita con la doctora Sáez en Centro, lo antes posible."
+  - text: "Bon dia, sóc la Marta Ruiz Gómez, DNI 12345678-Z. Voldria la primera visita que tinguin de medicina general."
     hold_ms: 4000
+  - text: "Em és igual el metge. Gràcies."
+    hold_ms: 2000
 oracle:
   accepted_outcomes:
     - actions:
@@ -41,6 +42,5 @@ oracle:
 limits:
   max_call_seconds: 180
 notes: >
-  PR01 (Dra. Ana Sáez, general) está en Centro lunes/miércoles/viernes
-  09:00-14:00. El caller pidió proveedor y sede: un dermatólogo en Centro o
-  la Dra. Sáez en Norte no son respuestas aceptadas.
+  Mismo resultado esperado que sb-001: el idioma de la conversación no
+  cambia la acción correcta. PR01 declara catalán en su ficha.

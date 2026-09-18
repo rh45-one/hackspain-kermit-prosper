@@ -1,7 +1,13 @@
 """Comparator tests: binary membership, diagnostics, transcript leaks."""
 from __future__ import annotations
 
-from evaluator.compare import compare, dedupe, diff_actions, transcript_leaks
+from evaluator.compare import (
+    categorize,
+    compare,
+    dedupe,
+    diff_actions,
+    transcript_leaks,
+)
 
 BOOK = {
     "action": "BOOK",
@@ -113,6 +119,47 @@ class TestCompare:
         cancel = {"action": "CANCEL", "appointment_id": "A00009"}
         cmp = compare([cancel, BOOK], [[BOOK, cancel]])
         assert cmp.passed
+
+    def test_forbidden_action_fails_explicitly(self):
+        cancel = {"action": "CANCEL", "appointment_id": "A00009"}
+        cmp = compare([cancel], [[BOOK]], forbidden_actions=["CANCEL"])
+        assert not cmp.passed
+        assert cancel in cmp.extra_actions
+
+    def test_forbidden_list_empty_is_noop(self):
+        cmp = compare([BOOK], [[BOOK]], forbidden_actions=[])
+        assert cmp.passed
+
+
+class TestCategorize:
+    def test_privacy_leak_category(self):
+        cmp = compare([BOOK], [[BOOK]])
+        cats = categorize(cmp, ["national_id"], None, [])
+        assert cats == ["privacy_error"]
+
+    def test_transport_error_category(self):
+        cmp = compare([], [[BOOK]])
+        cats = categorize(cmp, [], "ConnectionRefused", [])
+        assert "transport_error" in cats
+
+    def test_rejected_attempts_submission_error(self):
+        cmp = compare([], [[BOOK]])
+        cats = categorize(cmp, [], None, [{"route": "book", "status": 422}])
+        assert cats == ["submission_error"]
+
+    def test_empty_record_no_attempts_unknown(self):
+        cmp = compare([], [[BOOK]])
+        assert categorize(cmp, [], None, []) == ["unknown"]
+
+    def test_wrong_patient_identity_error(self):
+        bad = {**BOOK, "patient_id": "P99999"}
+        cmp = compare([bad], [[BOOK]])
+        assert "identity_error" in categorize(cmp, [], None, [])
+
+    def test_wrong_slot_reasoning_error(self):
+        bad = {**BOOK, "slot": "2026-09-21T11:00:00+02:00"}
+        cmp = compare([bad], [[BOOK]])
+        assert "reasoning_error" in categorize(cmp, [], None, [])
 
 
 class TestTranscriptLeaks:

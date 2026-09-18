@@ -9,7 +9,9 @@
     "ends": "2026-10-16",
     "max_span_days": 14,
     "slot_minutes": 15,
-    "closure_days": ["2026-10-12"]
+    "closure_days": [
+      "2026-10-12"
+    ]
   },
   "restrictions": [
     {
@@ -29,49 +31,146 @@
       "name": "Centro",
       "address": "Calle Arenal 12, Madrid",
       "latitude": 40.4189,
-      "longitude": -3.7060,
+      "longitude": -3.706,
       "hours": [
-        {"weekday": "monday", "intervals": ["09:00-20:00"]},
-        {"weekday": "tuesday", "intervals": ["09:00-20:00"]},
-        {"weekday": "wednesday", "intervals": ["09:00-20:00"]},
-        {"weekday": "thursday", "intervals": ["09:00-20:00"]},
-        {"weekday": "friday", "intervals": ["09:00-20:00"]},
-        {"weekday": "saturday", "intervals": ["09:00-14:00"]}
+        {
+          "weekday": "monday",
+          "intervals": [
+            "09:00-20:00"
+          ]
+        },
+        {
+          "weekday": "tuesday",
+          "intervals": [
+            "09:00-20:00"
+          ]
+        },
+        {
+          "weekday": "wednesday",
+          "intervals": [
+            "09:00-20:00"
+          ]
+        },
+        {
+          "weekday": "thursday",
+          "intervals": [
+            "09:00-20:00"
+          ]
+        },
+        {
+          "weekday": "friday",
+          "intervals": [
+            "09:00-20:00"
+          ]
+        },
+        {
+          "weekday": "saturday",
+          "intervals": [
+            "09:00-14:00"
+          ]
+        }
       ],
-      "covered_by": ["sanitas", "asisa", "dkv", "privado"],
+      "covered_by": [
+        "sanitas",
+        "asisa",
+        "dkv",
+        "privado"
+      ],
       "not_covered_by": []
     },
     {
       "id": "norte",
       "name": "Norte",
       "address": "Plaza de Castilla 3, Madrid",
-      "latitude": 40.4660,
-      "longitude": -3.6890,
+      "latitude": 40.466,
+      "longitude": -3.689,
       "hours": [
-        {"weekday": "monday", "intervals": ["09:00-19:00"]},
-        {"weekday": "tuesday", "intervals": ["09:00-19:00"]},
-        {"weekday": "wednesday", "intervals": ["09:00-19:00"]},
-        {"weekday": "thursday", "intervals": ["09:00-19:00"]},
-        {"weekday": "friday", "intervals": ["09:00-19:00"]}
+        {
+          "weekday": "monday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "tuesday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "wednesday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "thursday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "friday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        }
       ],
-      "covered_by": ["sanitas", "asisa", "privado"],
-      "not_covered_by": ["dkv"]
+      "covered_by": [
+        "sanitas",
+        "asisa",
+        "privado"
+      ],
+      "not_covered_by": [
+        "dkv"
+      ]
     },
     {
       "id": "sur",
       "name": "Sur",
       "address": "Avenida de los Poblados 50, Madrid",
-      "latitude": 40.3850,
-      "longitude": -3.7180,
+      "latitude": 40.385,
+      "longitude": -3.718,
       "hours": [
-        {"weekday": "monday", "intervals": ["09:00-19:00"]},
-        {"weekday": "tuesday", "intervals": ["09:00-19:00"]},
-        {"weekday": "wednesday", "intervals": ["09:00-19:00"]},
-        {"weekday": "thursday", "intervals": ["09:00-19:00"]},
-        {"weekday": "friday", "intervals": ["09:00-14:00"]}
+        {
+          "weekday": "monday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "tuesday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "wednesday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "thursday",
+          "intervals": [
+            "09:00-19:00"
+          ]
+        },
+        {
+          "weekday": "friday",
+          "intervals": [
+            "09:00-14:00"
+          ]
+        }
       ],
-      "covered_by": ["asisa", "dkv", "privado"],
-      "not_covered_by": ["sanitas"]
+      "covered_by": [
+        "asisa",
+        "dkv",
+        "privado"
+      ],
+      "not_covered_by": [
+        "sanitas"
+      ]
     }
   ],
   "specialties": [
@@ -81,7 +180,12 @@
       "min_age_months": 168,
       "max_age_months": null,
       "referral_required": false,
-      "covered_by": ["sanitas", "asisa", "dkv", "privado"],
+      "covered_by": [
+        "sanitas",
+        "asisa",
+        "dkv",
+        "privado"
+      ],
       "not_covered_by": []
     },
     {
@@ -90,7 +194,12 @@
       "min_age_months": 0,
       "max_age_months": 167,
       "referral_required": false,
-      "covered_by": ["sanitas", "asisa", "dkv", "privado"],
+      "covered_by": [
+        "sanitas",
+        "asisa",
+        "dkv",
+        "privado"
+      ],
       "not_covered_by": []
     },
     {
@@ -99,8 +208,13 @@
       "min_age_months": 0,
       "max_age_months": null,
       "referral_required": true,
-      "covered_by": ["sanitas"],
-      "not_covered_by": ["dkv", "privado"]
+      "covered_by": [
+        "sanitas"
+      ],
+      "not_covered_by": [
+        "dkv",
+        "privado"
+      ]
     },
     {
       "id": "orthopaedics",
@@ -108,8 +222,13 @@
       "min_age_months": 0,
       "max_age_months": null,
       "referral_required": false,
-      "covered_by": ["sanitas", "asisa"],
-      "not_covered_by": ["dkv"]
+      "covered_by": [
+        "sanitas",
+        "asisa"
+      ],
+      "not_covered_by": [
+        "dkv"
+      ]
     },
     {
       "id": "physiotherapy",
@@ -117,7 +236,12 @@
       "min_age_months": 0,
       "max_age_months": null,
       "referral_required": false,
-      "covered_by": ["sanitas", "asisa", "dkv", "privado"],
+      "covered_by": [
+        "sanitas",
+        "asisa",
+        "dkv",
+        "privado"
+      ],
       "not_covered_by": []
     },
     {
@@ -126,8 +250,13 @@
       "min_age_months": 0,
       "max_age_months": null,
       "referral_required": false,
-      "covered_by": ["sanitas", "privado"],
-      "not_covered_by": ["asisa"]
+      "covered_by": [
+        "sanitas",
+        "privado"
+      ],
+      "not_covered_by": [
+        "asisa"
+      ]
     }
   ],
   "appointment_types": [
@@ -200,33 +329,81 @@
     {
       "id": "sanitas",
       "name": "Sanitas",
-      "covered_specialties": ["general", "paediatrics", "dermatology", "orthopaedics", "physiotherapy", "gynaecology"],
+      "covered_specialties": [
+        "general",
+        "paediatrics",
+        "dermatology",
+        "orthopaedics",
+        "physiotherapy",
+        "gynaecology"
+      ],
       "uncovered_specialties": [],
-      "covered_locations": ["centro", "norte"],
-      "uncovered_locations": ["sur"]
+      "covered_locations": [
+        "centro",
+        "norte"
+      ],
+      "uncovered_locations": [
+        "sur"
+      ]
     },
     {
       "id": "asisa",
       "name": "ASISA",
-      "covered_specialties": ["general", "paediatrics", "orthopaedics", "physiotherapy"],
-      "uncovered_specialties": ["dermatology", "gynaecology"],
-      "covered_locations": ["centro", "norte", "sur"],
+      "covered_specialties": [
+        "general",
+        "paediatrics",
+        "orthopaedics",
+        "physiotherapy"
+      ],
+      "uncovered_specialties": [
+        "dermatology",
+        "gynaecology"
+      ],
+      "covered_locations": [
+        "centro",
+        "norte",
+        "sur"
+      ],
       "uncovered_locations": []
     },
     {
       "id": "dkv",
       "name": "DKV",
-      "covered_specialties": ["general", "paediatrics", "physiotherapy"],
-      "uncovered_specialties": ["dermatology", "orthopaedics", "gynaecology"],
-      "covered_locations": ["centro", "sur"],
-      "uncovered_locations": ["norte"]
+      "covered_specialties": [
+        "general",
+        "paediatrics",
+        "physiotherapy"
+      ],
+      "uncovered_specialties": [
+        "dermatology",
+        "orthopaedics",
+        "gynaecology"
+      ],
+      "covered_locations": [
+        "centro",
+        "sur"
+      ],
+      "uncovered_locations": [
+        "norte"
+      ]
     },
     {
       "id": "privado",
       "name": "Privado",
-      "covered_specialties": ["general", "paediatrics", "physiotherapy", "gynaecology"],
-      "uncovered_specialties": ["dermatology"],
-      "covered_locations": ["centro", "norte", "sur"],
+      "covered_specialties": [
+        "general",
+        "paediatrics",
+        "physiotherapy",
+        "gynaecology"
+      ],
+      "uncovered_specialties": [
+        "dermatology"
+      ],
+      "covered_locations": [
+        "centro",
+        "norte",
+        "sur"
+      ],
       "uncovered_locations": []
     }
   ],
@@ -235,27 +412,65 @@
       "id": "PR01",
       "name": "Dra. Ana Sáez",
       "specialty_id": "general",
-      "languages": ["español", "catalán"],
-      "appointment_type_ids": ["first_visit", "review"],
-      "location_ids": ["centro", "norte"],
+      "languages": [
+        "español",
+        "catalán"
+      ],
+      "appointment_type_ids": [
+        "first_visit",
+        "review"
+      ],
+      "location_ids": [
+        "centro",
+        "norte"
+      ],
       "schedules": [
         {
           "location_id": "centro",
           "days": [
-            {"weekday": "monday", "intervals": ["09:00-14:00"]},
-            {"weekday": "wednesday", "intervals": ["09:00-14:00"]},
-            {"weekday": "friday", "intervals": ["09:00-14:00"]}
+            {
+              "weekday": "monday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            },
+            {
+              "weekday": "friday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            }
           ]
         },
         {
           "location_id": "norte",
           "days": [
-            {"weekday": "tuesday", "intervals": ["16:00-19:00"]},
-            {"weekday": "thursday", "intervals": ["16:00-19:00"]}
+            {
+              "weekday": "tuesday",
+              "intervals": [
+                "16:00-19:00"
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "intervals": [
+                "16:00-19:00"
+              ]
+            }
           ]
         }
       ],
-      "accepted_insurers": ["sanitas", "asisa", "privado"],
+      "accepted_insurers": [
+        "sanitas",
+        "asisa",
+        "privado"
+      ],
       "refused_insurers": [],
       "leave": null
     },
@@ -263,42 +478,104 @@
       "id": "PR02",
       "name": "Dra. Marta Iglesias",
       "specialty_id": "dermatology",
-      "languages": ["español"],
-      "appointment_type_ids": ["dermatology_review"],
-      "location_ids": ["centro"],
+      "languages": [
+        "español"
+      ],
+      "appointment_type_ids": [
+        "dermatology_review"
+      ],
+      "location_ids": [
+        "centro"
+      ],
       "schedules": [
         {
           "location_id": "centro",
           "days": [
-            {"weekday": "monday", "intervals": ["10:00-13:00"]},
-            {"weekday": "wednesday", "intervals": ["10:00-13:00"]}
+            {
+              "weekday": "monday",
+              "intervals": [
+                "10:00-13:00"
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "intervals": [
+                "10:00-13:00"
+              ]
+            }
           ]
         }
       ],
-      "accepted_insurers": ["sanitas"],
-      "refused_insurers": ["dkv"],
-      "leave": {"start": "2026-09-14", "end": "2026-09-30", "reason": "sick leave"}
+      "accepted_insurers": [
+        "sanitas"
+      ],
+      "refused_insurers": [
+        "dkv"
+      ],
+      "leave": {
+        "start": "2026-09-14",
+        "end": "2026-09-30",
+        "reason": "sick leave"
+      }
     },
     {
       "id": "PR03",
       "name": "D. Álvaro Cid",
       "specialty_id": "physiotherapy",
-      "languages": ["español", "catalán", "galego"],
-      "appointment_type_ids": ["physio_session"],
-      "location_ids": ["sur"],
+      "languages": [
+        "español",
+        "catalán",
+        "galego"
+      ],
+      "appointment_type_ids": [
+        "physio_session"
+      ],
+      "location_ids": [
+        "sur"
+      ],
       "schedules": [
         {
           "location_id": "sur",
           "days": [
-            {"weekday": "monday", "intervals": ["09:00-13:00"]},
-            {"weekday": "tuesday", "intervals": ["09:00-13:00"]},
-            {"weekday": "wednesday", "intervals": ["09:00-13:00"]},
-            {"weekday": "thursday", "intervals": ["09:00-13:00"]},
-            {"weekday": "friday", "intervals": ["09:00-13:00"]}
+            {
+              "weekday": "monday",
+              "intervals": [
+                "09:00-13:00"
+              ]
+            },
+            {
+              "weekday": "tuesday",
+              "intervals": [
+                "09:00-13:00"
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "intervals": [
+                "09:00-13:00"
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "intervals": [
+                "09:00-13:00"
+              ]
+            },
+            {
+              "weekday": "friday",
+              "intervals": [
+                "09:00-13:00"
+              ]
+            }
           ]
         }
       ],
-      "accepted_insurers": ["sanitas", "asisa", "dkv", "privado"],
+      "accepted_insurers": [
+        "sanitas",
+        "asisa",
+        "dkv",
+        "privado"
+      ],
       "refused_insurers": [],
       "leave": null
     },
@@ -306,22 +583,58 @@
       "id": "PR04",
       "name": "Dra. Lucía Navarro",
       "specialty_id": "paediatrics",
-      "languages": ["español"],
-      "appointment_type_ids": ["paediatric_first_visit", "paediatric_review"],
-      "location_ids": ["norte"],
+      "languages": [
+        "español"
+      ],
+      "appointment_type_ids": [
+        "paediatric_first_visit",
+        "paediatric_review"
+      ],
+      "location_ids": [
+        "norte"
+      ],
       "schedules": [
         {
           "location_id": "norte",
           "days": [
-            {"weekday": "monday", "intervals": ["09:30-14:30"]},
-            {"weekday": "tuesday", "intervals": ["09:30-14:30"]},
-            {"weekday": "wednesday", "intervals": ["09:30-14:30"]},
-            {"weekday": "thursday", "intervals": ["09:30-14:30"]},
-            {"weekday": "friday", "intervals": ["09:30-14:30"]}
+            {
+              "weekday": "monday",
+              "intervals": [
+                "09:30-14:30"
+              ]
+            },
+            {
+              "weekday": "tuesday",
+              "intervals": [
+                "09:30-14:30"
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "intervals": [
+                "09:30-14:30"
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "intervals": [
+                "09:30-14:30"
+              ]
+            },
+            {
+              "weekday": "friday",
+              "intervals": [
+                "09:30-14:30"
+              ]
+            }
           ]
         }
       ],
-      "accepted_insurers": ["sanitas", "asisa", "dkv"],
+      "accepted_insurers": [
+        "sanitas",
+        "asisa",
+        "dkv"
+      ],
       "refused_insurers": [],
       "leave": null
     },
@@ -329,42 +642,99 @@
       "id": "PR05",
       "name": "Dr. Pablo Requena",
       "specialty_id": "general",
-      "languages": ["español"],
-      "appointment_type_ids": ["first_visit", "review"],
-      "location_ids": ["sur"],
+      "languages": [
+        "español"
+      ],
+      "appointment_type_ids": [
+        "first_visit",
+        "review"
+      ],
+      "location_ids": [
+        "sur"
+      ],
       "schedules": [
         {
           "location_id": "sur",
           "days": [
-            {"weekday": "monday", "intervals": ["09:00-14:00"]},
-            {"weekday": "tuesday", "intervals": ["09:00-14:00"]},
-            {"weekday": "wednesday", "intervals": ["09:00-14:00"]},
-            {"weekday": "thursday", "intervals": ["09:00-14:00"]},
-            {"weekday": "friday", "intervals": ["09:00-13:30"]}
+            {
+              "weekday": "monday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            },
+            {
+              "weekday": "tuesday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            },
+            {
+              "weekday": "friday",
+              "intervals": [
+                "09:00-13:30"
+              ]
+            }
           ]
         }
       ],
-      "accepted_insurers": ["asisa", "dkv", "privado"],
-      "refused_insurers": ["sanitas"],
+      "accepted_insurers": [
+        "asisa",
+        "dkv",
+        "privado"
+      ],
+      "refused_insurers": [
+        "sanitas"
+      ],
       "leave": null
     },
     {
       "id": "PR06",
       "name": "Dra. Carmen Fuentes",
       "specialty_id": "gynaecology",
-      "languages": ["español"],
-      "appointment_type_ids": ["gyn_review"],
-      "location_ids": ["centro"],
+      "languages": [
+        "español"
+      ],
+      "appointment_type_ids": [
+        "gyn_review"
+      ],
+      "location_ids": [
+        "centro"
+      ],
       "schedules": [
         {
           "location_id": "centro",
           "days": [
-            {"weekday": "tuesday", "intervals": ["09:00-13:00"]},
-            {"weekday": "thursday", "intervals": ["09:00-13:00"]}
+            {
+              "weekday": "tuesday",
+              "intervals": [
+                "09:00-13:00"
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "intervals": [
+                "09:00-13:00"
+              ]
+            }
           ]
         }
       ],
-      "accepted_insurers": ["sanitas", "privado"],
+      "accepted_insurers": [
+        "sanitas",
+        "privado"
+      ],
       "refused_insurers": [],
       "leave": null
     },
@@ -372,23 +742,59 @@
       "id": "PR07",
       "name": "Dr. Iván Iglesia",
       "specialty_id": "orthopaedics",
-      "languages": ["español"],
-      "appointment_type_ids": ["ortho_review"],
-      "location_ids": ["norte"],
+      "languages": [
+        "español"
+      ],
+      "appointment_type_ids": [
+        "ortho_review"
+      ],
+      "location_ids": [
+        "norte"
+      ],
       "schedules": [
         {
           "location_id": "norte",
           "days": [
-            {"weekday": "monday", "intervals": ["10:00-14:00"]},
-            {"weekday": "tuesday", "intervals": ["10:00-14:00"]},
-            {"weekday": "wednesday", "intervals": ["10:00-14:00"]},
-            {"weekday": "thursday", "intervals": ["10:00-14:00"]},
-            {"weekday": "friday", "intervals": ["10:00-14:00"]}
+            {
+              "weekday": "monday",
+              "intervals": [
+                "10:00-14:00"
+              ]
+            },
+            {
+              "weekday": "tuesday",
+              "intervals": [
+                "10:00-14:00"
+              ]
+            },
+            {
+              "weekday": "wednesday",
+              "intervals": [
+                "10:00-14:00"
+              ]
+            },
+            {
+              "weekday": "thursday",
+              "intervals": [
+                "10:00-14:00"
+              ]
+            },
+            {
+              "weekday": "friday",
+              "intervals": [
+                "10:00-14:00"
+              ]
+            }
           ]
         }
       ],
-      "accepted_insurers": ["sanitas", "asisa"],
-      "refused_insurers": ["dkv"],
+      "accepted_insurers": [
+        "sanitas",
+        "asisa"
+      ],
+      "refused_insurers": [
+        "dkv"
+      ],
       "leave": null
     }
   ],
@@ -404,7 +810,9 @@
       "sex": "F",
       "has_visited_before": true,
       "insurer": "sanitas",
-      "referrals": ["dermatology"],
+      "referrals": [
+        "dermatology"
+      ],
       "note": "Seen eleven times. Every visit so far has been at Centro. Hard of hearing - speak slowly."
     },
     {
@@ -433,7 +841,11 @@
       "has_visited_before": true,
       "insurer": "dkv",
       "referrals": [],
-      "note": "DKV plan - Norte is not covered for DKV."
+      "note": "DKV plan - Norte is not covered for DKV. Holds a second private policy he only mentions if asked.",
+      "policies": [
+        "dkv",
+        "privado"
+      ]
     },
     {
       "patient_id": "P00045",
@@ -517,8 +929,20 @@
     }
   ],
   "booked_slots": [
-    {"provider_id": "PR01", "start_time": "2026-09-21T09:15:00+02:00", "duration_minutes": 15},
-    {"provider_id": "PR01", "start_time": "2026-09-21T09:30:00+02:00", "duration_minutes": 15},
-    {"provider_id": "PR07", "start_time": "2026-09-21T10:00:00+02:00", "duration_minutes": 15}
+    {
+      "provider_id": "PR01",
+      "start_time": "2026-09-21T09:15:00+02:00",
+      "duration_minutes": 15
+    },
+    {
+      "provider_id": "PR01",
+      "start_time": "2026-09-21T09:30:00+02:00",
+      "duration_minutes": 15
+    },
+    {
+      "provider_id": "PR07",
+      "start_time": "2026-09-21T10:00:00+02:00",
+      "duration_minutes": 15
+    }
   ]
 }

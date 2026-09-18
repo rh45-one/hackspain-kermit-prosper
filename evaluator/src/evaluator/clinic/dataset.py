@@ -328,6 +328,12 @@ class Dataset:
                 )
                 continue
 
+            # A provider only offers the appointment types on its list,
+            # even when the caller asks for one explicitly.
+            if appointment_type_id and appointment_type_id not in p.get(
+                "appointment_type_ids", []
+            ):
+                continue
             type_ids = (
                 [appointment_type_id]
                 if appointment_type_id

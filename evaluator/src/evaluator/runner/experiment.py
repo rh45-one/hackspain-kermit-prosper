@@ -5,7 +5,7 @@ receiver) and the test double when a candidate asks for it, plays the
 harness side of each call, collects the record and scores it.
 
 The real agent is an external system: the runner reaches it over `ws_url`
-and never shares the scenario's accepted outcomes. `start_command` is a
+or `text_url` and never shares the scenario's oracle. `start_command` is a
 convenience to boot it; env overlays (e.g. AGENT_MODEL) make candidates
 distinct configurations of the same agent.
 """
@@ -20,7 +20,7 @@ import subprocess
 import threading
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +29,7 @@ import uvicorn
 
 from evaluator.clinic.dataset import Dataset
 from evaluator.clinic.server import create_app as create_clinic_app
-from evaluator.compare import compare, transcript_leaks
+from evaluator.compare import categorize, compare, transcript_leaks
 from evaluator.harness.double_agent import create_app as create_double_app
 from evaluator.harness.wsclient import dial, load_audio, silence
 from evaluator.models import (
@@ -38,6 +38,7 @@ from evaluator.models import (
     ExperimentConfig,
     Scenario,
 )
+from evaluator.simulator.patient import RulesPatient
 
 VERB_TO_ROUTE = {
     "REGISTER": "register",
@@ -85,15 +86,58 @@ def _to_submit_bodies(outcome: list[dict[str, Any]], mutate: bool = False) -> li
     return out
 
 
-def _scenario_frames(scenario: Scenario, scenario_path: Path) -> list[bytes]:
-    frames: list[bytes] = []
+def _scenario_turns(scenario: Scenario, scenario_path: Path) -> list[list[bytes]]:
+    """Voice path: one frame group per scripted turn (audio or silence)."""
+    groups: list[list[bytes]] = []
     for turn in scenario.turns:
-        if turn.audio:
-            frames.extend(load_audio(scenario_path.parent / turn.audio))
-        else:
-            frames.extend(silence(2000))
+        frames = load_audio(scenario_path.parent / turn.audio) if turn.audio else silence(2000)
         frames.extend(silence(turn.hold_ms))
-    return frames or silence(8000)
+        groups.append(frames)
+    return groups or [silence(8000)]
+
+
+async def _run_text_call(
+    scenario: Scenario,
+    text_url: str,
+    call_id: str,
+    http: httpx.AsyncClient,
+) -> tuple[list[str], list[str]]:
+    """Drive a call over the text adapter; returns (agent_turns, errors).
+
+    When the scenario defines a caller, the rules-based patient answers;
+    otherwise the scripted turn texts are replayed verbatim.
+    """
+    transcript: list[str] = []
+    errors: list[str] = []
+
+    async def send(text: str) -> str | None:
+        try:
+            resp = await http.post(f"{text_url}/turns", json={"call_id": call_id, "text": text})
+        except httpx.HTTPError as exc:
+            errors.append(f"text adapter: {type(exc).__name__}: {exc}")
+            return None
+        if resp.status_code != 200:
+            errors.append(f"text adapter HTTP {resp.status_code}")
+            return None
+        reply = resp.json().get("reply")
+        if reply:
+            transcript.append(reply)
+        return reply
+
+    patient = RulesPatient(scenario.caller, scenario.limits) if scenario.caller.opening else None
+    if patient is not None:
+        reply = await send(patient.opening() or "")
+        while reply is not None:
+            nxt = patient.respond(reply)
+            if nxt is None:
+                break
+            reply = await send(nxt)
+        return transcript, errors
+
+    for turn in scenario.turns:
+        if turn.text:
+            await send(turn.text)
+    return transcript, errors
 
 
 async def _run_case(
@@ -108,13 +152,18 @@ async def _run_case(
 ) -> CaseResult:
     call_id = uuid.uuid4().hex
     http = httpx.AsyncClient(base_url=clinic_url, timeout=10)
-    await http.post("/eval/calls", json={"call_id": call_id})
+    open_resp = await http.post("/eval/calls", json={"call_id": call_id})
     transcript: list[str] = []
-    error: str | None = None
+    errors: list[str] = []
+    latencies: list[float] = []
+    first_audio_ms: float | None = None
     started = time.monotonic()
+    harness_failed = open_resp.status_code != 200
 
     try:
-        if candidate.kind == "double":
+        if harness_failed:
+            errors.append(f"clinic refused call open: HTTP {open_resp.status_code}")
+        elif candidate.kind == "double":
             # Tell the double what this call should submit.
             mode = candidate.mode
             if mode == "silent":
@@ -129,70 +178,88 @@ async def _run_case(
             ev = await dial(
                 f"ws://127.0.0.1:{double_port}/ws",
                 call_id,
-                silence(400),  # the double ignores audio content
+                [silence(400)],  # the double ignores audio content
                 from_number=scenario.from_number,
                 after_send_idle_s=0.5,
                 max_call_s=30.0,
             )
-            error = ev.error
+            if ev.error:
+                errors.append(ev.error)
         elif candidate.text_url:
-            # Text adapter: POST {text_url}/turns {call_id, text} → {reply}.
-            for turn in scenario.turns:
-                if not turn.text:
-                    continue
-                resp = await http.post(
-                    f"{candidate.text_url}/turns",
-                    json={"call_id": call_id, "text": turn.text},
-                )
-                if resp.status_code == 200:
-                    reply = resp.json().get("reply")
-                    if reply:
-                        transcript.append(reply)
+            transcript, errors = await _run_text_call(scenario, candidate.text_url, call_id, http)
         else:
-            frames = _scenario_frames(scenario, scenario_path)
+            turns = _scenario_turns(scenario, scenario_path)
             ev = await dial(
                 candidate.ws_url or "",
                 call_id,
-                frames,
+                turns,
                 from_number=scenario.from_number,
                 after_send_idle_s=8.0,
+                max_call_s=scenario.limits.max_call_seconds,
             )
-            error = ev.error
+            if ev.error:
+                errors.append(ev.error)
+            latencies = [x for x in ev.turn_latencies_ms if x is not None]
+            first_audio_ms = ev.first_audio_ms
     finally:
         await http.post(f"/eval/calls/{call_id}/close")
         record_resp = await http.get(f"/eval/calls/{call_id}/record")
         await http.aclose()
 
-    submitted = record_resp.json().get("actions", []) if record_resp.status_code == 200 else []
-    cmp = compare(submitted, scenario.accepted_outcomes)
+    record = record_resp.json() if record_resp.status_code == 200 else {}
+    submitted = record.get("actions", [])
+    attempts = record.get("attempts", [])
+
+    oracle = scenario.oracle
+    cmp = compare(
+        submitted,
+        scenario.accepted_outcomes,
+        forbidden_actions=oracle.forbidden_actions,
+        require_nonempty_submission=oracle.require_nonempty_submission,
+    )
 
     leaks: list[str] = []
-    if scenario.leak_check and transcript:
+    if oracle.leak_check and transcript:
         leaks = transcript_leaks(
-            transcript, scenario.leak_check.national_id, scenario.leak_check.phone
+            transcript, oracle.leak_check.national_id, oracle.leak_check.phone
         )
 
     signal = cmp.failure_signal
     if leaks:
         signal = "transcript_leak"
 
+    # Harness defects invalidate the case - they are not agent failures.
+    transport_error = next((e for e in errors if "max_call_s" not in e), None)
+    if harness_failed or (transport_error and not submitted):
+        verdict = "invalid_evaluation"
+    else:
+        verdict = "pass" if (cmp.passed and not leaks) else "fail"
+
+    categories = (
+        categorize(cmp, leaks, transport_error, attempts) if verdict != "pass" else []
+    )
+
     return CaseResult(
         case_id=case_id,
         call_id=call_id,
-        scenario_id=scenario.scenario_id,
+        scenario_id=scenario.id,
         problem_id=scenario.problem_id,
         candidate=candidate.name,
         repetition=repetition,
-        passed=cmp.passed and not leaks,
+        verdict=verdict,
         failure_signal=signal,  # type: ignore[arg-type]
+        categories=categories,
         matched_outcome=cmp.matched_outcome,
         field_diffs=cmp.field_diffs,
         extra_actions=cmp.extra_actions,
         missing_actions=cmp.missing_actions,
         submitted=submitted,
+        submit_attempts=attempts,
         transcript=transcript,
+        turn_latencies_ms=latencies,
+        first_audio_ms=first_audio_ms,
         duration_s=round(time.monotonic() - started, 2),
-        errors=[error] if error else [],
+        errors=errors,
     )
 
 
@@ -204,6 +271,60 @@ def _load_scenarios(config: ExperimentConfig, config_dir: Path) -> list[tuple[Sc
     return pairs
 
 
+def validate_scenario(scenario: Scenario, dataset: Dataset) -> list[str]:
+    """Check a scenario resolves in its fixture (plan §8 loader rule).
+
+    An incoherent scenario is an evaluator bug, not an agent failure - so
+    these are reported, never silently scored.
+    """
+    problems: list[str] = []
+    if scenario.clinic_fixture and scenario.clinic_fixture != dataset.meta.get("name"):
+        problems.append(
+            f"clinic_fixture {scenario.clinic_fixture!r} != dataset {dataset.meta.get('name')!r}"
+        )
+    for i, outcome in enumerate(scenario.accepted_outcomes):
+        for action in outcome:
+            verb = action["action"]
+            if verb == "BOOK":
+                if action.get("patient_id") not in dataset.patients_by_id:
+                    problems.append(f"outcome {i}: unknown patient_id {action.get('patient_id')}")
+                if action.get("provider_id") not in dataset.providers_by_id:
+                    problems.append(f"outcome {i}: unknown provider_id {action.get('provider_id')}")
+                if action.get("location_id") not in dataset.locations_by_id:
+                    problems.append(f"outcome {i}: unknown location_id {action.get('location_id')}")
+                if action.get("appointment_type_id") not in dataset.types_by_id:
+                    problems.append(
+                        f"outcome {i}: unknown type {action.get('appointment_type_id')}"
+                    )
+                if action.get("policy_id") not in dataset.plans_by_id:
+                    problems.append(f"outcome {i}: unknown policy_id {action.get('policy_id')}")
+                slot = action.get("slot")
+                if slot:
+                    try:
+                        day = datetime.fromisoformat(str(slot)).date()
+                        if not (
+                            date.fromisoformat(dataset.calendar["starts"])
+                            <= day
+                            <= date.fromisoformat(dataset.calendar["ends"])
+                        ):
+                            problems.append(f"outcome {i}: slot {slot} outside calendar")
+                    except ValueError:
+                        problems.append(f"outcome {i}: unparseable slot {slot!r}")
+            elif verb in ("CANCEL", "RESCHEDULE"):
+                appt = action.get("appointment_id")
+                if appt and appt not in {a["appointment_id"] for a in dataset.appointments}:
+                    problems.append(f"outcome {i}: unknown appointment_id {appt}")
+            elif verb == "REGISTER":
+                from evaluator.normalize import national_id_check_ok
+
+                nid = action.get("national_id")
+                if nid and not national_id_check_ok(str(nid)):
+                    problems.append(f"outcome {i}: bad national_id check letter {nid!r}")
+    if not scenario.caller.opening and not scenario.turns:
+        problems.append("no caller.opening and no turns - nothing to say")
+    return problems
+
+
 def run_experiment(config_path: str, out_root: str | None = None) -> Path:
     """Run one experiment end to end; returns the results directory."""
     config_path_obj = Path(config_path).resolve()
@@ -213,6 +334,14 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
     dataset_hash = hashlib.sha256(
         (config_dir / config.clinic_dataset).read_bytes()
     ).hexdigest()[:12]
+
+    scenarios = _load_scenarios(config, config_dir)
+    fixture_problems = {
+        s.id: p for s, _ in scenarios if (p := validate_scenario(s, dataset))
+    }
+    if fixture_problems:
+        lines = [f"  {sid}: {probs}" for sid, probs in fixture_problems.items()]
+        raise ValueError("scenarios do not resolve in the fixture:\n" + "\n".join(lines))
 
     run_id = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:6]}"
     out_dir = Path(out_root or config_dir / "results") / run_id
@@ -241,12 +370,11 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
                     subprocess.Popen(cand.start_command, shell=True, env=env, cwd=config_dir)
                 )
 
-        scenarios = _load_scenarios(config, config_dir)
         results: list[CaseResult] = []
         for cand in config.candidates:
             for rep in range(config.repetitions):
                 for scenario, path in scenarios:
-                    case_id = f"{cand.name}/{scenario.scenario_id}/r{rep}"
+                    case_id = f"{cand.name}/{scenario.id}/r{rep}"
                     result = asyncio.run(
                         _run_case(
                             scenario,
@@ -269,10 +397,11 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
             "dataset": config.clinic_dataset,
             "reference_now": config.reference_now,
             "repetitions": config.repetitions,
+            "budget": config.budget,
             "started_at": datetime.now(UTC).isoformat(),
             "candidates": [c.model_dump(exclude={"start_command"}) for c in config.candidates],
             "scenarios": [
-                {"scenario_id": s.scenario_id, "problem_id": s.problem_id, "version": s.version}
+                {"id": s.id, "problem_id": s.problem_id, "version": s.version, "split": s.split}
                 for s, _ in scenarios
             ],
             "note": "resultado local - no es el veredicto oficial del reto",

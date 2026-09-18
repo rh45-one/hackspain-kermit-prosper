@@ -109,6 +109,14 @@ class TestRegistry:
         assert action["action"] == "REGISTER"
         assert action["new_patient"]["national_id"] == "12345678Z"
 
+    def test_attempts_logged_accepted_and_rejected(self):
+        reg = CallRegistry()
+        reg.open("c1")
+        reg.submit("c1", "book", {"call_id": "c1"})  # 422 missing fields
+        reg.submit("c1", "book", BOOK_BODY)  # 200
+        attempts = reg.calls["c1"].attempts
+        assert [a["status"] for a in attempts] == [422, 200]
+
 
 class TestHttp:
     async def test_health_no_auth(self, client):

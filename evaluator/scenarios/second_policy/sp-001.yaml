@@ -1,0 +1,47 @@
+id: sp-001
+problem_id: second_policy
+version: 1
+split: development
+language: es
+description: >
+  Segunda póliza: Luis (DKV) pide traumatología, que DKV no cubre. Tiene
+  una póliza privada que solo menciona si se le pregunta - facturar a DKV
+  falla, preguntar y facturar a privado pasa.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34622333444"
+  opening: "Buenos días, soy Luis Ortega Sanz. Quiero cita de traumatología, me duele la rodilla."
+  facts:
+    name: "Luis Ortega Sanz"
+    patient_id: P00044
+    national_id: "23456789D"
+    insurer: dkv
+    policies: [dkv, privado]
+    wants: "cita de traumatología por un dolor de rodilla"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+    reveal_second_policy_when_asked: true
+turns:
+  - text: "Buenos días, soy Luis Ortega Sanz. Quiero cita de traumatología, me duele la rodilla."
+    hold_ms: 4000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00044
+          provider_id: PR07
+          location_id: norte
+          appointment_type_id: ortho_review
+          slot: "2026-09-21T10:15:00+02:00"
+          policy_id: privado
+  forbidden_actions: []
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  PR07 es el único traumatólogo (Norte, 10:00-14:00). DKV no cubre ni la
+  especialidad ni la sede; la póliza privada sí ambas. El 21 a las 10:00
+  está ocupado (booked_slots) → 10:15. Un BOOK con policy_id dkv falla.

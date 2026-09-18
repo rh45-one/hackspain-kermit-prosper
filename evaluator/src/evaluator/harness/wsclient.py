@@ -5,6 +5,10 @@ keys, string `sequenceNumber`/`chunk`/`timestamp`, 20 ms µ-law frames
 base64-encoded in `media.payload`, `connected` → `start` → `media*` →
 `stop`. The evaluator plays the carrier's part, exactly like the official
 harness.
+
+Latency is measured per caller turn: end of the caller's last outbound
+frame → the agent's first inbound media frame after it (plan §13,
+"fin del habla del paciente → primer audio audible de respuesta").
 """
 from __future__ import annotations
 
@@ -48,20 +52,25 @@ class CallEvidence:
     connected_at: float = 0.0
     stopped_at: float = 0.0
     error: str | None = None
+    # Per-turn response latency in ms (plan §13); None where the agent
+    # never answered that turn before the next one started or the call ended.
+    turn_latencies_ms: list[float | None] = field(default_factory=list)
+    first_audio_ms: float | None = None  # connect → first inbound media frame
 
 
 async def dial(
     ws_url: str,
     call_id: str,
-    frames: list[bytes],
+    turns: list[list[bytes]],
     from_number: str | None = None,
     frame_interval_s: float = 0.02,
     open_timeout_s: float = 10.0,
     after_send_idle_s: float = 5.0,
     max_call_s: float = 180.0,
 ) -> CallEvidence:
-    """Play one call: handshake, stream `frames` in real time, then stop.
+    """Play one call: handshake, stream `turns` in real time, then stop.
 
+    `turns` is a list of frame groups - one group per caller utterance.
     Waits up to `after_send_idle_s` for the agent's tail-end audio before
     sending `stop` - submissions during the open call are valid, so the
     caller does not need to linger beyond the caller-side content.
@@ -90,6 +99,8 @@ async def dial(
             }
             await ws.send(json.dumps(start))
 
+            awaiting_reply_at: list[float | None] = [None]
+
             async def _recv() -> None:
                 async for raw in ws:
                     try:
@@ -98,38 +109,56 @@ async def dial(
                         continue
                     event = msg.get("event")
                     if event == "media":
+                        now = time.monotonic()
+                        if ev.first_audio_ms is None:
+                            ev.first_audio_ms = round((now - ev.connected_at) * 1000, 1)
                         ev.frames_received += 1
                         payload = msg.get("media", {}).get("payload", "")
                         ev.agent_bytes += len(payload)
+                        if awaiting_reply_at[0] is not None:
+                            ev.turn_latencies_ms.append(
+                                round((now - awaiting_reply_at[0]) * 1000, 1)
+                            )
+                            awaiting_reply_at[0] = None
                     elif event == "mark":
                         ev.marks.append(str(msg.get("mark", {}).get("name", "")))
 
             recv_task = asyncio.create_task(_recv())
             try:
-                for i, frame_bytes in enumerate(frames):
+                seq = 1
+                for turn_frames in turns:
                     if time.monotonic() - ev.connected_at > max_call_s:
                         ev.error = "caller-side max_call_s reached"
                         break
-                    await ws.send(
-                        json.dumps(
-                            {
-                                "event": "media",
-                                "sequenceNumber": str(i + 2),
-                                "media": {
-                                    "track": "inbound",
-                                    "chunk": str(i + 1),
-                                    "timestamp": str(i * 20),
-                                    "payload": base64.b64encode(frame_bytes).decode(),
-                                },
-                                "streamSid": stream_sid,
-                            }
+                    for frame_bytes in turn_frames:
+                        seq += 1
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "event": "media",
+                                    "sequenceNumber": str(seq),
+                                    "media": {
+                                        "track": "inbound",
+                                        "chunk": str(seq - 1),
+                                        "timestamp": str(seq * 20),
+                                        "payload": base64.b64encode(frame_bytes).decode(),
+                                    },
+                                    "streamSid": stream_sid,
+                                }
+                            )
                         )
-                    )
-                    await asyncio.sleep(frame_interval_s)
+                        ev.frames_sent += 1
+                        await asyncio.sleep(frame_interval_s)
+                    # Caller finished this utterance: the clock for the
+                    # agent's response latency starts now. If the previous
+                    # turn was never answered, record it as unanswered.
+                    if awaiting_reply_at[0] is not None:
+                        ev.turn_latencies_ms.append(None)
+                    awaiting_reply_at[0] = time.monotonic()
                 # Let the agent finish speaking before hanging up.
                 await asyncio.sleep(after_send_idle_s)
             finally:
-                await ws.send(json.dumps({"event": "stop", "sequenceNumber": str(len(frames) + 2), "streamSid": stream_sid}))
+                await ws.send(json.dumps({"event": "stop", "sequenceNumber": str(seq + 1), "streamSid": stream_sid}))
                 ev.stopped_at = time.monotonic()
                 recv_task.cancel()
                 try:

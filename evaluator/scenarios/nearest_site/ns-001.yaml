@@ -1,0 +1,45 @@
+id: ns-001
+problem_id: nearest_site
+version: 1
+split: development
+language: es
+description: >
+  Sede más cercana: la paciente vive junto a Plaza de Castilla (la sede
+  Norte está EN Plaza de Castilla 3). Por distancia recta debe ser Norte,
+  y en Norte solo PR01 da general los martes y jueves por la tarde.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Hola, soy Marta Ruiz Gómez. Quiero una revisión de medicina general en la sede que me pille más cerca; vivo al lado de Plaza de Castilla."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    insurer: sanitas
+    wants: "revisión de medicina general en la sede más cercana a Plaza de Castilla"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Quiero una revisión de medicina general en la sede que me pille más cerca; vivo al lado de Plaza de Castilla."
+    hold_ms: 4000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: norte
+          appointment_type_id: review
+          slot: "2026-09-22T16:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  Norte está literalmente en Plaza de Castilla 3: la sede más cercana es
+  Norte por distancia recta. PR01 da general en Norte martes y jueves
+  16:00-19:00; el primer hueco tras el viernes 18 es martes 22 a las 16:00.

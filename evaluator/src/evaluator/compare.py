@@ -204,12 +204,24 @@ class Comparison:
 
 
 def compare(
-    submitted: list[dict[str, Any]], accepted_outcomes: list[list[dict[str, Any]]]
+    submitted: list[dict[str, Any]],
+    accepted_outcomes: list[list[dict[str, Any]]],
+    forbidden_actions: list[str] | None = None,
+    require_nonempty_submission: bool = True,
 ) -> Comparison:
     """Score one call's record against the scenario's accepted outcomes."""
     record = dedupe(submitted)
     if not record:
+        # An empty accepted record always fails under the current rules;
+        # `require_nonempty_submission` is kept explicit for the day a
+        # scenario legitimately expects silence.
         return Comparison(False, "missing_record", None, [], [], [])
+
+    forbidden = {a.upper() for a in (forbidden_actions or [])}
+    if forbidden:
+        bad = [a for a in record if a["action"] in forbidden]
+        if bad:
+            return Comparison(False, "record_mismatch", None, [], bad, [])
 
     best: Comparison | None = None
     for i, outcome in enumerate(accepted_outcomes):
@@ -219,6 +231,69 @@ def compare(
         if best is None or len(diffs) < len(best.field_diffs):
             best = Comparison(False, "record_mismatch", None, diffs, extra, missing)
     return best or Comparison(False, "record_mismatch", None, [], [], [])
+
+
+# --- Failure attribution (plan §14, local heuristics) ------------------------
+#
+# Categories name the most likely cause, not the verdict. Where the evidence
+# cannot distinguish causes (a wrong national_id could be STT or reasoning),
+# we stay honest: `unknown` rather than a confident guess.
+
+_IDENTITY_FIELDS = {"patient_id", "appointment_id"}
+_REASONING_FIELDS = {
+    "provider_id",
+    "location_id",
+    "appointment_type_id",
+    "slot",
+    "policy_id",
+    "reason",
+}
+
+
+def categorize(
+    comparison: Comparison,
+    leaks: list[str],
+    transport_error: str | None,
+    submit_attempts: list[dict[str, Any]],
+) -> list[str]:
+    """Map one failed case to plan-§14 categories (heuristic, ordered).
+
+    `submit_attempts` are the receiver's log of HTTP submissions: attempts
+    that never produced an accepted action point at `submission_error`.
+    """
+    cats: list[str] = []
+    if transport_error:
+        cats.append("transport_error")
+    if leaks:
+        cats.append("privacy_error")
+    if comparison.passed:
+        return cats
+
+    rejected = [a for a in submit_attempts if a.get("status", 200) >= 400]
+    if not comparison.field_diffs and not comparison.extra_actions and not comparison.missing_actions:
+        # No accepted record at all.
+        cats.append("submission_error" if rejected else "unknown")
+        return cats
+
+    for diff in comparison.field_diffs:
+        if diff.field in _IDENTITY_FIELDS or (diff.verb == "REGISTER" and diff.field != "action"):
+            cats.append("identity_error")
+        elif diff.field in _REASONING_FIELDS or diff.field in ("action", "surnames"):
+            cats.append("reasoning_error")
+        else:
+            cats.append("unknown")
+    if comparison.extra_actions or comparison.missing_actions:
+        cats.append("reasoning_error")
+    if rejected:
+        cats.append("submission_error")
+
+    seen: set[str] = set()
+    out = []
+    for c in cats:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out or ["unknown"]
 
 
 # --- Problem-14 transcript leak check (local approximation) -----------------

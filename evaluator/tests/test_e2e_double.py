@@ -71,12 +71,13 @@ class TestDoubleE2E:
             ev = await dial(
                 "ws://127.0.0.1:18991/ws",
                 call_id,
-                silence(300),
+                [silence(300)],
                 from_number="+34612345678",
                 after_send_idle_s=0.3,
             )
             assert ev.error is None
             assert ev.frames_received > 0  # the double talks back
+            assert ev.first_audio_ms is not None
 
             await http.post(f"/eval/calls/{call_id}/close")
             record = (await http.get(f"/eval/calls/{call_id}/record")).json()
@@ -93,7 +94,7 @@ class TestDoubleE2E:
             ev = await dial(
                 "ws://127.0.0.1:18991/ws",
                 call_id,
-                silence(200),
+                [silence(200)],
                 after_send_idle_s=0.3,
             )
             assert ev.error is None
@@ -116,7 +117,7 @@ class TestDoubleE2E:
             await dial(
                 "ws://127.0.0.1:18991/ws",
                 call_id,
-                silence(200),
+                [silence(200)],
                 after_send_idle_s=0.3,
             )
             await http.post(f"/eval/calls/{call_id}/close")

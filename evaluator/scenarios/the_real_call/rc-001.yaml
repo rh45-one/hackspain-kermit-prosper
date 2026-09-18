@@ -1,31 +1,53 @@
-scenario_id: rc-001
-problem_id: the_real_call
-version: 1
+id: rc-001
+problem_id: real_call
+version: 2
+split: development
+language: es
 description: >
   Multi-acción: la abuela cancela su cita del 24 y reserva una nueva de
   general a primera hora del lunes. Las dos acciones deben ser correctas.
-reference_now: "2026-09-18T10:00:00+02:00"
-from_number: "+34612345678"
-language: es
-patient_context:
-  patient_id: P00042
-  insurer: sanitas
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: >
+    Hola, soy Marta Ruiz Gómez. Mira, dos cosas: no puedo ir a la cita del
+    24 con la doctora Sáez, así que canceladla, y en su lugar quiero una
+    de general a primera hora del lunes.
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    insurer: sanitas
+    wants: "cancelar la cita del 24 y pedir una de general el lunes a primera hora"
+    appointment: "la cita del 24 con la doctora Sáez"
+    prefer: "el lunes a primera hora"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
 turns:
   - text: >
       Hola, soy Marta Ruiz Gómez. Mira, dos cosas: no puedo ir a la cita del
       24 con la doctora Sáez, así que canceladla, y en su lugar quiero una
       de general a primera hora del lunes.
     hold_ms: 5000
-accepted_outcomes:
-  - - action: CANCEL
-      appointment_id: A00101
-    - action: BOOK
-      patient_id: P00042
-      provider_id: PR01
-      location_id: centro
-      appointment_type_id: review
-      slot: "2026-09-21T09:00:00+02:00"
-      policy_id: sanitas
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: CANCEL
+          appointment_id: A00101
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: centro
+          appointment_type_id: review
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [ESCALATE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
 notes: >
   La lista completa de acciones debe coincidir tras normalización: cancelar
   sin reservar, o reservar sin cancelar, falla el caso entero.
