@@ -49,8 +49,26 @@ Cartesia sonic fallback. Prompt instructs: reply in the caller's language.
 
 ### D6. Observability first-class from hour one
 Every call writes JSONL (frames timeline, tool calls, actions, errors) to
-`backend/data/calls/<call_id>.jsonl` + a FastAPI ops console (`/ops`) reading it —
-this is the jury-facing platform and the debug loop.
+`backend/data/calls/<call_id>.jsonl`. FastAPI `/ops` remains a JSON/HTML
+fallback over that store. The staff-facing jury platform is the Next.js
+FrontDesk in `frontend/` (D7).
+
+### D7. FrontDesk is Next.js, mock-first
+Clinic staff use a Next.js App Router + Tailwind + shadcn/ui app in
+`frontend/`. Routes: `/calls` (live monitor), `/patients` (directory),
+`/calendar` (week/day), `/settings` (tunnel, voice, knowledge sources).
+Spanish UI, English code. Until `/ops/api/*` is wired, the UI runs on
+typed mock data shaped like directory / appointments / call audit records.
+
+The browser does **not** speak Twilio Media Streams. The header shows
+whether the configured public `ws://` / `wss://` tunnel URL is set, plus
+capacity `n/10` active cards (backend still accepts 10–20 sockets).
+
+Calendar chips map closed action verbs to receptionist colours:
+`BOOK`/`REGISTER`/`RESCHEDULE` → BOOKED (green), `CANCEL` → CANCELLED
+(red), `NO_ACTION` → REFUSED (grey, reason shown), `ESCALATE` → DIVERTED
+(orange). Patient "triaje" is a reception flag derived from the latest
+agent action, not a clinical score. Handover is an ESCALATE seam in the UI.
 
 ## Risks / Trade-offs
 
@@ -68,3 +86,5 @@ Empty repo → scaffold this change. No migration.
 ## Open Questions
 
 - Exact Deepgram model for Catalan once problem 11 opens (practice will tell).
+- When FrontDesk stops using mocks: poll `/ops/api/calls` vs a dedicated
+  live WebSocket from the ops console (not the Twilio `/ws`).

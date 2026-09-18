@@ -11,7 +11,7 @@ submits exact booking actions to the Prosper platform.
 | `backend/` | The complete Python runtime: voice pipeline, clinic + scheduling core, LLM brain, ops console, ops scripts, tests and runtime data. Owns `pyproject.toml`, `uv.lock`, `Makefile` and `.env.example`. |
 | `docs/` | Shared team context: Prosper challenge notes, call contract, clinic and scoring docs, reflow interface. |
 | `openspec/` | OpenSpec changes and specs for this repository. |
-| `frontend/` | **Reserved** for the operator/frontend app. Not implemented in this change. |
+| `frontend/` | Staff FrontDesk (Next.js): live calls, patients, calendar, agent settings. Mock-first. |
 | `LICENSE`, `README.md`, `pytest.ini`, `.gitignore` | Repository-level context and root tooling. |
 
 There is no Python project at the repository root. Every runtime command is
@@ -66,5 +66,14 @@ ngrok tunnel, endpoints and credentials.
 
 ## Frontend
 
-The `frontend/` directory is reserved for a future operator UI and is not
-implemented here. No empty scaffold is committed.
+Staff FrontDesk (Next.js App Router) lives in `frontend/`. It is mock-first:
+live call cards, patient directory, Europe/Madrid calendar and agent settings
+run without the voice server. FastAPI `/ops` remains the JSON/HTML fallback.
+
+```sh
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 — it redirects to `/calls`.

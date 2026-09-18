@@ -22,7 +22,10 @@ problem 1 (simple booking) tonight.
 - A submission recorder that POSTs every accepted action to
   /api/v1/submit/* inside the 30-second window, with retries and 409 tolerance.
 - A per-call structured audit log (call_id, transcript, tool calls, actions)
-  as the basis for the jury-facing live console later.
+  as the basis for the jury-facing live console.
+- A Next.js FrontDesk in `frontend/` for clinic staff: live call monitor,
+  patient directory, Europe/Madrid calendar, and agent settings. Mock data
+  first; later the same shapes as `/ops/api/*` and `/api/v1/directory`.
 - Deployment runbook: ngrok static EU domain, backend `make run`, env template.
 
 ## Non-goals
@@ -42,7 +45,12 @@ problem 1 (simple booking) tonight.
   vocabulary, escalates red flags — and always submits an action.
 - Handles 10+ concurrent sockets with zero shared conversation state.
 
+### frontdesk-ops-console
+- Staff dashboard in `frontend/`: up to 10 live call cards, patient search
+  (name + DNI/NIE), appointment calendar in Europe/Madrid, tunnel/voice
+  settings. FastAPI `/ops` stays the JSON/HTML fallback.
+
 ## Impact
 
-- New backend/src/agent package, backend/tests, backend/ops scripts, backend/.env.example, backend/Makefile.
-- No existing code touched (repo is empty).
+- New `backend/src/agent` package, tests, ops scripts, `.env.example`, Makefile.
+- New `frontend/` Next.js App Router app (operator UI). Root README points at it.
