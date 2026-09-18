@@ -19,7 +19,7 @@ the appointment. All the tolerance in scoring lives in those two places.
 
 Every accent-insensitive fold below uses the same rule: Unicode NFKD
 decomposition with combining marks stripped. That is a deliberate
-simplification, not an oversight â it also folds "Ã±" to plain "n", so a
+simplification, not an oversight â it also folds "ñ" to plain "n", so a
 surname spelled with and without its tilde is treated as the same submission.
 
 
@@ -36,9 +36,9 @@ surname spelled with and without its tilde is treated as the same submission.
 
 | Submitted | Normalizes to | Why |
 |---|---|---|
-| \`JosÃ© GarcÃ­a LÃ³pez\` | \`jose {garcia, lopez}\` | accents stripped, case folded |
-| \`JosÃ© LÃ³pez GarcÃ­a\` | \`jose {garcia, lopez}\` | surname order does not matter |
-| \`Ana MuÃ±oz Ruiz\` | \`ana {munoz, ruiz}\` | deliberate simplification: "Ã±" folds to plain "n" |
+| \`José García López\` | \`jose {garcia, lopez}\` | accents stripped, case folded |
+| \`José López García\` | \`jose {garcia, lopez}\` | surname order does not matter |
+| \`Ana Muñoz Ruiz\` | \`ana {munoz, ruiz}\` | deliberate simplification: "ñ" folds to plain "n" |
 
 ## Captured phone number
 
@@ -68,4 +68,4 @@ surname spelled with and without its tilde is treated as the same submission.
 |---|---|---|
 | \`  Review  \` | \`review\` | surrounding whitespace and case folded |
 | \`NO_AVAILABILITY\` | \`no_availability\` | case folded |
-| \`PaediÃ¡tric_Review\` | \`paediatric_review\` | accents folded, same as names -- "Ã¡" -> "a" |
+| \`Paediátric_Review\` | \`paediatric_review\` | accents folded, same as names -- "á" -> "a" |
