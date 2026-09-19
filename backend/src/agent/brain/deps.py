@@ -3,16 +3,27 @@
 Worker modules may not exist yet during the build; tools degrade with an
 explicit error for the LLM instead of crashing the call.
 
-The CatalogueCache is process-wide: the instance warmed by the server's
-lifespan is the same instance every ToolBox reads, so the immutable
-catalogue is fetched exactly once per process. ``reset_catalogue_cache``
-exists for test isolation only.
+Catalogue caches are per organisation and process-wide within one: the
+instance warmed for a clinic is the same instance every ToolBox serving that
+clinic reads, so the immutable catalogue is fetched exactly once per process
+per organisation. With one organisation that is exactly the previous
+behaviour — a single cache, warmed once at startup.
+
+Callers that pass no ``org_id`` get the organisation bound to the current
+task (``agent.orgs.current_org_id``), which is the default organisation
+unless a call set one. That indirection is what lets ``brain/tools.py`` keep
+calling ``deps.try_catalogue_cache()`` with no arguments and still receive
+its own clinic's catalogue.
+
+``reset_catalogue_cache`` exists for test isolation only.
 """
 from __future__ import annotations
 
 import asyncio
 import threading
 from typing import Any
+
+from agent.orgs import current_org_id, normalize_org_id
 
 CLOSED_REASONS: frozenset[str] = frozenset(
     {
@@ -70,56 +81,120 @@ def _import(path: str) -> Any:
     return getattr(importlib.import_module(module_name), attr)
 
 
-# ---- shared catalogue cache ----------------------------------------------
-# One cache per process. Created lazily and thread-safely; ``warm`` itself is
-# idempotent and atomic (it rebuilds every index locally, then publishes in a
-# single assignment), so concurrent warmers converge on a complete snapshot.
-_catalogue_cache: Any | None = None
+# ---- shared catalogue caches, one per organisation ------------------------
+# Created lazily and thread-safely; ``warm`` itself is idempotent and atomic
+# (it rebuilds every index locally, then publishes in a single assignment), so
+# concurrent warmers of the same organisation converge on a complete snapshot.
+# Two organisations never share a lock, so a slow clinic cannot hold up
+# another one's first call.
+_catalogue_caches: dict[str, Any] = {}
 _catalogue_cache_lock = threading.Lock()
-_warm_lock = asyncio.Lock()
+_warm_locks: dict[str, asyncio.Lock] = {}
 
 
-def get_shared_catalogue_cache() -> Any | None:
-    """Return the process-wide CatalogueCache, creating it once."""
-    global _catalogue_cache
-    if _catalogue_cache is not None:
-        return _catalogue_cache
+def _org(org_id: str | None) -> str:
+    """The organisation to serve: the argument, else the current task's."""
+    return normalize_org_id(org_id) if org_id else current_org_id()
+
+
+def get_shared_catalogue_cache(org_id: str | None = None) -> Any | None:
+    """Return this organisation's CatalogueCache, creating it once."""
+    key = _org(org_id)
+    cache = _catalogue_caches.get(key)
+    if cache is not None:
+        return cache
     with _catalogue_cache_lock:
-        if _catalogue_cache is None:
+        cache = _catalogue_caches.get(key)
+        if cache is None:
             try:
                 cache_cls = _import("agent.clinic.cache.CatalogueCache")
             except (ImportError, AttributeError):
                 return None
-            _catalogue_cache = cache_cls()
-    return _catalogue_cache
+            cache = cache_cls()
+            _catalogue_caches[key] = cache
+    return cache
 
 
-def try_catalogue_cache() -> Any | None:
-    """Return the shared CatalogueCache (previously a fresh instance per call)."""
-    return get_shared_catalogue_cache()
+def try_catalogue_cache(org_id: str | None = None) -> Any | None:
+    """Return the shared CatalogueCache for an organisation.
+
+    With no argument this is the organisation bound to the current task, which
+    is how the ToolBox gets the right one without naming it.
+    """
+    return get_shared_catalogue_cache(org_id)
 
 
-def reset_catalogue_cache() -> None:
-    """Drop the shared cache. Test isolation only — never call in production."""
-    global _catalogue_cache
+def _warm_lock_for(org_id: str) -> asyncio.Lock:
+    """One warm lock per organisation, created under the same guard."""
+    lock = _warm_locks.get(org_id)
+    if lock is not None:
+        return lock
     with _catalogue_cache_lock:
-        _catalogue_cache = None
+        return _warm_locks.setdefault(org_id, asyncio.Lock())
 
 
-async def warm_shared_catalogue(client: Any) -> bool:
-    """Warm the shared cache once, even under concurrent callers.
+def reset_catalogue_cache(org_id: str | None = None) -> None:
+    """Drop a cache, or every cache. Test isolation only — never in production.
+
+    Called with no argument it drops them all, which is what an autouse test
+    fixture wants: one warmed organisation leaking into a test that expects a
+    cold catalogue is exactly the cross-test failure this guards.
+    """
+    with _catalogue_cache_lock:
+        if org_id is None:
+            _catalogue_caches.clear()
+            _warm_locks.clear()
+            return
+        key = normalize_org_id(org_id)
+        _catalogue_caches.pop(key, None)
+        _warm_locks.pop(key, None)
+
+
+async def warm_shared_catalogue(client: Any, org_id: str | None = None) -> bool:
+    """Warm one organisation's cache once, even under concurrent callers.
 
     Returns False only when the clinic layer is unavailable. A second warm of
     an already-warmed cache performs no fetch.
     """
-    cache = get_shared_catalogue_cache()
+    key = _org(org_id)
+    cache = get_shared_catalogue_cache(key)
     if cache is None:
         return False
-    async with _warm_lock:
+    async with _warm_lock_for(key):
         if cache.warmed:
             return True
         await cache.warm(client)
         return True
+
+
+async def ensure_catalogue_warm(settings: Any, org_id: str | None = None) -> Any | None:
+    """This organisation's catalogue, warmed on first use. Never raises.
+
+    The single place that turns "I need this clinic's catalogue" into at most
+    one fetch. Returns the cache when it is usable and None when the clinic
+    layer is absent, there are no credentials, or the fetch failed — callers
+    degrade to ids rather than fail, which is what every reader already did.
+    """
+    cache = get_shared_catalogue_cache(org_id)
+    if cache is None or cache.warmed:
+        return cache
+    if not getattr(settings, "prosper_api_key", ""):
+        return None
+    client: Any = None
+    try:
+        # Inside the guard on purpose: try_clinic_client calls the constructor
+        # outside its own try, so bad configuration raises out of it.
+        client = try_clinic_client(settings)
+        if client is None:
+            return None
+        await warm_shared_catalogue(client, org_id)
+    except Exception:  # noqa: BLE001 - a cold catalogue degrades, never 500s
+        return None
+    finally:
+        close = getattr(client, "close", None) if client is not None else None
+        if close is not None:
+            await close()
+    return cache if cache.warmed else None
 
 
 def try_clinic_client(settings: Any) -> Any | None:

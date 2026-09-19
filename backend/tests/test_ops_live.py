@@ -8,10 +8,12 @@ in the JSONL this module reads.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from agent.config import Settings
 from agent.ops import console, live
 
 TOKEN = "s3cret"
@@ -25,13 +27,26 @@ def _clean_cache():
     live._CACHE.clear()
 
 
+def _settings(tmp_path, **overrides) -> Settings:
+    """A real Settings over a throwaway DATA_DIR.
+
+    Real, not a stub with one attribute: the reader now resolves trace
+    directories through Settings (an organisation's own, plus the
+    pre-organisation one), and a stub that answers `calls_dir` and nothing
+    else would let those paths drift without a test noticing.
+    """
+    return Settings(_env_file=None, data_dir=str(tmp_path), ops_token=TOKEN, **overrides)
+
+
 @pytest.fixture
 def calls_dir(tmp_path, monkeypatch):
     """Point both modules at a throwaway DATA_DIR and open the door with a token."""
-    directory = tmp_path / "calls"
-    directory.mkdir()
-    monkeypatch.setattr(live, "settings", lambda: type("S", (), {"calls_dir": str(directory)})())
-    monkeypatch.setattr(console, "settings", lambda: type("S", (), {"ops_token": TOKEN})())
+    config = _settings(tmp_path)
+    directory = Path(config.calls_dir)
+    directory.mkdir(parents=True)
+    monkeypatch.setattr(live, "settings", lambda: config)
+    monkeypatch.setattr(console, "settings", lambda: config)
+    monkeypatch.setattr(live, "_WARM_TRIED", set())
     return directory
 
 
@@ -239,7 +254,6 @@ def test_a_call_that_queued_nothing_still_reports_an_outcome(calls_dir, client):
 
 def test_a_cold_catalogue_degrades_to_ids_instead_of_failing(calls_dir, client, monkeypatch):
     """No credentials is a normal state for this reader; it must still answer."""
-    monkeypatch.setattr(live, "_WARM_TRIED", False)
     write_trace(
         calls_dir,
         "c1",
@@ -341,11 +355,8 @@ def test_a_broken_clinic_client_does_not_become_a_500(calls_dir, client, monkeyp
     degrade to ids instead of failing the request."""
     from agent.brain import deps
 
-    monkeypatch.setattr(live, "_WARM_TRIED", False)
-    monkeypatch.setattr(
-        live, "settings",
-        lambda: type("S", (), {"calls_dir": str(calls_dir), "prosper_api_key": "k"})(),
-    )
+    config = _settings(calls_dir.parent.parent, prosper_api_key="k")
+    monkeypatch.setattr(live, "settings", lambda: config)
     def explode(_config):
         raise RuntimeError("bad base url")
     monkeypatch.setattr(deps, "try_clinic_client", explode)
@@ -384,3 +395,63 @@ def test_a_search_with_slots_does_not_explain_itself(calls_dir, client):
     )
     text = client.get("/ops/api/live/calls/c1", headers=HEADERS).json()["events"][0]["text"]
     assert text == 'Buscó huecos para "mañana": 3 disponibles.'
+
+
+# ---- organisations -------------------------------------------------------
+def _legacy_dir(calls_dir):
+    """DATA_DIR/calls: where every trace lived before organisations existed."""
+    legacy = calls_dir.parent.parent / "calls"
+    legacy.mkdir(parents=True, exist_ok=True)
+    return legacy
+
+
+def test_a_call_recorded_before_organisations_existed_is_still_listed(calls_dir, client):
+    """There are 190-odd of these on disk and on the volume. They stay readable."""
+    write_trace(_legacy_dir(calls_dir), "old", [say("caller", "hola")])
+    write_trace(calls_dir, "new", [say("caller", "buenas")])
+    rows = client.get("/ops/api/live/calls", headers=HEADERS).json()
+    assert {row["call_id"] for row in rows} == {"old", "new"}
+
+
+def test_a_call_from_before_organisations_can_still_be_opened(calls_dir, client):
+    write_trace(_legacy_dir(calls_dir), "old", [say("caller", "hola")])
+    detail = client.get("/ops/api/live/calls/old", headers=HEADERS)
+    assert detail.status_code == 200
+    assert detail.json()["conversation"][0]["text"] == "hola"
+
+
+def test_a_call_id_present_in_both_layouts_is_listed_once(calls_dir, client):
+    write_trace(_legacy_dir(calls_dir), "c1", [say("caller", "la vieja")])
+    write_trace(calls_dir, "c1", [say("caller", "la nueva")])
+    rows = client.get("/ops/api/live/calls", headers=HEADERS).json()
+    assert len(rows) == 1
+    detail = client.get("/ops/api/live/calls/c1", headers=HEADERS).json()
+    assert detail["conversation"][0]["text"] == "la nueva"
+
+
+def test_another_organisation_does_not_see_this_clinics_calls(calls_dir, client):
+    write_trace(calls_dir, "c1", [say("caller", "hola")])
+    write_trace(_legacy_dir(calls_dir), "old", [say("caller", "hola")])
+    rows = client.get("/ops/api/live/calls?org=clinica-sagasta", headers=HEADERS)
+    assert rows.status_code == 200
+    assert rows.json() == []
+    assert client.get("/ops/api/live/calls/c1?org=clinica-sagasta", headers=HEADERS).status_code == 404
+
+
+def test_an_organisation_that_could_walk_out_of_the_volume_is_refused(calls_dir, client):
+    assert client.get("/ops/api/live/calls?org=../..", headers=HEADERS).status_code == 400
+    assert client.get("/ops/api/live/calls/c1?org=..", headers=HEADERS).status_code == 400
+
+
+# The debugging console reads the same two directories through the same
+# helpers; it has no reader of its own and must not grow one.
+def test_the_console_also_reads_the_pre_organisation_traces(calls_dir, client):
+    write_trace(_legacy_dir(calls_dir), "old", [("action_queued", {"route": "book"})])
+    write_trace(calls_dir, "new", [("action_queued", {"route": "book"})])
+    rows = client.get("/ops/api/calls", headers=HEADERS).json()
+    assert {row["call_id"] for row in rows} == {"old", "new"}
+    assert client.get("/ops/api/calls/old", headers=HEADERS).status_code == 200
+
+
+def test_the_console_refuses_a_call_id_that_is_a_path(calls_dir, client):
+    assert client.get("/ops/api/calls/..%2F..%2Fsecret", headers=HEADERS).status_code in (400, 404)

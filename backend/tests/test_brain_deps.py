@@ -1,5 +1,6 @@
 """Offline tests for brain.deps: national-id gate, language normalization, and
-the process-wide CatalogueCache (identity, idempotent warm, test isolation)."""
+the per-organisation CatalogueCache (identity, idempotent warm, isolation
+between organisations, test isolation)."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +10,10 @@ import pytest
 
 from agent.brain import deps
 from agent.brain.deps import CLOSED_REASONS, normalize_language, validate_national_id
+from agent.orgs import DEFAULT_ORG_ID, reset_org, use_org
 from tests.conftest import load_fixture
+
+OTHER_ORG = "clinica-sagasta"
 
 
 class CountingClinicClient:
@@ -91,6 +95,70 @@ def test_normalize_language_names_and_codes():
 
 
 # ---- shared catalogue cache: identity, idempotent warm, isolation ----------
+
+
+def test_each_organisation_gets_its_own_cache():
+    """Two clinics sharing one catalogue is the bug this whole change removes."""
+    mine = deps.try_catalogue_cache(DEFAULT_ORG_ID)
+    theirs = deps.try_catalogue_cache(OTHER_ORG)
+    assert mine is not None and theirs is not None
+    assert mine is not theirs
+    assert deps.try_catalogue_cache(OTHER_ORG) is theirs
+
+
+async def test_warming_one_organisation_leaves_the_other_cold():
+    client = CountingClinicClient()
+    assert await deps.warm_shared_catalogue(client, DEFAULT_ORG_ID) is True
+    assert deps.try_catalogue_cache(DEFAULT_ORG_ID).warmed is True
+    assert deps.try_catalogue_cache(OTHER_ORG).warmed is False
+    assert client.fetches == 1
+
+    assert await deps.warm_shared_catalogue(client, OTHER_ORG) is True
+    assert deps.try_catalogue_cache(OTHER_ORG).warmed is True
+    assert client.fetches == 2  # a second clinic is a second catalogue
+
+
+def test_the_cache_follows_the_organisation_bound_to_the_call():
+    """How `brain/tools.py` gets the right catalogue without being told."""
+    token = use_org(OTHER_ORG)
+    try:
+        assert deps.try_catalogue_cache() is deps.try_catalogue_cache(OTHER_ORG)
+    finally:
+        reset_org(token)
+    assert deps.try_catalogue_cache() is deps.try_catalogue_cache(DEFAULT_ORG_ID)
+
+
+async def test_a_toolbox_reads_its_own_organisations_catalogue(tmp_path):
+    """A warmed clinic must never answer another clinic's call."""
+    from agent.brain.tools import ToolBox
+
+    client = CountingClinicClient()
+    await deps.warm_shared_catalogue(client, DEFAULT_ORG_ID)
+
+    token = use_org(OTHER_ORG)
+    try:
+        toolbox = ToolBox(_HintCtx(tmp_path), _HintSettings())
+    finally:
+        reset_org(token)
+    assert toolbox.cache is deps.get_shared_catalogue_cache(OTHER_ORG)
+    assert toolbox.cache.warmed is False
+
+
+def test_resetting_one_organisation_leaves_the_others_alone():
+    mine = deps.try_catalogue_cache(DEFAULT_ORG_ID)
+    theirs = deps.try_catalogue_cache(OTHER_ORG)
+    deps.reset_catalogue_cache(OTHER_ORG)
+    assert deps.try_catalogue_cache(DEFAULT_ORG_ID) is mine
+    assert deps.try_catalogue_cache(OTHER_ORG) is not theirs
+
+
+def test_resetting_with_no_organisation_drops_every_cache():
+    """What the autouse fixture relies on: no warm leaks into the next test."""
+    mine = deps.try_catalogue_cache(DEFAULT_ORG_ID)
+    theirs = deps.try_catalogue_cache(OTHER_ORG)
+    deps.reset_catalogue_cache()
+    assert deps.try_catalogue_cache(DEFAULT_ORG_ID) is not mine
+    assert deps.try_catalogue_cache(OTHER_ORG) is not theirs
 
 
 def test_try_catalogue_cache_returns_one_process_wide_instance():

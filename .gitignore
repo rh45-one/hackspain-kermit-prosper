@@ -23,8 +23,12 @@ __pycache__/
 htmlcov/
 
 # Runtime call data and recordings (may contain caller PII).
+# Two layouts: DATA_DIR/<org_id>/calls is where traces are written now, and
+# DATA_DIR/calls is where every call before organisations existed was written.
 backend/data/calls/*
 !backend/data/calls/.gitkeep
+backend/data/*/calls/*
+!backend/data/*/calls/.gitkeep
 backend/data/reflow/*
 !backend/data/reflow/.gitkeep
 *.raw

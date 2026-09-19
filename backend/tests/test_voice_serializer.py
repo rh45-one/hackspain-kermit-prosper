@@ -21,6 +21,7 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameProcessorSetup
 from pipecat.utils.asyncio.task_manager import TaskManager
 
+from agent.orgs import DEFAULT_ORG_ID
 from agent.voice.context import CallContext
 from agent.voice.twilio import ProsperTwilioSerializer
 
@@ -128,7 +129,7 @@ async def test_start_captures_call_identity(tmp_path):
     assert ctx.stream_sid == STREAM_SID
     assert ctx.from_number == PHONE
     # The per-call audit record must follow the real callSid.
-    assert (tmp_path / "data" / "calls" / f"{CALL_SID}.jsonl").exists()
+    assert (tmp_path / "data" / DEFAULT_ORG_ID / "calls" / f"{CALL_SID}.jsonl").exists()
 
 
 async def test_start_without_from_number_keeps_hint_absent(tmp_path):

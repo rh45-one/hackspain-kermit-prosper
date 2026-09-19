@@ -73,8 +73,10 @@ Secrets live only in `fly secrets` (`PROSPER_API_KEY`, `HELMCODE_API_KEY`,
 baked into the image: `.dockerignore` excludes `.env`. Non-secret knobs are
 plain `[env]` entries in `fly.toml`.
 
-Call JSONL under `/data/calls` contains caller PII. The volume is wiped with
-`fly volumes destroy prosper_data` after the event.
+Call JSONL under `/data/<org_id>/calls` contains caller PII (and under
+`/data/calls` for everything recorded before organisations existed — nothing
+writes there any more, the ops console still reads it). The volume is wiped
+with `fly volumes destroy prosper_data` after the event.
 
 ## Fallback: ngrok from a laptop (zero cost, zero deploy)
 

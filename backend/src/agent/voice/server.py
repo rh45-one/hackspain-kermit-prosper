@@ -4,6 +4,7 @@ Run: uv run python -m agent.voice.server   (listens on VOICE_WS_PORT)
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,12 +17,19 @@ from pipecat.workers.runner import WorkerRunner
 from agent.config import Settings, settings
 from agent.logging import setup_logging
 from agent.ops import turns as text_turns
+from agent.orgs import reset_org, use_org
 from agent.voice.context import CallContext
 from agent.voice.flush import flush_call
 from agent.voice.pipeline import build_worker, transport_params
 
 app_settings: Settings = settings()
 setup_logging(app_settings.log_level)
+
+# How long a socket will wait for a cold catalogue before answering the call
+# without one. Only ever paid by the first call of an organisation the
+# lifespan did not warm; the clinic this process is configured for is warm
+# before the first socket opens, so a scored call never waits here.
+CATALOGUE_WARM_TIMEOUT_SECONDS = 5.0
 
 
 @asynccontextmanager
@@ -33,12 +41,13 @@ async def lifespan(app: FastAPI):
         try:
             from agent.brain import deps
 
+            org_id = app_settings.org_id
             client = deps.try_clinic_client(app_settings)
-            cache = deps.try_catalogue_cache()
+            cache = deps.try_catalogue_cache(org_id)
             if client and cache:
-                await cache.warm(client)
+                await deps.warm_shared_catalogue(client, org_id)
                 providers = len(getattr(cache, "providers_by_id", {}) or {})
-                logger.info("clinic catalogue warmed: {} providers", providers)
+                logger.info("clinic catalogue warmed for {}: {} providers", org_id, providers)
             else:
                 logger.warning("clinic/scheduling layers not ready - running degraded")
         except Exception as exc:  # noqa: BLE001
@@ -76,16 +85,48 @@ async def demo_voice_ws(websocket: WebSocket) -> None:
     await _run_voice_socket(websocket, submit_actions=False)
 
 
+async def _warm_catalogue_for(org_id: str) -> None:
+    """Warm an organisation's catalogue on its first call. Never raises.
+
+    The lifespan warms the organisation this process is configured for, so on
+    a scored call this sees a warmed cache and returns without any I/O. A
+    second organisation has nobody to warm it at boot — its first caller does,
+    once, under a timeout, because a clinic that will not answer must cost a
+    call a few seconds of degraded lookups and never the call itself.
+    """
+    from agent.brain import deps
+
+    try:
+        await asyncio.wait_for(
+            deps.ensure_catalogue_warm(app_settings, org_id),
+            CATALOGUE_WARM_TIMEOUT_SECONDS,
+        )
+    except (TimeoutError, asyncio.CancelledError):
+        logger.warning("catalogue for {} not warm in time; call runs on ids", org_id)
+    except Exception as exc:  # noqa: BLE001 - never fail a call over a lookup table
+        logger.error("catalogue warm for {} failed: {}", org_id, exc)
+
+
 async def _run_voice_socket(websocket: WebSocket, *, submit_actions: bool) -> None:
     await websocket.accept()
-    ctx = CallContext(data_dir=app_settings.data_dir, submit_actions=submit_actions)
+    # One organisation per socket, bound to this task before anything is
+    # built: the ToolBox reads it from here to pick its catalogue cache.
+    org_id = app_settings.org_id
+    org_token = use_org(org_id)
+    ctx = CallContext(
+        org_id=org_id,
+        data_dir=app_settings.data_dir,
+        submit_actions=submit_actions,
+    )
     logger.info(
-        "{} socket open (provisional id {})",
+        "{} socket open for {} (provisional id {})",
         "scored" if submit_actions else "demo",
+        org_id,
         ctx.call_id,
     )
 
     try:
+        await _warm_catalogue_for(org_id)
         transport_params_ = transport_params(ctx, app_settings)
         transport = FastAPIWebsocketTransport(websocket, params=transport_params_)
         worker = build_worker(transport, ctx, app_settings)
@@ -107,6 +148,7 @@ async def _run_voice_socket(websocket: WebSocket, *, submit_actions: bool) -> No
         # Exactly one flush per call. Demo contexts take the audited no-submit
         # branch; scored calls retain the normal Prosper submission contract.
         await flush_call(ctx, app_settings)
+        reset_org(org_token)
         logger.info("socket done: call {} (stopped={})", ctx.call_id, ctx.stopped)
 
 

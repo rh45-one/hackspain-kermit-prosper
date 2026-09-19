@@ -14,6 +14,7 @@ import pytest
 from pipecat.frames.frames import Frame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
+from agent.orgs import DEFAULT_ORG_ID
 from agent.voice import pipeline as pl
 from agent.voice.context import CallContext
 from agent.voice.gemini_live import GeminiInputBridge, GeminiOutputBridge
@@ -144,7 +145,7 @@ async def test_gemini_without_key_fails_fast(tmp_path):
 
 async def test_engine_choice_is_audited_per_socket(tmp_path):
     build(tmp_path, "CA-audit", EngineSettings())
-    blob = (tmp_path / "data" / "calls" / "CA-audit.jsonl").read_text(encoding="utf-8")
+    blob = (tmp_path / "data" / DEFAULT_ORG_ID / "calls" / "CA-audit.jsonl").read_text(encoding="utf-8")
     assert '"event": "engine_selected"' in blob
     assert '"engine": "cascade"' in blob
 
@@ -330,7 +331,7 @@ async def test_teardown_is_idempotent_and_releases_sidecars(tmp_path):
     await transport.handlers["on_client_disconnected"](transport, None)
     await transport.handlers["on_client_disconnected"](transport, None)
 
-    blob = (tmp_path / "data" / "calls" / "CA-end.jsonl").read_text(encoding="utf-8")
+    blob = (tmp_path / "data" / DEFAULT_ORG_ID / "calls" / "CA-end.jsonl").read_text(encoding="utf-8")
     assert blob.count('"event": "socket_stop"') == 1  # mark_stopped is once-only
     assert worker.cancel_count == 2  # cancel is safe to repeat; flush is not
 

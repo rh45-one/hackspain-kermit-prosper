@@ -25,6 +25,7 @@ from pipecat.utils.asyncio.task_manager import TaskManager
 
 from agent.audio.converter import TelephonyGeminiConverter
 from agent.brain import prompts
+from agent.orgs import DEFAULT_ORG_ID
 from agent.voice.context import CallContext
 from agent.voice.gemini_live import (
     GEMINI_LIVE_MODEL,
@@ -81,7 +82,7 @@ async def test_start_captures_identity_and_no_rest_hangup(tmp_path):
     assert ctx.stream_sid == "SM-gemini"
     assert ctx.from_number == "+34612345678"
     assert ctx.stopped is True
-    assert (tmp_path / "data" / "calls" / "CA-gemini.jsonl").exists()
+    assert (tmp_path / "data" / DEFAULT_ORG_ID / "calls" / "CA-gemini.jsonl").exists()
     # EndFrame is a safe no-op: auto_hang_up stays off, no Twilio REST call.
     from pipecat.frames.frames import EndFrame
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any, Literal
 
 import httpx
@@ -14,6 +13,7 @@ from agent.clinic.client import ProsperClient
 from agent.clinic.errors import ClinicValidationError, ProsperError
 from agent.clinic.models import Appointment, PatientMatch
 from agent.config import settings
+from agent.orgs import DEFAULT_ORG_ID
 
 router = APIRouter(prefix="/ops/api/frontdesk")
 
@@ -59,13 +59,13 @@ async def _warm_catalogue() -> Any | None:
     try:
         from agent.brain import deps
 
-        cache = deps.try_catalogue_cache()
+        cache = deps.try_catalogue_cache(DEFAULT_ORG_ID)
         if cache is None:
             return None
         if not cache.warmed:
             client = deps.try_clinic_client(settings())
             if client is not None:
-                await cache.warm(client)
+                await deps.warm_shared_catalogue(client, DEFAULT_ORG_ID)
         return cache
     except Exception:  # noqa: BLE001 - a cold cache degrades to ids, never a 500
         return None
@@ -132,8 +132,10 @@ def calls(_: None = Depends(_gated)) -> list[CallView]:
     config = settings()
     now = datetime.now(UTC)
     views = []
+    # Both layouts for the default organisation: the traces recorded before
+    # organisations existed are still the only record of 190-odd scored calls.
     paths = sorted(
-        Path(config.calls_dir).glob("*.jsonl"),
+        config.call_trace_paths(DEFAULT_ORG_ID),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )[:30]

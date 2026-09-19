@@ -1,17 +1,23 @@
 """Ops console: what the jury sees. Live calls, transcripts, reflow plan.
 
-Mounts read-only views over data/calls/*.jsonl and data/reflow/*.json.
+Mounts read-only views over data/<org_id>/calls/*.jsonl and data/reflow/*.json.
+There is no session here yet — one shared token, no idea who you are — so
+every view reads the default organisation. When step 4 of PLATFORM.md brings
+users, that is the line that changes.
+
 Run: uv run uvicorn agent.ops.console:app --port 7861
 """
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from agent.config import settings
+from agent.orgs import DEFAULT_ORG_ID
 
 _LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
 
@@ -117,7 +123,12 @@ async def index(_: None = Depends(require_ops_access)) -> str:
 @app.get("/ops/api/calls")
 async def calls(_: None = Depends(require_ops_access)) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
-    for path in sorted(Path(settings().calls_dir).glob("*.jsonl"), reverse=True)[:30]:
+    # Sorted by call id, not by full path: the traces of one organisation now
+    # come from two directories (the current layout and the pre-organisation
+    # one), and sorting by path would group them by directory instead of
+    # listing the newest ids first the way this console always has.
+    paths = sorted(settings().call_trace_paths(DEFAULT_ORG_ID), key=lambda p: p.name, reverse=True)
+    for path in paths[:30]:
         actions = 0
         for line in path.read_text(encoding="utf-8").splitlines():
             try:
@@ -131,7 +142,10 @@ async def calls(_: None = Depends(require_ops_access)) -> list[dict[str, object]
 
 @app.get("/ops/api/calls/{call_id}")
 async def call_detail(call_id: str, _: None = Depends(require_ops_access)) -> list[dict[str, object]]:
-    path = Path(settings().calls_dir) / f"{call_id}.jsonl"
+    # The id lands in a filesystem path, so it may only ever be a bare name.
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", call_id) or call_id.startswith("."):
+        raise HTTPException(400, "invalid call id")
+    path = settings().call_trace_path(call_id, DEFAULT_ORG_ID)
     if not path.exists():
         raise HTTPException(404, "call not found")
     events = []

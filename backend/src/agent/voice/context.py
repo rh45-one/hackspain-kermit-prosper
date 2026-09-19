@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from agent.orgs import DEFAULT_ORG_ID, normalize_org_id
+
 # How long the pipeline waits for the harness `start` event after client
 # connect before giving up on the from_number hint.
 START_WAIT_SECONDS = 0.5
@@ -22,6 +24,10 @@ def _utcnow() -> str:
 class CallContext:
     """Everything a single phone call owns: identity, registries, audit."""
 
+    # Which clinic this call belongs to. Defaults to the one organisation
+    # this repository was built for, so a CallContext built without one is
+    # the call this codebase has always made.
+    org_id: str = DEFAULT_ORG_ID
     data_dir: str = "./data"
     call_id: str = field(default_factory=lambda: f"local-{int(time.time() * 1000)}")
     stream_sid: str = ""
@@ -72,10 +78,20 @@ class CallContext:
     start_received: asyncio.Event = field(default_factory=asyncio.Event)
 
     def __post_init__(self) -> None:
-        calls_dir = Path(self.data_dir) / "calls"
+        # Normalised here and nowhere else: from this point the id is known to
+        # be a safe directory name, and every path below is built from it.
+        self.org_id = normalize_org_id(self.org_id)
+        calls_dir = self._calls_dir()
         calls_dir.mkdir(parents=True, exist_ok=True)
         self._audit_path = calls_dir / f"{self.call_id}.jsonl"
-        self.audit("call_context_created", {"from_number": self.from_number})
+        self.audit(
+            "call_context_created",
+            {"from_number": self.from_number, "org_id": self.org_id},
+        )
+
+    def _calls_dir(self) -> Path:
+        """This organisation's trace directory: DATA_DIR/<org_id>/calls."""
+        return Path(self.data_dir) / self.org_id / "calls"
 
     # ---- identity --------------------------------------------------------
     def set_call_id(self, call_id: str) -> None:
@@ -83,13 +99,13 @@ class CallContext:
 
         The context is created with a provisional id before the harness
         speaks; once callSid is known the audit trail moves with it so the
-        per-call record lives at data/calls/<call_id>.jsonl.
+        per-call record lives at data/<org_id>/calls/<call_id>.jsonl.
         """
         if not call_id or call_id == self.call_id:
             return
         old_path = self._audit_path
         self.call_id = call_id
-        new_path = Path(self.data_dir) / "calls" / f"{call_id}.jsonl"
+        new_path = self._calls_dir() / f"{call_id}.jsonl"
         if old_path is not None and old_path.exists() and not new_path.exists():
             old_path.rename(new_path)
         self._audit_path = new_path

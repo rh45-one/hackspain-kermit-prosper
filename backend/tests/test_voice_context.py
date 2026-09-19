@@ -1,6 +1,7 @@
 """Per-call state tests: identity binding, lifecycle, registries."""
 from __future__ import annotations
 
+from agent.orgs import DEFAULT_ORG_ID
 from agent.voice.context import CallContext
 
 
@@ -12,7 +13,7 @@ def test_provisional_call_id_gets_own_audit_file(tmp_path):
     ctx = make_ctx(tmp_path)
 
     assert ctx.call_id.startswith("local-")
-    assert (tmp_path / "data" / "calls" / f"{ctx.call_id}.jsonl").exists()
+    assert (tmp_path / "data" / DEFAULT_ORG_ID / "calls" / f"{ctx.call_id}.jsonl").exists()
 
 
 def test_set_call_id_moves_audit_trail_to_callsid(tmp_path):
@@ -23,8 +24,8 @@ def test_set_call_id_moves_audit_trail_to_callsid(tmp_path):
     ctx.set_call_id("CA-real-sid")
     ctx.audit("after_start", {})
 
-    new_path = tmp_path / "data" / "calls" / "CA-real-sid.jsonl"
-    old_path = tmp_path / "data" / "calls" / f"{provisional}.jsonl"
+    new_path = tmp_path / "data" / DEFAULT_ORG_ID / "calls" / "CA-real-sid.jsonl"
+    old_path = tmp_path / "data" / DEFAULT_ORG_ID / "calls" / f"{provisional}.jsonl"
     assert ctx.call_id == "CA-real-sid"
     assert new_path.exists()
     assert not old_path.exists()
@@ -49,7 +50,7 @@ def test_mark_stopped_flushes_once(tmp_path):
     ctx.mark_stopped()
     ctx.mark_stopped()
 
-    path = tmp_path / "data" / "calls" / f"{ctx.call_id}.jsonl"
+    path = tmp_path / "data" / DEFAULT_ORG_ID / "calls" / f"{ctx.call_id}.jsonl"
     events = [line for line in path.read_text(encoding="utf-8").splitlines() if "socket_stop" in line]
     assert len(events) == 1
     assert ctx.stopped is True
@@ -78,7 +79,7 @@ def test_transcript_is_recorded_and_audited(tmp_path):
         {"role": "caller", "text": "Hola"},
         {"role": "assistant", "text": "Buenas tardes"},
     ]
-    path = tmp_path / "data" / "calls" / f"{ctx.call_id}.jsonl"
+    path = tmp_path / "data" / DEFAULT_ORG_ID / "calls" / f"{ctx.call_id}.jsonl"
     assert "Hola" in path.read_text(encoding="utf-8")
 
 

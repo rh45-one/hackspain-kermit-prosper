@@ -74,7 +74,7 @@ def client(monkeypatch, tmp_path, flushed):
 
 
 def calls_dir_of(client, tmp_path) -> Path:
-    return Path(server_module.app_settings.data_dir) / "calls"
+    return Path(server_module.app_settings.calls_dir)
 
 
 def start_message(i: int, with_phone: bool = True) -> dict:

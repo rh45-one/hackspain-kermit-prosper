@@ -63,6 +63,16 @@ def test_call_audit_is_isolated_and_partial_lines_are_ignored(config):
     assert calls[1]["diagnostic"] is None
 
 
+def test_calls_recorded_before_organisations_are_still_served(config):
+    """The panel must not lose the calls this clinic made before the change."""
+    legacy = Path(config.legacy_calls_dir)
+    legacy.mkdir(parents=True, exist_ok=True)
+    event = frontdesk.AuditEvent(ts=datetime.now(UTC), event="call_context_created")
+    (legacy / "CA-old.jsonl").write_text(event.model_dump_json())
+    CallContext(data_dir=config.data_dir, call_id="CA-new")
+    assert {call.callId for call in frontdesk.calls()} == {"CA-old", "CA-new"}
+
+
 def test_old_unclosed_logs_are_not_live_calls(config):
     CallContext(data_dir=config.data_dir, call_id="CA-abandoned")
     event = frontdesk.AuditEvent(

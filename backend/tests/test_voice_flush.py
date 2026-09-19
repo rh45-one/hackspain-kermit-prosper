@@ -10,6 +10,7 @@ from typing import ClassVar
 
 import pytest
 
+from agent.orgs import DEFAULT_ORG_ID
 from agent.voice.context import CallContext
 from agent.voice.flush import flush_call
 
@@ -127,7 +128,7 @@ async def test_demo_call_never_constructs_submitter_or_adds_fallback(tmp_path, f
     assert FakeSubmitter.instances == []
     assert ctx.submitted is True
     assert ctx.queued_actions == []
-    audit = (tmp_path / "data" / "calls" / "browser-demo.jsonl").read_text()
+    audit = (tmp_path / "data" / DEFAULT_ORG_ID / "calls" / "browser-demo.jsonl").read_text()
     assert '"event": "flush_skipped"' in audit
     assert '"reason": "demo_call"' in audit
 

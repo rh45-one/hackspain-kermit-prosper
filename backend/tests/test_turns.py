@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent.ops import turns as text_turns
+from agent.orgs import DEFAULT_ORG_ID
 
 
 # ---- doubles -------------------------------------------------------------
@@ -300,8 +301,8 @@ async def test_bench_traces_are_kept_out_of_the_real_call_directory(tmp_path):
     adapter = make_adapter(tmp_path, [FakeResponse(text="Hola.")])
     await adapter.turn("call-7", "Hola.")
 
-    assert (tmp_path / "turns" / "calls" / "call-7.jsonl").exists()
-    assert not (tmp_path / "data" / "calls").exists()
+    assert (tmp_path / "turns" / DEFAULT_ORG_ID / "calls" / "call-7.jsonl").exists()
+    assert not (tmp_path / "data" / DEFAULT_ORG_ID / "calls").exists()
     await adapter.aclose()
 
 

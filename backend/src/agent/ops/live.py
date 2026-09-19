@@ -7,7 +7,7 @@ it decided. Same JSONL on disk, different reader.
 
 Two properties this module owes its callers:
 
-Live. ``ctx.audit`` appends to ``DATA_DIR/calls/<call_id>.jsonl`` as each event
+Live. ``ctx.audit`` appends to ``DATA_DIR/<org_id>/calls/<call_id>.jsonl`` as each event
 happens, so a call in progress is a file that is still growing. Reading it is
 reading the call live; there is no second channel to build.
 
@@ -30,6 +30,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from agent.config import settings
+from agent.orgs import DEFAULT_ORG_ID, InvalidOrgId, normalize_org_id
 
 
 def require_access(request: Request) -> None:
@@ -140,54 +141,41 @@ def _reason_es(reason: str | None) -> str:
 
 
 # ---- catalogue names -----------------------------------------------------
-# Warming is attempted at most once per process, successful or not: a failing
-# warm must not turn a 3-second poll into 3-second outbound retries.
-_WARM_TRIED = False
+# Warming is attempted at most once per process per organisation, successful
+# or not: a failing warm must not turn a 3-second poll into 3-second outbound
+# retries, and one unreachable clinic must not stop another one's names from
+# ever being fetched.
+_WARM_TRIED: set[str] = set()
 
 
-async def _catalogue() -> Any | None:
-    """The process-wide catalogue, warmed once if it is not already.
+async def _catalogue(org_id: str = DEFAULT_ORG_ID) -> Any | None:
+    """This organisation's catalogue, warmed once if it is not already.
 
     Without this the panel says "PR10" and "norte" to a receptionist, which is
     the id of a doctor and the id of a site and means nothing to a person.
-    The catalogue is immutable, so this is one burst of requests for the life
-    of the process — and when this module runs inside `agent.serve`, the
-    server's lifespan has already warmed the same shared cache and nothing is
-    fetched at all.
+    The catalogue is immutable within an organisation, so this is one burst of
+    requests for the life of the process — and when this module runs inside
+    `agent.serve`, the server's lifespan has already warmed the cache of the
+    organisation it serves and nothing is fetched at all.
     """
-    global _WARM_TRIED
     try:
         from agent.brain import deps
     except (ImportError, AttributeError):
         return None
-    cache = deps.try_catalogue_cache()
+    cache = deps.try_catalogue_cache(org_id)
     if cache is None:
         return None
     if cache.warmed:
         return cache
-    if _WARM_TRIED:
+    if org_id in _WARM_TRIED:
         return None
-    _WARM_TRIED = True
-    client: Any | None = None
-    # Everything from here is inside the guard, the client construction
-    # included: `deps.try_clinic_client` calls the constructor outside its own
-    # try, so bad configuration raises out of it and would reach a reader whose
-    # whole job is to answer. A cold catalogue degrades to ids, never to a 500.
-    try:
-        config = settings()
-        if not getattr(config, "prosper_api_key", ""):
-            return None
-        client = deps.try_clinic_client(config)
-        if client is None:
-            return None
-        await deps.warm_shared_catalogue(client)
-    except Exception:  # noqa: BLE001
-        return None
-    finally:
-        close = getattr(client, "close", None) if client is not None else None
-        if close is not None:
-            await close()
-    return cache if cache.warmed else None
+    _WARM_TRIED.add(org_id)
+    # `ensure_catalogue_warm` owns the whole guarded path, the client
+    # construction included: `deps.try_clinic_client` calls the constructor
+    # outside its own try, so bad configuration raises out of it and would
+    # reach a reader whose whole job is to answer. A cold catalogue degrades
+    # to ids, never to a 500.
+    return await deps.ensure_catalogue_warm(settings(), org_id)
 
 
 def _name_of(cache: Any | None, kind: str, ident: str | None) -> str:
@@ -491,19 +479,24 @@ def _read(path: Path) -> dict[str, Any] | None:
     return parsed
 
 
-def _recent(limit: int) -> list[tuple[Path, float]]:
-    """Newest traces first, with their mtime. One scandir pass, no re-stat."""
-    calls_dir = Path(settings().calls_dir)
-    try:
-        entries = [
-            entry
-            for entry in os.scandir(calls_dir)
-            if entry.name.endswith(".jsonl") and entry.is_file()
-        ]
-    except OSError:
-        return []
-    entries.sort(key=lambda e: e.stat().st_mtime_ns, reverse=True)
-    found = [(Path(e.path), e.stat().st_mtime) for e in entries[:limit]]
+def _recent(limit: int, org_id: str = DEFAULT_ORG_ID) -> list[tuple[Path, float]]:
+    """Newest traces first, with their mtime. One scandir pass per directory.
+
+    An organisation has one directory of its own and, for the clinic that
+    predates organisations, a second one holding everything recorded before
+    this layout existed. A call id appearing in both is the same call: the
+    current layout wins and the older copy is dropped.
+    """
+    entries: dict[str, os.DirEntry] = {}
+    for calls_dir in settings().call_trace_dirs(org_id):
+        try:
+            for entry in os.scandir(calls_dir):
+                if entry.name.endswith(".jsonl") and entry.is_file():
+                    entries.setdefault(entry.name, entry)
+        except OSError:
+            continue
+    ordered = sorted(entries.values(), key=lambda e: e.stat().st_mtime_ns, reverse=True)
+    found = [(Path(e.path), e.stat().st_mtime) for e in ordered[:limit]]
     live = {str(p) for p, _ in found}
     for stale in [k for k in _CACHE if k not in live]:
         del _CACHE[stale]
@@ -525,18 +518,32 @@ def _duration(parsed: dict[str, Any]) -> int | None:
 
 
 # ---- routes --------------------------------------------------------------
+def _org_of(raw: str) -> str:
+    """The organisation a request asks for. An unknown shape is a 400, never a path."""
+    try:
+        return normalize_org_id(raw)
+    except InvalidOrgId as exc:
+        raise HTTPException(400, "organización no válida") from exc
+
+
 @router.get("/ops/api/live/calls")
-async def live_calls() -> list[dict[str, Any]]:
+async def live_calls(org: str = DEFAULT_ORG_ID) -> list[dict[str, Any]]:
     """Recent calls, newest first, as a receptionist would skim them.
 
     Calls with no transcript at all are left out: 24 of the 164 traces on disk
     are sockets that opened and never produced a word, and they tell a person
     at the front desk nothing.
+
+    `org` defaults to the one clinic this process serves, so a panel that
+    knows nothing about organisations sees exactly what it always saw. Until
+    there are sessions (PLATFORM.md step 4) it is the whole of the tenancy
+    boundary on this route — it is behind the ops door and nothing more.
     """
+    org_id = _org_of(org)
     now = time.time()
-    cache = await _catalogue()
+    cache = await _catalogue(org_id)
     out: list[dict[str, Any]] = []
-    for path, mtime in _recent(_MAX_CALLS):
+    for path, mtime in _recent(_MAX_CALLS, org_id):
         parsed = _read(path)
         if parsed is None or parsed["transcripts"] == 0:
             continue
@@ -571,16 +578,17 @@ async def live_calls() -> list[dict[str, Any]]:
 
 
 @router.get("/ops/api/live/calls/{call_id}")
-async def live_call(call_id: str) -> dict[str, Any]:
+async def live_call(call_id: str, org: str = DEFAULT_ORG_ID) -> dict[str, Any]:
     """One call: the conversation and the story of the decision, in Spanish."""
     # The id lands in a filesystem path, so it may only ever be a bare name.
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", call_id) or call_id.startswith("."):
         raise HTTPException(400, "identificador de llamada no válido")
-    path = Path(settings().calls_dir) / f"{call_id}.jsonl"
+    org_id = _org_of(org)
+    path = settings().call_trace_path(call_id, org_id)
     parsed = _read(path)
     if parsed is None:
         raise HTTPException(404, "llamada no encontrada")
-    cache = await _catalogue()
+    cache = await _catalogue(org_id)
     now = time.time()
     try:
         mtime = path.stat().st_mtime

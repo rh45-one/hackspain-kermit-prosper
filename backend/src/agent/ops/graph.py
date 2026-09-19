@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from agent.clinic import graph as clinic_graph
+from agent.orgs import DEFAULT_ORG_ID
 
 router = APIRouter(prefix="/ops/api/live")
 
@@ -43,13 +44,13 @@ async def _cache() -> Any | None:
         from agent.brain import deps
         from agent.config import settings
 
-        cache = deps.try_catalogue_cache()
+        cache = deps.try_catalogue_cache(DEFAULT_ORG_ID)
         if cache is None:
             return None
         if not cache.warmed:
             client = deps.try_clinic_client(settings())
             if client is not None:
-                await cache.warm(client)
+                await deps.warm_shared_catalogue(client, DEFAULT_ORG_ID)
         return cache
     except Exception:  # noqa: BLE001 - a cold catalogue draws less, never 500s
         return None

@@ -33,6 +33,7 @@ and is git-ignored. Never commit it.
 | `OPS_HTTP_PORT` | no | Ops console port (default `7861`). |
 | `CALLER_TZ`, `MAX_CALL_MINUTES`, `SUBMIT_WINDOW_SECONDS` | no | Behaviour knobs. |
 | `DATA_DIR` | no | Runtime data root; relative values resolve to `backend/data`. |
+| `ORG_ID` | no | The organisation this process answers for (default `clinica-arenal`). Decides which `DATA_DIR/<org_id>/calls` its traces go to and which catalogue cache it uses. Must be a bare slug: it is a directory name. |
 | `LOG_LEVEL` | no | Loguru level. |
 | `PUBLIC_WS_URL` | for `make check-ws` | The tunneled endpoint, e.g. `wss://<domain>.ngrok-free.app/ws`. |
 
@@ -73,7 +74,7 @@ HTTPS; use the deployed host or ngrok for an actual browser call.
 | `GET /call` | voice server | Browser microphone simulator. |
 | `WS /ws/demo` | voice server | Non-submitting browser call pipeline. |
 | `GET /ops` | ops console | Live call timeline, transcripts, actions. |
-| `GET /ops/api/calls[?]` | ops console | JSON view over `data/calls/*.jsonl`. |
+| `GET /ops/api/calls[?]` | ops console | JSON view over `data/<org_id>/calls/*.jsonl`. |
 | `GET /ops/api/reflow` | ops console | JSON view over the reflow queue. |
 | `POST /turns` | voice server | Text bench adapter. Mounted only with `TURNS_ADAPTER`, loopback or `OPS_TOKEN` only. See the text bench section. |
 
@@ -170,7 +171,7 @@ the calendar window all degrade — silently, which is the worst part.
 |---|---|
 | `TURNS_ADAPTER` | Mounts `POST /turns`. Absent, nothing is mounted: the process answering scored calls never serves test routes. |
 | `TURNS_MODEL` | Defaults to `gemini-3.8-flash`. The scored path's `gemini-3.8-live` is audio-only and has no text API, so the bench cannot run the scored model. |
-| `TURNS_DATA_DIR` | Defaults to `<DATA_DIR>/turns`. Keeps bench traces out of `data/calls/`, where a run would bury the scored traces under 60 fake ones. |
+| `TURNS_DATA_DIR` | Defaults to `<DATA_DIR>/turns`. Keeps bench traces out of `data/<org_id>/calls/`, where a run would bury the scored traces under 60 fake ones. |
 | `OPS_TOKEN` | `/turns` sits behind the ops access check: loopback only, or this token. A reachable `/turns` runs the real ToolBox and submits against the live Prosper API with our key. |
 
 ## Local simulator (no harness)
@@ -209,9 +210,15 @@ reply audio to `/tmp/agent_reply.raw` (8 kHz µ-law).
 
 Runtime artifacts live under `backend/data/`:
 
-- `data/calls/<call_id>.jsonl` — per-call audit trail (transcript, tool calls,
-  actions). Treated as caller PII; git-ignored.
+- `data/<org_id>/calls/<call_id>.jsonl` — per-call audit trail (transcript,
+  tool calls, actions). Treated as caller PII; git-ignored. `org_id` defaults
+  to `clinica-arenal` (`ORG_ID`); two organisations never share a directory.
+- `data/calls/<call_id>.jsonl` — the same thing, written before organisations
+  existed. Nothing writes there any more and the readers still read it, so the
+  190-odd traces of real scored calls on this disk and on the Fly volume stay
+  visible in `/ops`. A second organisation does not see them.
 - `data/reflow/` — ClinicReflow queue shared with the optimizer.
 
 Call data and recordings must not be committed. The root `.gitignore` excludes
-`backend/data/calls/*`, `backend/data/reflow/*` and common audio extensions.
+`backend/data/calls/*`, `backend/data/*/calls/*`, `backend/data/reflow/*` and
+common audio extensions.

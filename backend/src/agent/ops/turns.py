@@ -51,6 +51,7 @@ from pydantic import BaseModel
 
 from agent.brain import prompts
 from agent.brain.tools import ToolBox
+from agent.orgs import normalize_org_id, reset_org, use_org
 from agent.voice.context import CallContext
 from agent.voice.flush import flush_call
 
@@ -237,6 +238,9 @@ class TextAdapter:
     ) -> None:
         self.settings = settings
         self.model = model or os.environ.get(ENV_MODEL) or DEFAULT_MODEL
+        # The bench runs for one organisation at a time, the one this process
+        # is configured for. Its traces are still filed under it.
+        self.org_id = normalize_org_id(getattr(settings, "org_id", None))
         # Bench traces never land among the real ones: /ops reads the same
         # directory and a run would bury 60 scored calls under 63 fake ones.
         self.data_dir = data_dir or os.environ.get(ENV_DATA_DIR) or f"{settings.data_dir}/turns"
@@ -271,7 +275,9 @@ class TextAdapter:
             if call is not None:
                 call.last_seen = time.monotonic()
                 return call
-            ctx = CallContext(data_dir=self.data_dir, call_id=call_id)
+            ctx = CallContext(
+                org_id=self.org_id, data_dir=self.data_dir, call_id=call_id
+            )
             # The route-owned boundary flush_call already honours. Setting it
             # here is what keeps a bench run off the real platform.
             ctx.submit_actions = self.submit_actions
@@ -279,7 +285,13 @@ class TextAdapter:
                 "text_adapter_call_open",
                 {"model": self.model, "submit_actions": self.submit_actions},
             )
-            toolbox = ToolBox(ctx, self.settings)
+            # Bound around the construction only: the ToolBox resolves its
+            # catalogue cache there, and the organisation must be the call's.
+            org_token = use_org(ctx.org_id)
+            try:
+                toolbox = ToolBox(ctx, self.settings)
+            finally:
+                reset_org(org_token)
             # Same background reading of every finalised caller turn the
             # voice path does; it abstains by itself when Jev is absent.
             toolbox.watch_caller_turns()
