@@ -1302,7 +1302,37 @@ class ToolBox:
             return
         self.ctx.queued_actions.append({"route": "no-action", "reason": reason})
         self.ctx.audit("action_queued", {"route": "no-action", "reason": reason})
+        self._raise_it_with_somebody(reason)
         await params.result_callback({"noted": True, "reason": reason})
+
+    def _raise_it_with_somebody(self, reason: str) -> None:
+        """Put this ending in front of a person.
+
+        A call that ends without an appointment is not finished: somebody at
+        the clinic has to know. The graph already works out who — it is
+        computed from the same eighteen reasons the clinic itself defines —
+        and until now nothing ever asked it, so `who_to_call` was exported
+        and never called. A diagram of who ought to be told, telling nobody.
+
+        This writes the intent, and only the intent. Actually dialling a
+        person is a different product with consent and a phone bill attached;
+        what a panel needs first is the queue of people who have not been
+        told yet.
+        """
+        from agent.clinic import graph
+
+        route = graph.who_to_call(reason)
+        if route is None:
+            return
+        self.ctx.audit(
+            "needs_a_human",
+            {
+                "reason": route.reason,
+                "who": route.target,
+                "urgency": route.urgency,
+                "because": route.detail,
+            },
+        )
 
     async def escalate_call(self, params: FunctionCallParams, reason: str = "medical_emergency") -> None:
         """Hand the call to a human. Book nothing.
@@ -1331,6 +1361,7 @@ class ToolBox:
             return
         self.ctx.queued_actions.append({"route": "escalate", "reason": reason})
         self.ctx.audit("action_queued", {"route": "escalate", "reason": reason})
+        self._raise_it_with_somebody(reason)
         await params.result_callback({"escalated": True})
 
     # ---- Jev advisory (Gemini path only) ----------------------------------

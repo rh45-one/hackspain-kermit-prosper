@@ -1372,3 +1372,34 @@ async def test_a_named_plan_beats_everything(box):
 
 async def test_a_slot_that_says_nothing_changes_nothing(box):
     assert _plan_case(box, "dkv", []) == "dkv"
+
+
+async def test_a_call_that_ends_without_an_appointment_reaches_a_person(box, ctx):
+    """The graph knew who to tell and nobody ever asked it."""
+    await box.finish_without_booking(FakeParams(), reason="no_availability")
+
+    raised = audited(ctx, "needs_a_human")[-1]
+    assert raised["reason"] == "no_availability"
+    assert raised["who"] == "manager"
+    assert raised["urgency"] == "today"
+    assert raised["because"]
+
+
+async def test_an_emergency_leaves_the_building(box, ctx):
+    await box.escalate_call(FakeParams(), reason="medical_emergency")
+
+    raised = audited(ctx, "needs_a_human")[-1]
+    assert raised["who"] == "emergency"
+    assert raised["urgency"] == "now"
+    assert "112" in raised["because"]
+
+
+async def test_a_booking_bothers_nobody(box, ctx):
+    """Only endings without an appointment produce work for a human."""
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
+    token = params.result.get("earliest_token")
+    if token:
+        await box.book_appointment(FakeParams(), slot_token=token)
+
+    assert not audited(ctx, "needs_a_human")
