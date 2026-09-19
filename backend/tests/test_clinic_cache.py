@@ -126,3 +126,24 @@ async def test_nearest_locations_orders_by_distance(cache: CatalogueCache):
     assert ids[-1] == "norte"
     distances = [d for _, d in ordered]
     assert distances == sorted(distances)
+
+
+def test_a_generic_second_word_does_not_hide_the_plan(cache):
+    """Three of the ten plans end in a word two of them share."""
+    assert cache.plan_by_name("Sanitas Salud").id == "sanitas"
+    assert cache.plan_by_name("ASISA").id == "asisa"
+
+
+def test_a_shared_word_identifies_no_plan_on_its_own(cache):
+    assert cache.plan_by_name("salud") is None
+    assert cache.plan_by_name("seguros") is None
+
+
+def test_particular_is_what_a_caller_calls_self_pay(cache):
+    """The catalogue says 'Privado'; nobody on a telephone does."""
+    for spoken in ("particular", "privada", "Privado"):
+        assert cache.plan_by_name(spoken).id == "privado"
+
+
+def test_an_invented_plan_still_resolves_to_nothing(cache):
+    assert cache.plan_by_name("Sanitos Premium") is None

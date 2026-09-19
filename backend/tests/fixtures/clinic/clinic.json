@@ -6,7 +6,9 @@
     "ends": "2026-10-16",
     "max_span_days": 14,
     "slot_minutes": 15,
-    "closure_days": ["2026-10-12"],
+    "closure_days": [
+      "2026-10-12"
+    ],
     "appointment_count": 120
   },
   "restrictions": [
@@ -22,19 +24,41 @@
       "name": "Dra. Ana Sáez",
       "specialty_id": "general",
       "specialty_name": "General practice",
-      "languages": ["español", "catalán"],
-      "appointment_type_names": ["First visit", "Review"],
-      "location_names": ["Centro", "Norte"],
+      "languages": [
+        "español",
+        "catalán"
+      ],
+      "appointment_type_names": [
+        "First visit",
+        "Review"
+      ],
+      "location_names": [
+        "Centro",
+        "Norte"
+      ],
       "schedules": [
         {
           "location_id": "centro",
           "location_name": "Centro",
-          "days": [{"weekday": "monday", "intervals": ["09:00-14:00"]}]
+          "days": [
+            {
+              "weekday": "monday",
+              "intervals": [
+                "09:00-14:00"
+              ]
+            }
+          ]
         }
       ],
       "accepted_insurers": [
-        {"id": "sanitas", "name": "Sanitas"},
-        {"id": "asisa", "name": "ASISA"}
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        },
+        {
+          "id": "asisa",
+          "name": "ASISA"
+        }
       ],
       "refused_insurers": [],
       "leave": null
@@ -44,26 +68,61 @@
       "name": "Dra. Marta Iglesias",
       "specialty_id": "dermatology",
       "specialty_name": "Dermatology",
-      "languages": ["español"],
-      "appointment_type_names": ["Dermatology review"],
-      "location_names": ["Centro"],
+      "languages": [
+        "español"
+      ],
+      "appointment_type_names": [
+        "Dermatology review"
+      ],
+      "location_names": [
+        "Centro"
+      ],
       "schedules": [],
-      "accepted_insurers": [{"id": "sanitas", "name": "Sanitas"}],
-      "refused_insurers": [{"id": "dkv", "name": "DKV"}],
-      "leave": {"start": "2026-09-14", "end": "2026-09-30", "reason": "sick leave"}
+      "accepted_insurers": [
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        }
+      ],
+      "refused_insurers": [
+        {
+          "id": "dkv",
+          "name": "DKV"
+        }
+      ],
+      "leave": {
+        "start": "2026-09-14",
+        "end": "2026-09-30",
+        "reason": "sick leave"
+      }
     },
     {
       "id": "PR03",
       "name": "D. Álvaro Cid",
       "specialty_id": "physiotherapy",
       "specialty_name": "Physiotherapy",
-      "languages": ["español", "catalán", "galego"],
-      "appointment_type_names": ["First visit", "Review"],
-      "location_names": ["Sur"],
+      "languages": [
+        "español",
+        "catalán",
+        "galego"
+      ],
+      "appointment_type_names": [
+        "First visit",
+        "Review"
+      ],
+      "location_names": [
+        "Sur"
+      ],
       "schedules": [],
       "accepted_insurers": [
-        {"id": "sanitas", "name": "Sanitas"},
-        {"id": "asisa", "name": "ASISA"}
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        },
+        {
+          "id": "asisa",
+          "name": "ASISA"
+        }
       ],
       "refused_insurers": [],
       "leave": null
@@ -76,8 +135,15 @@
       "min_age_months": 0,
       "max_age_months": null,
       "referral_required": false,
-      "provider_names": ["Dra. Ana Sáez"],
-      "covered_by": [{"id": "sanitas", "name": "Sanitas"}],
+      "provider_names": [
+        "Dra. Ana Sáez"
+      ],
+      "covered_by": [
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        }
+      ],
       "not_covered_by": []
     },
     {
@@ -86,9 +152,21 @@
       "min_age_months": 0,
       "max_age_months": null,
       "referral_required": true,
-      "provider_names": ["Dra. Marta Iglesias"],
-      "covered_by": [{"id": "sanitas", "name": "Sanitas"}],
-      "not_covered_by": [{"id": "dkv", "name": "DKV"}]
+      "provider_names": [
+        "Dra. Marta Iglesias"
+      ],
+      "covered_by": [
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        }
+      ],
+      "not_covered_by": [
+        {
+          "id": "dkv",
+          "name": "DKV"
+        }
+      ]
     },
     {
       "id": "physiotherapy",
@@ -96,8 +174,15 @@
       "min_age_months": 0,
       "max_age_months": null,
       "referral_required": false,
-      "provider_names": ["D. Álvaro Cid"],
-      "covered_by": [{"id": "sanitas", "name": "Sanitas"}],
+      "provider_names": [
+        "D. Álvaro Cid"
+      ],
+      "covered_by": [
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        }
+      ],
       "not_covered_by": []
     }
   ],
@@ -128,7 +213,9 @@
       "duration_minutes": 15,
       "new_patient_requirement": "visited before",
       "guidance": "Dermatology follow-up.",
-      "provider_names": ["Dra. Marta Iglesias"],
+      "provider_names": [
+        "Dra. Marta Iglesias"
+      ],
       "specialty_id": "dermatology",
       "specialty_name": "Dermatology"
     }
@@ -140,31 +227,60 @@
       "address": "Calle Mayor 1, Madrid",
       "latitude": 40.4168,
       "longitude": -3.7038,
-      "hours": [{"weekday": "saturday", "intervals": ["09:00-13:00"]}],
-      "provider_names": ["Dra. Ana Sáez", "Dra. Marta Iglesias"],
-      "covered_by": [{"id": "sanitas", "name": "Sanitas"}],
+      "hours": [
+        {
+          "weekday": "saturday",
+          "intervals": [
+            "09:00-13:00"
+          ]
+        }
+      ],
+      "provider_names": [
+        "Dra. Ana Sáez",
+        "Dra. Marta Iglesias"
+      ],
+      "covered_by": [
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        }
+      ],
       "not_covered_by": []
     },
     {
       "id": "norte",
       "name": "Norte",
       "address": "Calle del Norte 10, Madrid",
-      "latitude": 40.4900,
-      "longitude": -3.6800,
+      "latitude": 40.49,
+      "longitude": -3.68,
       "hours": [],
-      "provider_names": ["Dra. Ana Sáez"],
-      "covered_by": [{"id": "sanitas", "name": "Sanitas"}],
+      "provider_names": [
+        "Dra. Ana Sáez"
+      ],
+      "covered_by": [
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        }
+      ],
       "not_covered_by": []
     },
     {
       "id": "sur",
       "name": "Sur",
       "address": "Camino del Sur 5, Getafe",
-      "latitude": 40.3080,
-      "longitude": -3.7320,
+      "latitude": 40.308,
+      "longitude": -3.732,
       "hours": [],
-      "provider_names": ["D. Álvaro Cid"],
-      "covered_by": [{"id": "sanitas", "name": "Sanitas"}],
+      "provider_names": [
+        "D. Álvaro Cid"
+      ],
+      "covered_by": [
+        {
+          "id": "sanitas",
+          "name": "Sanitas"
+        }
+      ],
       "not_covered_by": []
     }
   ],
@@ -172,35 +288,97 @@
     {
       "id": "sanitas",
       "name": "Sanitas",
-      "covered_specialty_names": ["General practice", "Dermatology", "Physiotherapy"],
+      "covered_specialty_names": [
+        "General practice",
+        "Dermatology",
+        "Physiotherapy"
+      ],
       "uncovered_specialty_names": [],
-      "covered_location_names": ["Centro", "Norte", "Sur"],
+      "covered_location_names": [
+        "Centro",
+        "Norte",
+        "Sur"
+      ],
       "uncovered_location_names": [],
-      "accepted_by": ["Dra. Ana Sáez", "Dra. Marta Iglesias", "D. Álvaro Cid"],
+      "accepted_by": [
+        "Dra. Ana Sáez",
+        "Dra. Marta Iglesias",
+        "D. Álvaro Cid"
+      ],
       "refused_by": [],
       "holders": 2
     },
     {
       "id": "asisa",
       "name": "ASISA",
-      "covered_specialty_names": ["General practice"],
-      "uncovered_specialty_names": ["Dermatology"],
-      "covered_location_names": ["Centro", "Norte"],
-      "uncovered_location_names": ["Sur"],
-      "accepted_by": ["Dra. Ana Sáez", "D. Álvaro Cid"],
-      "refused_by": ["Dra. Marta Iglesias"],
+      "covered_specialty_names": [
+        "General practice"
+      ],
+      "uncovered_specialty_names": [
+        "Dermatology"
+      ],
+      "covered_location_names": [
+        "Centro",
+        "Norte"
+      ],
+      "uncovered_location_names": [
+        "Sur"
+      ],
+      "accepted_by": [
+        "Dra. Ana Sáez",
+        "D. Álvaro Cid"
+      ],
+      "refused_by": [
+        "Dra. Marta Iglesias"
+      ],
       "holders": 1
     },
     {
       "id": "dkv",
       "name": "DKV",
-      "covered_specialty_names": ["General practice"],
-      "uncovered_specialty_names": ["Dermatology"],
-      "covered_location_names": ["Centro", "Norte", "Sur"],
+      "covered_specialty_names": [
+        "General practice"
+      ],
+      "uncovered_specialty_names": [
+        "Dermatology"
+      ],
+      "covered_location_names": [
+        "Centro",
+        "Norte",
+        "Sur"
+      ],
       "uncovered_location_names": [],
-      "accepted_by": ["Dra. Ana Sáez", "D. Álvaro Cid"],
-      "refused_by": ["Dra. Marta Iglesias"],
+      "accepted_by": [
+        "Dra. Ana Sáez",
+        "D. Álvaro Cid"
+      ],
+      "refused_by": [
+        "Dra. Marta Iglesias"
+      ],
       "holders": 1
+    },
+    {
+      "id": "privado",
+      "name": "Privado",
+      "covered_specialty_names": [
+        "General practice",
+        "Dermatology",
+        "Physiotherapy"
+      ],
+      "uncovered_specialty_names": [],
+      "covered_location_names": [
+        "Centro",
+        "Norte",
+        "Sur"
+      ],
+      "uncovered_location_names": [],
+      "accepted_by": [
+        "Dra. Ana Sáez",
+        "Dra. Marta Iglesias",
+        "D. Álvaro Cid"
+      ],
+      "refused_by": [],
+      "holders": 2
     }
   ]
 }

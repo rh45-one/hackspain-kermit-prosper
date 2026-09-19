@@ -111,6 +111,19 @@ def _fold(text: str) -> str:
     return stripped.casefold().strip()
 
 
+# Words that appear in more than one plan name and so identify none of them.
+_GENERIC_PLAN_WORDS = frozenset({"salud", "seguros", "seguro", "sanitaria", "sanitario"})
+
+# What a Spanish caller says when they have no insurance at all. The catalogue
+# calls it "Privado"; nobody on a telephone does.
+_PLAN_SYNONYMS = {
+    "particular": "privado",
+    "particulares": "privado",
+    "privada": "privado",
+    "privado": "privado",
+}
+
+
 def _index_names(target: dict[str, Any], name: str, item: Any) -> None:
     """Index a record under its folded full name and each folded token.
 
@@ -209,6 +222,10 @@ class CatalogueCache:
         for plan in catalogue.plans:
             plans_by_id[plan.id] = plan
             _index_names(plans_by_name, plan.name, plan)
+        # "Salud" belongs to two plans and identifies neither; whichever came
+        # first in the catalogue would otherwise answer to it on its own.
+        for word in _GENERIC_PLAN_WORDS:
+            plans_by_name.pop(word, None)
         locations_by_id: dict[str, ClinicLocation] = {}
         locations_by_name: dict[str, ClinicLocation] = {}
         for location in catalogue.locations:
@@ -287,7 +304,26 @@ class CatalogueCache:
         return self.locations_by_id.get(location_id)
 
     def plan_by_name(self, name: str) -> ClinicPlan | None:
-        return self._lookup(self.plans_by_name, name)
+        """Resolve a plan from however the caller says it.
+
+        Plans differ from providers here. Three of the ten carry a generic
+        second word — Mapfre *Salud*, Caser *Salud*, Nueva Mutua *Sanitaria* —
+        so "Sanitas Salud" resolves to two different records and the shared
+        lookup rightly refuses it. There is no near-miss pair among ten plan
+        names the way there is among surnames, so once the generic words are
+        dropped a single remaining token is safe to trust.
+        """
+        exact = self._lookup(self.plans_by_name, name)
+        if exact is not None:
+            return exact
+        folded = _fold(name)
+        for word, plan_id in _PLAN_SYNONYMS.items():
+            if word in folded.split():
+                return self.plans_by_id.get(plan_id)
+        distinctive = " ".join(t for t in folded.split() if t not in _GENERIC_PLAN_WORDS)
+        if distinctive and distinctive != folded:
+            return self._lookup(self.plans_by_name, distinctive)
+        return None
 
     def plan_by_id(self, plan_id: str) -> ClinicPlan | None:
         return self.plans_by_id.get(plan_id)
