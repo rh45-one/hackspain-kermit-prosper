@@ -342,14 +342,15 @@ def test_factory_hands_the_turns_to_local_vad(monkeypatch):
     assert vad.disabled is True
 
 
-def test_factory_pins_the_spoken_language_to_spanish(monkeypatch):
-    """Regression: a Spanish caller answered in English after one turn.
+def test_factory_lets_the_model_pick_the_language(monkeypatch):
+    """A pinned language code is also a pinned accent.
 
-    pipecat leaves ``speech_config.language_code`` at ``en-US``. On a live
-    call the agent greeted in Spanish and then switched to English for the
-    rest of the conversation, mishearing the caller's constraints with it.
-    The clinic is in Madrid, so the wire default is Spanish; the system
-    prompt still governs following a caller into another language.
+    pipecat's own default is en-US, which pulled a Spanish call into English
+    a turn after the greeting, so this is cleared explicitly rather than left
+    alone. Pinning es-ES instead fixed that and broke the other direction:
+    the agent answered an English caller in English with a Spanish accent,
+    because the voice was still configured for Spanish. Unset, the model
+    takes both language and accent from what it hears.
     """
     import agent.voice.gemini_live as gl
 
@@ -359,13 +360,13 @@ def test_factory_pins_the_spoken_language_to_spanish(monkeypatch):
     service = create_gemini_live_service(
         _SettingsStub(), _ToolboxStub(), service_cls=FakeGeminiService
     )
-    assert service.kwargs["settings"].language == "es-ES"
+    assert service.kwargs["settings"].language is None
 
-    # Overridable per deployment, for the multilingual problems.
-    configured = _SettingsStub()
-    configured.gemini_language = "ca-ES"
+    # Still pinnable per deployment, for a line that must stay in one language.
+    pinned = _SettingsStub()
+    pinned.gemini_language = "ca-ES"
     service = create_gemini_live_service(
-        configured, _ToolboxStub(), service_cls=FakeGeminiService
+        pinned, _ToolboxStub(), service_cls=FakeGeminiService
     )
     assert service.kwargs["settings"].language == "ca-ES"
 

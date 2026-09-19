@@ -98,19 +98,23 @@ def phone_hint_greeting(ctx: Any) -> str:
     # talking around the third second whether or not we have finished, so a
     # long greeting buys nothing and collides with their opening words — and
     # it spends the call's ~36 s budget before anything useful happens.
-    opening = "Answer with one short sentence: name the clinic, good morning, and ask how you can help."
+    opening = (
+        "Answer with one short sentence: name the clinic, good morning, and ask "
+        "how you can help. Nothing else — let them say what they want first."
+    )
     if given_name:
         return (
             f"The phone is ringing. {opening} Caller id says this line belongs to "
-            f"{given_name}; you may use that given name and nothing else. It is a "
-            f"hint, never identification, so confirm it with ONE detail — ask for "
-            f"their date of birth and nothing more. Do not ask them to say their "
-            f"name: you already have it, saying a full name over a phone is slow "
-            f"and easily misheard, and one matching detail is all the clinic needs "
-            f"before opening a chart. Reveal no record detail until lookup_patient "
-            f"and confirm_patient have both succeeded. The person on the line may "
-            f"not be {given_name}; if their date of birth does not match, drop the "
-            f"hint silently and ask for their full name as usual."
+            f"{given_name}, so you may use that given name and nothing else from "
+            f"the record. It is a hint, never proof: before you act on anyone's "
+            f"chart, confirm it with their date of birth alone — you already have "
+            f"the name, and a full name over a telephone is slow and easily "
+            f"misheard. If the date does not match, drop the hint without comment "
+            f"and ask for the full name instead. Reveal nothing from any record "
+            f"until lookup_patient has found them and confirm_patient has "
+            f"succeeded. The person on the line may not be {given_name}, and may "
+            f"be calling about somebody else — then it is that other person you "
+            f"identify and book for, not the caller."
         )
     return (
         f"The phone is ringing. {opening} If a chart hint was provided, greet them "

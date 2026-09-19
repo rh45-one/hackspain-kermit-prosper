@@ -49,11 +49,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_live_model: str = "gemini-3.8-live"
     gemini_voice_id: str = ""
-    # Gemini Live speech_config.language_code. pipecat defaults it to en-US,
-    # which pulls a Spanish call into English mid-conversation; the clinic is
-    # in Madrid, so the wire default is Spanish. The system prompt still tells
-    # the model to follow a caller who speaks another language.
-    gemini_language: str = "es-ES"
+    # Gemini Live speech_config.language_code. Empty means "let the model
+    # choose", which is the default: a pinned code is also an accent, and
+    # pinning es-ES had the agent answer English callers in English with a
+    # Spanish accent. Set it only to force one language.
+    gemini_language: str = ""
     # RNNoise on the inbound wire. Measured at 2.48 ms per 20 ms frame, which
     # one call absorbs easily and ten do not: ten concurrent calls would ask
     # for 1240 ms of CPU per second of audio on a single event loop, and a

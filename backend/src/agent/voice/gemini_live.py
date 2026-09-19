@@ -237,15 +237,20 @@ def _gemini_voice_id(settings: Any) -> str:
     return str(getattr(settings, "gemini_voice_id", "") or "Charon")
 
 
-def _gemini_language(settings: Any) -> str:
-    """Resolve the Gemini speech language code, defaulting to Spanish.
+def _gemini_language(settings: Any) -> str | None:
+    """The spoken language code, or None to let the model choose.
 
-    pipecat leaves ``speech_config.language_code`` at ``en-US``; observed on a
-    real call, that drags a Spanish conversation into English one turn after
-    the greeting. The clinic is in Madrid, so the wire default is ``es-ES``
-    and the system prompt still governs switching to a caller's own language.
+    None is the default, and it is the point: a pinned code is an accent.
+    With ``es-ES`` pinned the agent answered an English caller in English
+    but with a Spanish accent, because the voice was still configured for
+    Spanish. Unset, the model picks the language AND the accent from what it
+    hears, which is what a caller switching language actually needs.
+
+    pipecat's own default is ``en-US``, which drags a Spanish call into
+    English, so this is never simply left alone — it is explicitly cleared.
+    Set GEMINI_LANGUAGE to pin one anyway.
     """
-    return str(getattr(settings, "gemini_language", "") or "es-ES")
+    return str(getattr(settings, "gemini_language", "") or "") or None
 
 
 def create_gemini_live_service(
@@ -325,6 +330,8 @@ def create_gemini_live_service(
             model=GEMINI_LIVE_MODEL,
             modalities=audio_modality,
             voice=_gemini_voice_id(settings),
+            # None clears pipecat's en-US default and leaves the choice to
+            # the model; a value pins both language and accent.
             language=_gemini_language(settings),
             vad=vad_params,
         ),
@@ -335,7 +342,7 @@ def create_gemini_live_service(
         "Gemini Live service created: model={} language={} server_vad={} "
         "(per-socket instance)",
         GEMINI_LIVE_MODEL,
-        _gemini_language(settings),
+        _gemini_language(settings) or "elegido por el modelo",
         "off (local VAD drives turns)" if vad_params is not None and vad_params.disabled else "on",
     )
     return service
