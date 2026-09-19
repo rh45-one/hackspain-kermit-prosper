@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prosper · consola de developer</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <span class="dot"></span>
+        <strong>Prosper</strong><span class="muted">consola de developer</span>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="bench" class="on">Benchmarks</button>
+        <button data-tab="metrics">Métricas</button>
+        <button data-tab="compare">Comparar</button>
+        <button data-tab="chat">Probar el agente</button>
+      </nav>
+      <div class="runbar">
+        <label class="muted" for="run">corrida</label>
+        <select id="run"></select>
+        <button id="reload" title="recargar la lista de corridas">↻</button>
+        <a id="report" class="link" target="_blank" rel="noreferrer">report.html</a>
+      </div>
+    </header>
+
+    <main>
+      <p id="error" class="error" hidden></p>
+
+      <section id="tab-bench" class="panel">
+        <h2>Resumen por candidato</h2>
+        <p class="hint">
+          Cada cifra trae su numerador y denominador; <code>n/d</code> significa que el
+          dato no existe, nunca cero.
+        </p>
+        <div id="bench-cards" class="cards"></div>
+        <h2>Matriz por problema</h2>
+        <div id="matrix" class="tablewrap"></div>
+      </section>
+
+      <section id="tab-metrics" class="panel" hidden>
+        <h2>Métricas de la corrida</h2>
+        <div id="metrics" class="tablewrap"></div>
+        <h2>Errores</h2>
+        <pre id="metrics-errors" class="log"></pre>
+      </section>
+
+      <section id="tab-compare" class="panel" hidden>
+        <h2>Alternativas en la misma corrida</h2>
+        <p class="hint">Filas = (escenario, repetición). <span class="star">✱</span> marca desacuerdo.</p>
+        <div id="side" class="tablewrap"></div>
+        <h2>Dos corridas</h2>
+        <div class="row">
+          <select id="diff-a"></select>
+          <select id="diff-b"></select>
+          <button id="diff-run">Comparar</button>
+        </div>
+        <div id="diff" class="cards"></div>
+      </section>
+
+      <section id="tab-chat" class="panel" hidden>
+        <h2>Probar el agente</h2>
+        <p class="hint">
+          Abre una llamada real contra el WebSocket del agente y la clínica local. El
+          texto se sintetiza aquí, el audio del agente se guarda y —si hay STT— se
+          transcribe. Al cerrar, muestra submissions y diagnóstico.
+        </p>
+        <div class="grid">
+          <label>WebSocket del agente<input id="ws" value="ws://127.0.0.1:7862/ws" /></label>
+          <label>Clínica local<input id="clinic" value="http://127.0.0.1:18090" /></label>
+          <label>TTS<select id="tts"><option>espeak-ng</option><option>pico2wave</option></select></label>
+          <label>STT<select id="stt">
+            <option value="">auto</option><option value="none">none (solo audio)</option>
+            <option value="deepgram">deepgram</option><option value="openai-compat">openai-compat</option>
+          </select></label>
+          <label>Escenario (opcional)<input id="scenario" placeholder="evaluator/scenarios/simple_booking/sb-001.yaml" /></label>
+          <label>Auditoría del agente (opcional)<input id="audit" placeholder="/ruta/al/DATA_DIR" /></label>
+        </div>
+        <div class="row">
+          <button id="chat-open" class="primary">Abrir llamada</button>
+          <button id="chat-close" disabled>Cerrar y evaluar</button>
+          <span id="chat-state" class="muted">sin sesión</span>
+        </div>
+        <div id="chat-log" class="chatlog"></div>
+        <form id="chat-form" class="row" hidden>
+          <input id="chat-text" placeholder="Escribí lo que diría el caller y Enter" autocomplete="off" />
+          <button class="primary">Decir</button>
+        </form>
+        <div id="chat-result"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

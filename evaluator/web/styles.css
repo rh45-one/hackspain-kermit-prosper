@@ -1,0 +1,129 @@
+/* Developer console: dark, dense, built to be read at a glance while a run is
+   happening. No framework, no CDN: it has to work on venue wifi. */
+
+:root {
+  --bg: #14161a;
+  --panel: #1b1e24;
+  --line: #2a2f38;
+  --ink: #e6e9ef;
+  --muted: #8d95a5;
+  --accent: #7cc4ff;
+  --good: #6ee7a8;
+  --warn: #ffd479;
+  --bad: #ff8a8a;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+code, pre, .log { font-family: var(--mono); }
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 20px;
+  background: linear-gradient(180deg, #171a1f, #14161a);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand strong { letter-spacing: 0.02em; }
+.dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+}
+.muted { color: var(--muted); }
+.brand .muted { font-size: 12px; }
+
+.tabs { display: flex; gap: 4px; }
+.tabs button, .row button, .runbar button, .runbar a.link {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.tabs button.on { background: #24303d; border-color: #35506b; color: #fff; }
+.tabs button:hover, .row button:hover { border-color: #3d4a5c; }
+
+.runbar { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+select, input {
+  background: #101318;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  min-width: 0;
+}
+
+main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 26px 0 10px; }
+h3 { font-size: 14px; margin: 0 0 6px; }
+h4 { font-size: 12px; margin: 0 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+.error { background: #3a1d1d; border: 1px solid #6b2b2b; color: #ffd7d7; padding: 10px 12px; border-radius: 8px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.card p { margin: 4px 0; }
+.big { font-size: 22px; font-weight: 600; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { background: #1f242c; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+tbody tr:hover { background: #1c2027; }
+
+.good { color: var(--good); }
+.warn { color: var(--warn); }
+.bad { color: var(--bad); }
+.star { color: var(--warn); }
+
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+button.primary { background: #24435f; border-color: #375f85; color: #fff; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+
+.chatlog {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #101318;
+  padding: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  margin: 10px 0;
+}
+.line { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-bottom: 1px dashed #23283366; }
+.line .who { width: 58px; text-transform: uppercase; font-size: 11px; color: var(--muted); }
+.line.caller .what { color: #cfe6ff; }
+.line.agent .what { color: #d8ffe9; }
+.line audio { height: 28px; }
+.log {
+  background: #101318;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  overflow-x: auto;
+  max-height: 260px;
+  font-size: 12.5px;
+  color: #cfd6e4;
+}
