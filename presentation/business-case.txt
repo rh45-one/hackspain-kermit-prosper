@@ -1,0 +1,55 @@
+Para captar la atención de un Venture Capital (VC), la narrativa debe dar un giro de 180 grados: a los inversores no les importa si usas Next.js o Python; les importa el **Tamaño del Mercado (TAM)**, el **Retorno de Inversión (ROI)** para los clientes y el **Foso Defensivo (Moat)** de la tecnología.
+
+Aquí tienes la propuesta de negocio estructurada para **Pronto**, utilizando estimaciones y métricas basadas en estándares reales de la industria sanitaria y de call centers.
+
+### Propuesta de Negocio: Pronto (AI Healthcare Operations)
+
+#### 1. El Problema: La fuga de capital en la gestión clínica
+
+Las clínicas y hospitales se enfrentan a un colapso administrativo que destruye su rentabilidad y empeora la experiencia del paciente:
+
+* **Costes operativos insostenibles:** El coste medio de una llamada gestionada por un humano en un centro médico ronda los **4€ - 8€** (incluyendo salarios, infraestructura y tiempos de inactividad).
+* **Pérdida de ingresos por ausencias (Empty Slots):** Cuando un médico causa baja imprevista, la reprogramación manual es lenta. Un hueco vacío en la agenda supone una pérdida media de **100€ a 200€**. Si un médico (con 25 pacientes al día) se ausenta y no se reasignan las citas, la clínica pierde hasta **5.000€ en un solo día**.
+* **Tasa de abandono:** Durante los picos de llamadas (8:00 AM - 10:00 AM), las esperas superan los 5-10 minutos, provocando un abandono de hasta el **15% de los pacientes**, que terminan acudiendo a la competencia.
+
+#### 2. La Solución: Pronto
+
+Pronto no es un simple bot; es un **agente de operaciones clínicas automatizado** diseñado para la máxima seguridad médica y eficiencia administrativa.
+
+* **Inbound Resolutivo (Zero Wait Time):** Recepción simultánea e infinita de llamadas. Citas agendadas en menos de 2 minutos, con un cumplimiento estricto de las reglas de negocio (ej. validación de aseguradoras como DKV) y cero colisiones en la agenda (0.0% constraint violations).
+* **Outbound Recovery (El Salvavidas de Ingresos):** Un sistema proactivo que, ante la baja de un médico, llama automáticamente a los pacientes afectados para reprogramarlos en huecos libres de otros doctores, salvando la facturación del día.
+
+#### 3. Impacto Financiero y ROI (El Caso de Uso para el VC)
+
+Para vender Pronto a una red de clínicas, este es el cálculo de retorno que debes mostrar en el PowerPoint:
+
+**Escenario base: Clínica mediana (2.000 llamadas/mes, 1 baja médica/mes)**
+
+* **Ahorro Directo (Inbound):**
+* Coste actual (Humano): 2.000 llamadas x 5€ = 10.000€/mes.
+* Coste Pronto (IA): 2.000 llamadas x 0,50€ = 1.000€/mes.
+* *Ahorro mensual:* **+9.000€ (Reducción del 90% en costes de Level 1 Support).**
+
+
+* **Recuperación de Ingresos (Outbound):**
+* 1 médico ausente = 25 citas perdidas.
+* Tasa de éxito de reprogramación de Pronto: 70% (17 pacientes salvados).
+* *Ingresos recuperados:* 17 pacientes x 150€ (ticket medio) = **+2.550€ salvados por incidencia.**
+
+
+
+**El mensaje para el VC:** Pronto se paga solo en su primera semana de uso.
+
+#### 4. Foso Defensivo (Por qué Pronto y no una API genérica de OpenAI)
+
+Los inversores preguntarán: *"¿Por qué no puede un hospital usar ChatGPT?"* Aquí es donde brilla vuestro trabajo:
+
+* **Clinical Safety & Compliance (Triage de Manchester):** Pronto no diagnostica, enruta. Si detecta una emergencia (Nivel I o II), desvía instantáneamente al 112. Un LLM genérico tiene riesgo de alucinación médica; Pronto opera sobre raíles clínicos estrictos.
+* **Executive Dashboard B2B:** La administración del hospital no quiere ver código, quiere ver métricas. Nuestro panel ofrece auditoría en tiempo real, trazabilidad de protección de datos (PII) e historial de "Outbound Recovery", dando a la gerencia control total y mitigando riesgos legales.
+
+#### 5. Modelo de Negocio (Go-To-Market & Monetización)
+
+Pronto opera bajo un modelo **B2B SaaS + Usage-Based Pricing**:
+
+* **SaaS Fee Mensual (Licencia de Plataforma):** 299€ - 499€/mes por clínica para acceder al "Centro de Mando" (el frontend que tú has construido), gestión del directorio médico y analíticas.
+* **Pay-per-Resolution (Uso):** 0,50€ por llamada Inbound gestionada con éxito (cita agendada/resuelta) y 2,00€ por cada paciente reprogramado con éxito en campañas Outbound (cobramos una prima porque estamos salvando ingresos directos).
