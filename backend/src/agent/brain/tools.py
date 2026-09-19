@@ -1381,7 +1381,8 @@ class ToolBox:
         This writes the intent, and only the intent. Actually dialling a
         person is a different product with consent and a phone bill attached;
         what a panel needs first is the queue of people who have not been
-        told yet.
+        told yet — and since this also opens an incident, that queue now
+        exists somewhere a person can read instead of only in a trace file.
         """
         from agent.clinic import graph
 
@@ -1397,6 +1398,43 @@ class ToolBox:
                 "because": route.detail,
             },
         )
+        self._open_incident(route)
+
+    def _open_incident(self, route: Any) -> None:
+        """Deja la incidencia donde una persona la vea, no sólo en la traza.
+
+        La línea de auditoría vive en un `.jsonl` dentro de un volumen: sirve
+        para reconstruir una llamada después, y no sirve para que alguien se
+        entere ahora. La fila en la base va a la misma pantalla que el resto
+        del panel y se asigna a quien dicen las rutas de la clínica — o sea,
+        a la misma persona a la que llamaría el agente, no a otra.
+
+        No levanta nunca. Una incidencia que no se puede escribir no puede
+        ser el motivo de que una llamada puntuable falle.
+        """
+        try:
+            from agent.accounts.store import Incident, store
+            from agent.orgs import normalize_org_id
+
+            platform = store(getattr(self, "settings", None))
+            if not platform.exists:
+                return
+            patient = (getattr(self.ctx, "confirmed_patient", None) or {}).get("patient_id", "")
+            platform.open_incident(
+                normalize_org_id(getattr(self.ctx, "org_id", "") or ""),
+                Incident(
+                    id="",
+                    reason=route.reason,
+                    summary=route.detail,
+                    assigned_to=route.target,
+                    urgency=route.urgency,
+                    source="agent",
+                    call_id=str(getattr(self.ctx, "call_id", "") or ""),
+                    patient=str(patient or ""),
+                ),
+            )
+        except Exception:  # noqa: BLE001 - nunca por delante de una llamada
+            return
 
     async def escalate_call(self, params: FunctionCallParams, reason: str = "medical_emergency") -> None:
         """Hand the call to a human. Book nothing.

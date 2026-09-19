@@ -60,7 +60,7 @@ from agent.orgs import DEFAULT_ORG_ID
 
 # Bumped by appending to _MIGRATIONS. Never by editing one in place: the
 # volume already holds a database that has run the old ones.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
     (
@@ -185,6 +185,50 @@ _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
             # as a slug rather than a foreign key so deleting somebody leaves a
             # chain that reads as broken instead of one that quietly vanishes.
             "ALTER TABLE people ADD COLUMN covers_for TEXT NOT NULL DEFAULT ''",
+        ),
+    ),
+    (
+        4,
+        (
+            # Lo que va mal, mientras va mal.
+            #
+            # Hasta ahora una llamada que acababa sin cita dejaba una línea en
+            # una traza dentro de un volumen que nadie mira. El motivo estaba
+            # en el vocabulario cerrado, la persona a la que le tocaba estaba
+            # en `routes`, y entre las dos no había nada: ningún sitio donde
+            # ver lo que está pasando ahora mismo ni a quién le toca.
+            #
+            # `reason` es uno de los dieciocho finales y no se valida aquí a
+            # propósito: el vocabulario vive en `deps.CLOSED_REASONS` y una
+            # restricción de SQLite sería una segunda copia que envejece sola.
+            """
+            CREATE TABLE IF NOT EXISTS incidents (
+                id           TEXT PRIMARY KEY,
+                org_id       TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                reason       TEXT NOT NULL,
+                -- Lo que ha pasado, en palabras. De la llamada o de quien lo
+                -- escribe en el panel.
+                summary      TEXT NOT NULL DEFAULT '',
+                -- A quién le toca. Un slug de `people`, no una clave ajena:
+                -- si alguien se va, la incidencia queda apuntando a un hueco
+                -- visible en vez de desaparecer con él.
+                assigned_to  TEXT NOT NULL DEFAULT '',
+                urgency      TEXT NOT NULL DEFAULT 'today',
+                -- open | acknowledged | closed
+                status       TEXT NOT NULL DEFAULT 'open',
+                -- De dónde salió: 'agent' cuando la abrió una llamada,
+                -- 'panel' cuando la escribió una persona.
+                source       TEXT NOT NULL DEFAULT 'panel',
+                -- La llamada que la abrió, para poder ir a su traza.
+                call_id      TEXT NOT NULL DEFAULT '',
+                patient      TEXT NOT NULL DEFAULT '',
+                note         TEXT NOT NULL DEFAULT '',
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL,
+                closed_at    TEXT
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_incidents_org ON incidents(org_id, status, created_at)",
         ),
     ),
 ]

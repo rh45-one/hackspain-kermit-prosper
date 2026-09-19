@@ -71,6 +71,50 @@ class StoreError(RuntimeError):
     """A rule of this layer was broken: unknown org, duplicate email, bad role."""
 
 
+def _incident_row(row: Any) -> Incident:
+    return Incident(
+        id=row["id"],
+        reason=row["reason"],
+        summary=row["summary"],
+        assigned_to=row["assigned_to"],
+        urgency=row["urgency"],
+        status=row["status"],
+        source=row["source"],
+        call_id=row["call_id"],
+        patient=row["patient"],
+        note=row["note"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        closed_at=row["closed_at"],
+    )
+
+
+@dataclass(frozen=True)
+class Incident:
+    """Algo que ha ido mal, mientras va mal.
+
+    Nace de una llamada que acaba sin cita o de alguien que lo escribe en el
+    panel, y vive hasta que una persona la cierra. `assigned_to` es el slug
+    de quien tiene que ocuparse, resuelto por la misma tabla de rutas que
+    decide a quién llama el agente — así que la incidencia y la llamada
+    apuntan siempre a la misma persona.
+    """
+
+    id: str
+    reason: str
+    summary: str = ""
+    assigned_to: str = ""
+    urgency: str = "today"
+    status: str = "open"  # open | acknowledged | closed
+    source: str = "panel"  # panel | agent
+    call_id: str = ""
+    patient: str = ""
+    note: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    closed_at: str | None = None
+
+
 @dataclass(frozen=True)
 class Organization:
     id: str
@@ -456,6 +500,91 @@ class Store:
                     (normalize_org_id(org_id), reason),
                 ).rowcount
             )
+
+
+    # ---- incidents -------------------------------------------------------
+    def open_incident(self, org_id: str, incident: Incident) -> Incident:
+        """Abre una incidencia. Devuelve la fila tal y como ha quedado."""
+        now = now_iso()
+        row = Incident(
+            id=incident.id or f"inc-{uuid.uuid4().hex[:12]}",
+            reason=incident.reason,
+            summary=incident.summary,
+            assigned_to=incident.assigned_to,
+            urgency=incident.urgency or "today",
+            status=incident.status or "open",
+            source=incident.source or "panel",
+            call_id=incident.call_id,
+            patient=incident.patient,
+            note=incident.note,
+            created_at=now,
+            updated_at=now,
+            closed_at=None,
+        )
+        with connect(self.path) as db:
+            db.execute(
+                """
+                INSERT INTO incidents (
+                    id, org_id, reason, summary, assigned_to, urgency, status,
+                    source, call_id, patient, note, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.id,
+                    normalize_org_id(org_id),
+                    row.reason,
+                    row.summary,
+                    row.assigned_to,
+                    row.urgency,
+                    row.status,
+                    row.source,
+                    row.call_id,
+                    row.patient,
+                    row.note,
+                    row.created_at,
+                    row.updated_at,
+                ),
+            )
+        return row
+
+    def list_incidents(self, org_id: str, *, status: str = "", limit: int = 100) -> list[Incident]:
+        """Las más recientes primero. `status` vacío las trae todas."""
+        sql = "SELECT * FROM incidents WHERE org_id = ?"
+        args: list[Any] = [normalize_org_id(org_id)]
+        if status:
+            sql += " AND status = ?"
+            args.append(status)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        args.append(max(1, min(int(limit), 500)))
+        with connect(self.path) as db:
+            return [_incident_row(row) for row in db.execute(sql, args)]
+
+    def set_incident_status(
+        self, org_id: str, incident_id: str, status: str, *, note: str = ""
+    ) -> Incident | None:
+        """Mueve una incidencia de estado. `closed` sella la hora."""
+        if status not in {"open", "acknowledged", "closed"}:
+            raise ValueError(f"estado desconocido: {status!r}")
+        now = now_iso()
+        with connect(self.path) as db:
+            changed = db.execute(
+                """
+                UPDATE incidents
+                   SET status = ?,
+                       note = CASE WHEN ? = '' THEN note ELSE ? END,
+                       updated_at = ?,
+                       closed_at = CASE WHEN ? = 'closed' THEN ? ELSE NULL END
+                 WHERE org_id = ? AND id = ?
+                """,
+                (status, note, note, now, status, now, normalize_org_id(org_id), incident_id),
+            ).rowcount
+            if not changed:
+                return None
+            row = db.execute(
+                "SELECT * FROM incidents WHERE org_id = ? AND id = ?",
+                (normalize_org_id(org_id), incident_id),
+            ).fetchone()
+        return _incident_row(row) if row is not None else None
 
     # ---- users -----------------------------------------------------------
     def create_user(self, email: str, password: str, display_name: str = "") -> User:
