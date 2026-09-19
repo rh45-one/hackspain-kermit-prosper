@@ -162,6 +162,13 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
 # The product view lives in its own module: same data, different audience, and
 # it must not grow inside this debugging console. `live` reaches back for
 # `require_ops_access` lazily, so this import is one-way and order-independent.
+from agent.ops.frontdesk import router as frontdesk_router
 from agent.ops.live import router as live_router
 
 app.include_router(live_router)
+# The operator panel a teammate built in frontend/ has been calling these
+# since it landed, and they did not exist: /calls, /patients, /calendar and
+# /directory have all been answering 404. The router comes from PR #2; the
+# access gate on it does not, and without one it would have served whole
+# transcripts to anyone with the URL.
+app.include_router(frontdesk_router)
