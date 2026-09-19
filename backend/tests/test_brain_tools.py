@@ -418,6 +418,68 @@ async def test_the_lookup_says_which_fields_matched(box):
     assert "matched_on" in params.result["matches"][0]
 
 
+async def test_a_coverage_refusal_waits_for_the_second_plan_question(box, ctx):
+    """Regression: refusing on a plan the caller was about to replace.
+
+    Live, the agent refused orthopaedics on the plan on file. The caller
+    answered "why can't it be booked with Nueva Mutua?" — naming a second
+    plan that exists nowhere in the data — and the agent repeated the refusal
+    and ended the call. Problem 17 in one exchange.
+
+    A coverage refusal is only true for the plan we know about, so it does
+    not go through until the question has been put.
+    """
+    params = FakeParams()
+    await box.finish_without_booking(params, reason="specialty_not_covered")
+
+    assert ctx.queued_actions == [], "refused on half the facts"
+    assert "error" in params.result
+    assert "another insurance plan" in params.result["do_this_first"]
+
+    # One nudge only: the same refusal goes through next time, so the model
+    # cannot be trapped arguing about whether it asked.
+    params = FakeParams()
+    await box.finish_without_booking(params, reason="specialty_not_covered")
+    assert ctx.queued_actions[-1]["reason"] == "specialty_not_covered"
+
+
+async def test_naming_a_plan_answers_the_question(box, ctx):
+    """A caller who names a plan has answered it; no nudge is needed."""
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="tomorrow", specialty_name="General practice", insurer="ASISA"
+    )
+    assert ctx.asked_about_second_plan is True
+
+    ctx.queued_actions.clear()
+    await box.finish_without_booking(FakeParams(), reason="specialty_not_covered")
+    assert ctx.queued_actions[-1]["reason"] == "specialty_not_covered"
+
+
+async def test_a_refusal_that_is_not_about_cover_is_never_deferred(box, ctx):
+    """Only coverage reasons wait. An emergency or an empty diary does not."""
+    for reason in ("no_availability", "out_of_scope", "patient_not_found"):
+        ctx.queued_actions.clear()
+        await box.finish_without_booking(FakeParams(), reason=reason)
+        assert ctx.queued_actions[-1]["reason"] == reason
+
+
+async def test_availability_is_clamped_to_the_published_calendar(box, monkeypatch):
+    """A window past the calendar costs a turn as a 422; clamp it instead."""
+    from datetime import date as _date
+
+    monkeypatch.setattr(
+        box, "_calendar_window", lambda: (_date(2026, 9, 7), _date(2026, 10, 16))
+    )
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="in a fortnight", specialty_name="General practice"
+    )
+    call = box.client.availability_calls[-1]
+    assert call["date_to"] <= _date(2026, 10, 16)
+    assert call["date_from"] >= _date(2026, 9, 7)
+
+
 async def test_the_chart_reaches_the_model(box, ctx):
     """Referrals and the note were fetched every call and then thrown away.
 

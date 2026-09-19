@@ -40,6 +40,9 @@ class CallContext:
     # Jev's typed reading of that turn, refreshed in the background as each
     # caller turn finalises so the tools can quote it without paying for it.
     latest_decision: dict[str, Any] | None = None
+    # Set once the caller has been asked whether they hold a second insurance
+    # plan. A coverage refusal before that is a guess, not an answer.
+    asked_about_second_plan: bool = False
     # Set by the ToolBox so every finalised caller turn is read by Jev in the
     # background. A plain callable, not a coroutine: the context must not own
     # a task or a sidecar, and add_transcript must never await anything.

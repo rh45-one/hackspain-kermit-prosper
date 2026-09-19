@@ -105,6 +105,17 @@ def _fold_plain(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold().strip()
 
 
+# Refusals that are only true for the plan on file. A second plan the caller
+# holds can overturn every one of them, so none may be sent before they have
+# been asked.
+_COVERAGE_REASONS = frozenset({
+    "specialty_not_covered",
+    "location_not_covered",
+    "provider_not_in_network",
+    "insurer_referral_required",
+    "allowance_exhausted",
+})
+
 _SAFE_PATIENT_FIELDS = (
     "patient_id",
     "given_name",
@@ -285,6 +296,38 @@ class ToolBox:
         self.ctx.audit("phone_hint", {"outcome": "matched", "patient_id": match.get("patient_id")})
 
     # ---- tools -----------------------------------------------------------
+    def _calendar_window(self) -> tuple[date, date] | None:
+        """The clinic's bookable range, or None when the catalogue is cold."""
+        if self.cache is None or not self.cache.warmed:
+            return None
+        cal = self.cache.catalogue.calendar
+
+        def as_date(value: Any) -> date | None:
+            # The catalogue types these as dates; a fixture may hold strings.
+            if isinstance(value, date):
+                return value
+            try:
+                return date.fromisoformat(str(value))
+            except ValueError:
+                return None
+
+        first, last = as_date(cal.starts), as_date(cal.ends)
+        return (first, last) if first and last else None
+
+    def _clamp_to_calendar(self, start: date, end: date) -> tuple[date, date] | None:
+        """Pull a requested window inside the published calendar.
+
+        None when the whole window falls outside it, which is a real answer —
+        the clinic simply does not take bookings then — rather than a 422 the
+        model has to read.
+        """
+        window = self._calendar_window()
+        if window is None:
+            return (start, end)
+        first, last = window
+        start, end = max(start, first), min(end, last)
+        return (start, end) if start <= end else None
+
     def _known_specialties(self) -> list[str]:
         """The clinic's real specialty names, from the cached catalogue.
 
@@ -515,6 +558,9 @@ class ToolBox:
         if patient_id:
             kwargs["patient_id"] = patient_id
         if insurer and self.cache is not None:
+            # Naming a plan IS the answer to the second-plan question, so a
+            # coverage refusal after this is an informed one.
+            self.ctx.asked_about_second_plan = True
             plan = self.cache.plan_by_name(insurer)
             if plan is not None:
                 kwargs["insurer"] = plan.id
@@ -534,6 +580,23 @@ class ToolBox:
                 }
             )
             return
+
+        # The calendar is finite and the API rejects anything outside it, which
+        # costs a turn. Clamp instead: a caller asking for something beyond the
+        # published window gets the nearest real answer with a note, not an
+        # error the model has to interpret.
+        clamped = self._clamp_to_calendar(kwargs["date_from"], kwargs["date_to"])
+        if clamped is None:
+            await params.result_callback(
+                {
+                    "error": "that date is outside the clinic's bookable calendar",
+                    "bookable": self._calendar_window(),
+                }
+            )
+            return
+        if clamped != (kwargs["date_from"], kwargs["date_to"]):
+            resolved["clamped_to_calendar"] = [d.isoformat() for d in clamped]
+        kwargs["date_from"], kwargs["date_to"] = clamped
 
         result = await self._call(self.client.search_availability(**kwargs), "find_availability")
         if self._is_error(result):
@@ -996,6 +1059,34 @@ class ToolBox:
         if reason not in deps.CLOSED_REASONS:
             await params.result_callback({"error": f"reason {reason!r} not allowed", "allowed": sorted(deps.CLOSED_REASONS)})
             return
+        # A coverage refusal is only true for the plan we know about, and a
+        # patient may hold a second one that is nowhere in the data — only the
+        # caller can reveal it. Observed live: the agent refused orthopaedics,
+        # the caller answered "why can't it be booked with Nueva Mutua?", and
+        # the agent repeated the refusal and ended the call. Refuse only after
+        # the question has been put.
+        if reason in _COVERAGE_REASONS and not self.ctx.asked_about_second_plan:
+            # One nudge, not a loop: the flag is set here, so the same refusal
+            # goes through next time. The point is to buy the caller a single
+            # chance to volunteer the plan that changes the answer, not to
+            # argue with the model about whether it asked.
+            self.ctx.asked_about_second_plan = True
+            self.ctx.audit("refusal_deferred", {"reason": reason})
+            await params.result_callback(
+                {
+                    "error": "not yet: this refusal depends on which plan they hold",
+                    "do_this_first": (
+                        "ask the caller whether they hold another insurance plan besides "
+                        "the one on file. A second plan exists nowhere in the data and "
+                        "only they can tell you. If they name one, search availability "
+                        "again passing it as insurer, and bill the plan that works. If "
+                        "they say they have no other, call this tool again and it will "
+                        "go through."
+                    ),
+                }
+            )
+            return
+
         if self.ctx.queued_actions:
             await params.result_callback(
                 {
