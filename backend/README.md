@@ -283,3 +283,58 @@ Which key a call uses, in order: **the clinic's own stored key**, else
 **nothing** — a clinic nobody configured never inherits somebody else's key.
 The middle step is what keeps a scored call resolving the exact credential it
 resolved before any of this existed.
+
+## The clinic's own people and routes
+
+`clinic/graph.py` computes the whole clinic off the catalogue and declares
+exactly one thing by hand: the four humans the API has never heard of
+(`front_desk`, `manager`, `on_call`, `emergency`) and which of the eighteen
+endings reaches which of them. Schema v2 turns both into per-organisation
+data — `people` and `routes` — without moving the declaration.
+
+**The overlay rule, which is the whole design:** a configured row *replaces*
+the default with the same key; every default nobody has replaced *stays*. So
+an organisation that configures nothing behaves exactly as today, and one
+that configures a single role does not silently lose the other three or the
+other seventeen reasons. A clinic is never left with nobody to call.
+
+`agent/accounts/directory.py` does not restate the defaults — it reads
+`graph`'s own tables, so a fifth role added there appears here the same day.
+
+### The call profile is per person
+
+What Ginés asked for. Each row carries what the agent should do when it rings
+*that* person: `languages`, `opening` (what to say when they pick up),
+`may_ask` and `must_not_ask`. Two colleagues on the same line are opened
+differently.
+
+The language generalises what `/ws/demo?reason=` already did. Today it comes
+from `provider_id` through the catalogue, which answers for a doctor and has
+nothing to say about a receptionist. Now the person's own row answers first
+and the catalogue is the fallback, so a doctor resolves exactly as before and
+everybody else finally resolves at all.
+
+`phone` and `email` are stored and are deliberately **not** in the brief that
+reaches a prompt. Ringing somebody is a thing a person does with a number;
+the model never needs it. They are why these routes sit behind a membership
+check and not merely behind the ops door.
+
+### Endpoints
+
+Members read, owners and admins write — the same two dependencies the
+credential routes use.
+
+```
+GET    /ops/api/orgs/{org}/people                     effective directory
+PUT    /ops/api/orgs/{org}/people/{slug}              create or replace
+DELETE /ops/api/orgs/{org}/people/{slug}              back to the default
+GET    /ops/api/orgs/{org}/people/{slug}/call-profile what a call would open with
+GET    /ops/api/orgs/{org}/routes                     all eighteen, with `reachable`
+PUT    /ops/api/orgs/{org}/routes/{reason}            point a reason at somebody
+DELETE /ops/api/orgs/{org}/routes/{reason}            back to the declared route
+```
+
+Every row says `source`: `configured` or `default`. A route naming somebody
+who is not there reports `reachable: false` rather than being hidden — the
+graph still has a target, but that is not a thing to discover during a
+medical emergency. Writing such a route is refused outright.

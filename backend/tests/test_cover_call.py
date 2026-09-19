@@ -63,3 +63,30 @@ def test_a_colleague_we_cannot_place_leaves_the_language_unsaid(tmp_path):
 
     assert _languages_of("") == ""
     assert _languages_of("PR-does-not-exist") == ""
+
+
+def test_the_per_person_profile_reaches_the_prompt(tmp_path):
+    """Somebody who knows this colleague writes how to open with them."""
+    prompt = system_prompt_for(
+        _ctx(tmp_path, {
+            "who": "Dra. Carmen Ortiz Vidal",
+            "opening": "Tutéala, lleva quince años aquí",
+            "may_ask": "si puede doblar el sábado",
+            "must_not_ask": "nada de guardias de noche, tiene una excedencia",
+        })
+    )
+
+    assert "Tutéala, lleva quince años aquí" in prompt
+    assert "si puede doblar el sábado" in prompt
+    assert "nada de guardias de noche" in prompt
+
+
+def test_a_clinic_that_configured_nothing_behaves_as_it_always_did(tmp_path):
+    """Defaults answer, so the directory arriving changes nobody's calls."""
+    from agent.clinic import graph
+
+    route = graph.who_to_call("provider_on_leave")
+
+    assert route is not None
+    assert route.target == "manager"
+    assert route.urgency == "today"

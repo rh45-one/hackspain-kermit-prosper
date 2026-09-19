@@ -97,22 +97,23 @@ async def demo_voice_ws(websocket: WebSocket) -> None:
     reason = (query.get("reason") or "").strip()
     brief: dict[str, str] | None = None
     if reason:
-        from agent.clinic import graph
+        from agent.accounts import directory
 
-        route = graph.who_to_call(reason)
-        brief = {
-            "reason": reason,
-            "who": query.get("who") or (route.target if route else ""),
-            "because": query.get("because") or (route.detail if route else ""),
-            "urgency": query.get("urgency") or (route.urgency if route else ""),
-            "gap": query.get("gap") or "",
-            # Which language to open in, read off the catalogue rather than
-            # guessed. An inbound caller is a stranger and Gemini works their
-            # language out from what they say; here we know exactly who is
-            # picking up, so opening in Spanish and waiting to be corrected
-            # would be choosing to ignore what we already know.
-            "speaks": _languages_of(query.get("provider_id") or ""),
-        }
+        # The directory resolves the whole brief: who this organisation sends
+        # this reason to, what to open with, which language, and what the
+        # agent may and may not ask them. A clinic that has configured none of
+        # it gets the declared defaults, so this behaves as it always did.
+        brief = directory.cover_brief(
+            app_settings.org_id,
+            reason,
+            who=query.get("who") or "",
+            because=query.get("because") or "",
+            urgency=query.get("urgency") or "",
+            gap=query.get("gap") or "",
+            provider_id=query.get("provider_id") or "",
+            person_slug=query.get("person") or "",
+            config=app_settings,
+        )
     await _run_voice_socket(websocket, submit_actions=False, cover_brief=brief)
 
 

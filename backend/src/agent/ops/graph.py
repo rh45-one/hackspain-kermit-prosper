@@ -65,7 +65,7 @@ async def clinic_map(_: None = Depends(_access)) -> dict[str, Any]:
     happens when there is no slot" — and a drawing needs it to exist before it
     can be pointed at.
     """
-    built = clinic_graph.build(await _cache())
+    built = clinic_graph.build(await _cache(), DEFAULT_ORG_ID)
 
     nodes = [{**node, **_LAYERS.get(node["kind"], {})} for node in built["nodes"]]
     nodes += [

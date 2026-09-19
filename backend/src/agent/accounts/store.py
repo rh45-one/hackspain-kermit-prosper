@@ -18,6 +18,7 @@ Two rules this module enforces and does not delegate:
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -50,6 +51,20 @@ def _older_than(stamp: str, age: timedelta) -> bool:
         return datetime.fromisoformat(stamp) < datetime.now(UTC) - age
     except (TypeError, ValueError):
         return True
+
+
+# A slug is an id a route points at and a node the graph draws. Same shape as
+# an organisation id, and for the same reason: it must never be able to be
+# anything but a bare name.
+_SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,62}")
+
+
+def normalize_slug(raw: str) -> str:
+    """Canonical person slug, or StoreError. Never a path, never a blank."""
+    value = (raw or "").strip().lower()
+    if not _SLUG.fullmatch(value):
+        raise StoreError(f"invalid person id: {raw!r}")
+    return value
 
 
 class StoreError(RuntimeError):
@@ -86,6 +101,50 @@ class Membership:
 
 
 @dataclass(frozen=True)
+class Person:
+    """Somebody the clinic can ring, and how this agent should ring them.
+
+    Everything after `provider_id` is the call profile: it belongs to the
+    person and not to the deployment, so two colleagues on the same line can
+    be opened differently, in different languages, with different things the
+    agent is allowed to ask them.
+
+    `source` is "configured" for a row and "default" for one of the four roles
+    `clinic/graph.py` declares by hand. It is what lets a panel show "nobody
+    has set this up yet" instead of pretending somebody did.
+    """
+
+    slug: str
+    name: str
+    role: str
+    detail: str = ""
+    languages: tuple[str, ...] = ()
+    provider_id: str | None = None
+    # Staff contact details. Shown to members of this organisation; never put
+    # into a model prompt, which is why `directory.cover_brief` does not carry
+    # them. Ringing somebody is a thing a person does with this, not the agent.
+    phone: str = ""
+    email: str = ""
+    # The call profile.
+    opening: str = ""
+    may_ask: tuple[str, ...] = ()
+    must_not_ask: tuple[str, ...] = ()
+    active: bool = True
+    source: str = "configured"
+
+
+@dataclass(frozen=True)
+class Route:
+    """One of the eighteen endings, and who hears about it in this clinic."""
+
+    reason: str
+    person_slug: str
+    urgency: str
+    detail: str = ""
+    source: str = "configured"
+
+
+@dataclass(frozen=True)
 class Session:
     user_id: str
     current_org_id: str
@@ -101,6 +160,32 @@ def _org_row(row: sqlite3.Row) -> Organization:
         has_credential=bool(row["prosper_api_key_encrypted"]),
         credential_fingerprint=row["prosper_api_key_fingerprint"] or "",
         credentials_updated_at=row["credentials_updated_at"],
+    )
+
+
+def _split(raw: str | None) -> tuple[str, ...]:
+    """A stored list. Commas for language codes, newlines for sentences."""
+    text = (raw or "").strip()
+    if not text:
+        return ()
+    separator = "\n" if "\n" in text else ","
+    return tuple(part.strip() for part in text.split(separator) if part.strip())
+
+
+def _person_row(row: sqlite3.Row) -> Person:
+    return Person(
+        slug=row["slug"],
+        name=row["name"],
+        role=row["role"],
+        detail=row["detail"],
+        languages=_split(row["languages"]),
+        provider_id=row["provider_id"] or None,
+        phone=row["phone"],
+        email=row["email"],
+        opening=row["opening"],
+        may_ask=_split(row["may_ask"]),
+        must_not_ask=_split(row["must_not_ask"]),
+        active=bool(row["active"]),
     )
 
 
@@ -210,6 +295,152 @@ class Store:
         return crypto.decrypt_secret(
             row["prosper_api_key_encrypted"], key_material, aad=normalize_org_id(org_id)
         )
+
+    # ---- people ----------------------------------------------------------
+    def upsert_person(self, org_id: str, person: Person) -> Person:
+        """Create or replace one person. The slug is the identity, not the name.
+
+        A name changes; a route pointing at somebody must not break because
+        somebody married. So routes reference the slug and this is an upsert
+        on (org_id, slug).
+        """
+        org_id = normalize_org_id(org_id)
+        slug = normalize_slug(person.slug)
+        if not person.name.strip():
+            raise StoreError("a person needs a name")
+        if self.get_organization(org_id) is None:
+            raise StoreError(f"unknown organisation {org_id!r}")
+        stamp = now_iso()
+        with connect(self.path) as db:
+            db.execute(
+                """INSERT INTO people (id, org_id, slug, name, role, detail, languages,
+                                       provider_id, phone, email, opening, may_ask,
+                                       must_not_ask, active, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(org_id, slug) DO UPDATE SET
+                       name = excluded.name, role = excluded.role,
+                       detail = excluded.detail, languages = excluded.languages,
+                       provider_id = excluded.provider_id, phone = excluded.phone,
+                       email = excluded.email, opening = excluded.opening,
+                       may_ask = excluded.may_ask, must_not_ask = excluded.must_not_ask,
+                       active = excluded.active, updated_at = excluded.updated_at""",
+                (
+                    uuid.uuid4().hex,
+                    org_id,
+                    slug,
+                    person.name.strip(),
+                    person.role.strip() or "other",
+                    person.detail.strip(),
+                    ",".join(person.languages),
+                    (person.provider_id or "").strip() or None,
+                    person.phone.strip(),
+                    person.email.strip(),
+                    person.opening.strip(),
+                    "\n".join(person.may_ask),
+                    "\n".join(person.must_not_ask),
+                    1 if person.active else 0,
+                    stamp,
+                    stamp,
+                ),
+            )
+        found = self.get_person(org_id, slug)
+        assert found is not None
+        return found
+
+    def get_person(self, org_id: str, slug: str) -> Person | None:
+        with connect(self.path) as db:
+            row = db.execute(
+                "SELECT * FROM people WHERE org_id = ? AND slug = ?",
+                (normalize_org_id(org_id), (slug or "").strip().lower()),
+            ).fetchone()
+        return _person_row(row) if row else None
+
+    def list_people(self, org_id: str) -> list[Person]:
+        """Configured people only. The defaults are layered on in `directory`."""
+        with connect(self.path) as db:
+            rows = db.execute(
+                "SELECT * FROM people WHERE org_id = ? ORDER BY name",
+                (normalize_org_id(org_id),),
+            ).fetchall()
+        return [_person_row(row) for row in rows]
+
+    def delete_person(self, org_id: str, slug: str) -> bool:
+        """Remove a person. Routes pointing at them fall back to the default."""
+        with connect(self.path) as db:
+            return bool(
+                db.execute(
+                    "DELETE FROM people WHERE org_id = ? AND slug = ?",
+                    (normalize_org_id(org_id), (slug or "").strip().lower()),
+                ).rowcount
+            )
+
+    # ---- routes ----------------------------------------------------------
+    def upsert_route(self, org_id: str, route: Route) -> Route:
+        """Point one of the eighteen reasons at somebody, with an urgency."""
+        org_id = normalize_org_id(org_id)
+        if self.get_organization(org_id) is None:
+            raise StoreError(f"unknown organisation {org_id!r}")
+        with connect(self.path) as db:
+            db.execute(
+                """INSERT INTO routes (org_id, reason, person_slug, urgency, detail, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(org_id, reason) DO UPDATE SET
+                       person_slug = excluded.person_slug, urgency = excluded.urgency,
+                       detail = excluded.detail, updated_at = excluded.updated_at""",
+                (
+                    org_id,
+                    route.reason,
+                    normalize_slug(route.person_slug),
+                    route.urgency,
+                    route.detail.strip(),
+                    now_iso(),
+                ),
+            )
+        found = self.get_route(org_id, route.reason)
+        assert found is not None
+        return found
+
+    def get_route(self, org_id: str, reason: str) -> Route | None:
+        with connect(self.path) as db:
+            row = db.execute(
+                "SELECT * FROM routes WHERE org_id = ? AND reason = ?",
+                (normalize_org_id(org_id), reason),
+            ).fetchone()
+        if row is None:
+            return None
+        return Route(
+            reason=row["reason"],
+            person_slug=row["person_slug"],
+            urgency=row["urgency"],
+            detail=row["detail"],
+        )
+
+    def list_routes(self, org_id: str) -> list[Route]:
+        """Configured routes only. `directory` overlays them on the defaults."""
+        with connect(self.path) as db:
+            rows = db.execute(
+                "SELECT * FROM routes WHERE org_id = ? ORDER BY reason",
+                (normalize_org_id(org_id),),
+            ).fetchall()
+        return [
+            Route(
+                reason=row["reason"],
+                person_slug=row["person_slug"],
+                urgency=row["urgency"],
+                detail=row["detail"],
+            )
+            for row in rows
+        ]
+
+    def delete_route(self, org_id: str, reason: str) -> bool:
+        """Back to the hand-written route. A reason is never left with nobody."""
+        with connect(self.path) as db:
+            return bool(
+                db.execute(
+                    "DELETE FROM routes WHERE org_id = ? AND reason = ?",
+                    (normalize_org_id(org_id), reason),
+                ).rowcount
+            )
 
     # ---- users -----------------------------------------------------------
     def create_user(self, email: str, password: str, display_name: str = "") -> User:
