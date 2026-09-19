@@ -302,6 +302,19 @@ async def test_gemini_greeting_flows_through_context_aggregator(tmp_path):
     assert "phone is ringing" in messages[-1]["content"]
 
 
+async def test_duplicate_connect_events_queue_only_one_greeting(tmp_path):
+    import asyncio
+
+    from pipecat.frames.frames import LLMRunFrame
+
+    settings = EngineSettings(voice_engine="gemini_live", gemini_api_key="k")
+    transport, worker = build(tmp_path, "CA-one-greeting", settings)
+    handler = transport.handlers["on_client_connected"]
+    await asyncio.gather(handler(transport, None), handler(transport, None))
+    frames = [frame for batch in worker.queued for frame in batch]
+    assert sum(isinstance(frame, LLMRunFrame) for frame in frames) == 1
+
+
 async def test_per_socket_isolation_across_engines(tmp_path):
     settings = EngineSettings(voice_engine="gemini_live", gemini_api_key="k")
     t1, _ = build(tmp_path, "CA-iso-1", settings)

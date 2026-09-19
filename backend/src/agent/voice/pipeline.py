@@ -100,8 +100,9 @@ def phone_hint_greeting(ctx: Any) -> str:
     # long greeting buys nothing and collides with their opening words — and
     # it spends the call's ~36 s budget before anything useful happens.
     opening = (
-        "Answer with one short sentence: name the clinic, good morning, and ask "
-        "how you can help. Nothing else — let them say what they want first."
+        "Start in English: 'Good morning, Clínica Arenal. How can I help?' "
+        "Then switch to the caller's language. Nothing else — let them say "
+        "what they want first."
     )
     if given_name:
         return (
@@ -320,10 +321,17 @@ def build_worker(
         # task tree) performs the actual teardown, so no deadlock here.
         await worker.cancel()
 
+    greeting_queued = False
+
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport: Any, client: Any) -> None:
+        nonlocal greeting_queued
         ctx.mark_pipeline_stage("client_connected")
         ctx.audit("client_connected", {})
+        if greeting_queued:
+            ctx.audit("greeting_skipped_duplicate", {})
+            return
+        greeting_queued = True
         # Caller-id hint: bounded wait for the harness `start` event, then a
         # private directory search. Never authenticates anyone; the hint only
         # personalises the greeting and never enters the confirmation registry.
