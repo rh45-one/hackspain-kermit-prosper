@@ -70,9 +70,9 @@ export function ObservatoryChrome() {
     >
       <div className="mx-auto flex h-[72px] max-w-[var(--page-max-width)] items-center justify-between gap-5">
         <Link
-          href="/calls"
+          href="/"
           className="group flex shrink-0 items-center gap-3 rounded-lg outline-none active:scale-[0.99]"
-          aria-label="Pronto, ir al monitor"
+          aria-label="Pronto, ir al inicio"
         >
           <span className="grid size-9 place-items-center rounded-[10px] bg-graphite text-canvas-white shadow-sm transition-transform duration-200 ease-out group-hover:-translate-y-0.5 group-active:translate-y-0">
             <ProntoMark className="size-[22px]" />

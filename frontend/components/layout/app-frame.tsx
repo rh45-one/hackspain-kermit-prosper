@@ -1,10 +1,27 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+
 import { FrontdeskProvider } from "@/components/frontdesk-provider";
 import { ObservatoryChrome } from "@/components/layout/observatory-chrome";
 import { MotionObserver } from "@/components/motion/motion-observer";
 
+function isMarketing(pathname: string | null) {
+  return pathname === "/" || pathname === "/login";
+}
+
 export function AppFrame({ children, demo }: { children: React.ReactNode; demo: boolean }) {
+  const pathname = usePathname();
+
+  if (isMarketing(pathname)) {
+    return (
+      <>
+        <MotionObserver />
+        {children}
+      </>
+    );
+  }
+
   return (
     <FrontdeskProvider demo={demo}>
       <div className="min-h-full bg-background">

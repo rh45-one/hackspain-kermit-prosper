@@ -294,53 +294,41 @@ function OutcomeBars() {
 
 export function ObservatoryCharts() {
   const { activeCount, calls, demo } = useFrontdesk();
-
-  if (!demo) {
-    const summaries = calls.flatMap((call) =>
-      call.diagnostic ? [call.diagnostic] : [],
-    );
-    const metrics = [
-      [
-        "Gestiones enviadas bien",
-        summaries.reduce(
-          (sum, item) => sum + (item.submissions_succeeded ?? 0),
-          0,
-        ),
-      ],
-      [
-        "Gestiones con error",
-        summaries.reduce(
-          (sum, item) => sum + (item.submissions_failed ?? 0),
-          0,
-        ),
-      ],
-      [
-        "Llamadas con plan B",
-        summaries.filter((item) => item.fallback_action_added).length,
-      ],
-    ];
-    return (
-      <dl className="grid gap-4 sm:grid-cols-3">
-        {metrics.map(([label, value]) => (
-          <div
-            key={label}
-            className="surface rounded-[18px] p-[var(--card-padding)]"
-          >
-            <dt className="text-[13px] text-quiet">{label} · últimos registros</dt>
-            <dd className="mt-2 font-heading text-2xl">{value}</dd>
-          </div>
-        ))}
-      </dl>
-    );
-  }
+  const summaries = calls.flatMap((call) =>
+    call.diagnostic ? [call.diagnostic] : [],
+  );
+  const liveMetrics = [
+    [
+      "Gestiones enviadas bien",
+      summaries.reduce((sum, item) => sum + (item.submissions_succeeded ?? 0), 0),
+    ],
+    [
+      "Gestiones con error",
+      summaries.reduce((sum, item) => sum + (item.submissions_failed ?? 0), 0),
+    ],
+    [
+      "Llamadas con plan B",
+      summaries.filter((item) => item.fallback_action_added).length,
+    ],
+  ] as const;
 
   return (
-    <div data-reveal="fade">
-      <div className="grid gap-4 lg:grid-cols-3">
-        <article
-          data-reveal=""
-          className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-3"
-        >
+    <div>
+      {demo ? null : (
+        <dl className="mb-4 grid gap-4 sm:grid-cols-3">
+          {liveMetrics.map(([label, value]) => (
+            <div
+              key={label}
+              className="surface rounded-[18px] p-[var(--card-padding)]"
+            >
+              <dt className="text-[13px] text-quiet">{label} · últimos registros</dt>
+              <dd className="mt-2 font-heading text-2xl">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <div data-visible="true" className="grid gap-4 lg:grid-cols-3">
+        <article className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-3">
           <p className="font-heading text-[17px] text-graphite">
             Actividad del día
           </p>
@@ -353,11 +341,7 @@ export function ObservatoryCharts() {
             <LoadChart />
           </div>
         </article>
-        <article
-          data-reveal=""
-          data-delay="1"
-          className="surface rounded-[18px] p-[var(--card-padding)]"
-        >
+        <article className="surface rounded-[18px] p-[var(--card-padding)]">
           <p className="font-heading text-[17px] text-graphite">
             Líneas ocupadas
           </p>
@@ -366,11 +350,7 @@ export function ObservatoryCharts() {
             Hay sitio para {CALL_CAPACITY} llamadas a la vez
           </p>
         </article>
-        <article
-          data-reveal=""
-          data-delay="2"
-          className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-2"
-        >
+        <article className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-2">
           <p className="font-heading text-[17px] text-graphite">
             Cómo acabaron las gestiones
           </p>
