@@ -9,6 +9,7 @@ Commands:
     validate  check that scenarios resolve against the clinic fixture
     diff      compare two run directories
     compare   side-by-side of every candidate inside one run
+    dev       developer console: read-only API plus a live chat with the agent
 """
 from __future__ import annotations
 
@@ -53,6 +54,12 @@ def main() -> None:
     p = sub.add_parser("compare", help="side-by-side of every candidate inside one run")
     p.add_argument("run", help="results dir of the run")
     p.add_argument("--json", action="store_true", help="emit the machine-readable summary")
+
+    p = sub.add_parser("dev", help="developer console: read-only API plus a live chat")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8099)
+    p.add_argument("--results", default="evaluator/experiments/results")
+    p.add_argument("--web", default="evaluator/web")
 
     p = sub.add_parser("chat", help="manual tester: type to a live agent and read its replies")
     p.add_argument("--ws-url", default="ws://127.0.0.1:17860/ws", help="agent websocket")
@@ -160,6 +167,15 @@ def main() -> None:
             print()
         else:
             print(format_diff(result))
+    elif args.cmd == "dev":
+        import uvicorn
+
+        from evaluator.api.app import create_app
+
+        console = create_app(args.results, args.web)
+        print(f"consola de developer: http://{args.host}:{args.port}/  (API en /api/docs)")
+        print(f"corridas leídas de: {args.results}")
+        uvicorn.run(console, host=args.host, port=args.port, log_level="warning")
     elif args.cmd == "compare":
         from evaluator.report.side_by_side import (
             format_side_by_side,

@@ -56,6 +56,7 @@ class ChatOptions:
     reply_idle_ms: float = 900.0
     reply_max_ms: float = 20000.0
     reply_start_ms: float = 6000.0
+    submission_wait_s: float = SUBMISSION_WAIT_S
     turn_tail_ms: float = 600.0
     greeting_wait_ms: float = 20000.0
     greet_first: bool = True
@@ -65,14 +66,14 @@ def _out(message: str = "") -> None:
     print(message, flush=True)
 
 
-async def _open_call_window(options: ChatOptions) -> str:
+async def open_call_window(options: ChatOptions) -> str:
     async with httpx.AsyncClient(base_url=options.clinic_url, timeout=10) as http:
         response = await http.post("/eval/calls", json={"call_id": options.call_id})
         response.raise_for_status()
     return options.call_id
 
 
-async def _close_call_window(options: ChatOptions) -> None:
+async def close_call_window(options: ChatOptions) -> None:
     async with httpx.AsyncClient(base_url=options.clinic_url, timeout=10) as http:
         await http.post(f"/eval/calls/{options.call_id}/close")
 
@@ -87,9 +88,9 @@ def _audit_for(options: ChatOptions) -> AgentAudit:
     return read_agent_audit(options.call_id, directory)
 
 
-async def _wait_for_actions(options: ChatOptions, timeout_s: float = SUBMISSION_WAIT_S) -> dict:
+async def wait_for_actions(options: ChatOptions, timeout_s: float | None = None) -> dict:
     """Submissions land after the socket closes; wait bounded, then report."""
-    deadline = time.monotonic() + timeout_s
+    deadline = time.monotonic() + (options.submission_wait_s if timeout_s is None else timeout_s)
     record: dict = {"actions": [], "attempts": []}
     async with httpx.AsyncClient(base_url=options.clinic_url, timeout=10) as http:
         while True:
@@ -123,7 +124,7 @@ async def _speak_agent(
         return audio
     wav_path = save_dir / f"{turn:02d}-agent-{label}.wav"
     wav_path.write_bytes(ulaw_to_wav(audio))
-    seconds = len(audio) / 2 / 8000
+    seconds = len(audio) / 8000  # µ-law: 1 byte per sample at 8 kHz
     if isinstance(transcriber, NullTranscriber):
         _out(f"agente ({label}): [audio-only {seconds:.1f}s → {wav_path}] {transcriber.reason}")
     else:
@@ -154,7 +155,7 @@ async def run_chat(options: ChatOptions) -> int:
         env["EVALUATOR_STT_PROVIDER"] = options.stt_provider
     transcriber = transcriber_from_env(env)
 
-    await _open_call_window(options)
+    await open_call_window(options)
     session = CallSession(
         options.ws_url, options.call_id, from_number=options.from_number
     )
@@ -220,12 +221,12 @@ async def run_chat(options: ChatOptions) -> int:
         evidence = await session.close()
         await transcriber.aclose()
 
-    await _close_call_window(options)
-    record = await _wait_for_actions(options)
+    await close_call_window(options)
+    record = await wait_for_actions(options)
 
     _out()
     _out(f"frames  caller={evidence.frames_sent} agente={evidence.frames_received}")
-    caller_seconds = len(evidence.caller_audio) / 2 / 8000
+    caller_seconds = len(evidence.caller_audio) / 8000
     _out(f"voz del caller enviada: {caller_seconds:.1f}s")
     if evidence.turn_latencies_ms:
         answered = [ms for ms in evidence.turn_latencies_ms if ms is not None]
