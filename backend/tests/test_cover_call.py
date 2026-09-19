@@ -90,3 +90,36 @@ def test_a_clinic_that_configured_nothing_behaves_as_it_always_did(tmp_path):
     assert route is not None
     assert route.target == "manager"
     assert route.urgency == "today"
+
+
+def _cache_with_week():
+    """A catalogue that publishes a week, the way the real one does."""
+    day = lambda w, i: type("D", (), {"weekday": w, "intervals": i})()
+    sched = type("S", (), {"location_name": "Arenal Norte",
+                           "days": [day("monday", ["09:00–14:00"]), day("tuesday", ["09:00–14:00"])]})()
+    provider = type("P", (), {"schedules": [sched]})()
+    return type("C", (), {"warmed": True, "provider_by_id": staticmethod(lambda _id: provider)})()
+
+
+def test_the_gap_is_read_off_the_published_week():
+    """"Nos hemos quedado sin ginecología" leaves them asking when and where."""
+    from agent.clinic import rota
+
+    assert rota.gap_sentence(_cache_with_week(), "PR02", "monday") == (
+        "lunes de 09:00 a 14:00 en Arenal Norte"
+    )
+
+
+def test_a_colleague_already_in_clinic_that_day_is_flagged():
+    """Asking somebody to cover a morning they already work is how people stop picking up."""
+    from agent.clinic import rota
+
+    assert rota.already_working(_cache_with_week(), "PR02", "monday")
+    assert rota.already_working(_cache_with_week(), "PR02", "sunday") == ""
+
+
+def test_a_week_the_catalogue_cannot_say_is_left_out_rather_than_invented():
+    from agent.clinic import rota
+
+    assert rota.gap_sentence(None, "PR02", "monday") == ""
+    assert rota.gap_sentence(_cache_with_week(), "", "monday") == ""

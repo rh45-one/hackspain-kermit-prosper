@@ -171,6 +171,7 @@ def system_prompt_for(ctx: CallContext) -> str:
         ("Qué ha pasado", "because"),
         ("Urgencia", "urgency"),
         ("Hueco a cubrir", "gap"),
+        ("OJO, ya trabaja entonces", "already_working"),
         ("Habla", "speaks"),
         # Written per person by whoever runs the clinic, not by this file.
         # Somebody who knows Dra. Ortiz knows how to open a call with her;

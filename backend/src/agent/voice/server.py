@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -114,7 +115,40 @@ async def demo_voice_ws(websocket: WebSocket) -> None:
             person_slug=query.get("person") or "",
             config=app_settings,
         )
+        # What shift is actually uncovered, and whether the colleague we are
+        # about to ring is already in clinic then. Both are lookups in the
+        # published week, not guesses, and both are the questions anybody
+        # picking up asks first.
+        brief = dict(brief)
+        brief.update(_shift_facts(query, brief))
     await _run_voice_socket(websocket, submit_actions=False, cover_brief=brief)
+
+
+def _shift_facts(query: Any, brief: dict[str, str]) -> dict[str, str]:
+    """The uncovered shift, and a clash if the person called already works it."""
+    try:
+        from agent.brain import deps
+        from agent.clinic import rota
+
+        cache = deps.try_catalogue_cache(app_settings.org_id)
+        if cache is None or not getattr(cache, "warmed", False):
+            return {}
+        weekday = (query.get("weekday") or "").strip()
+        missing = query.get("provider_id") or ""
+        facts: dict[str, str] = {}
+        if not brief.get("gap"):
+            gap = rota.gap_sentence(cache, missing, weekday)
+            if gap:
+                facts["gap"] = gap
+        clash = rota.already_working(cache, query.get("cover_provider_id") or "", weekday)
+        if clash:
+            # Saying this out loud beats discovering it mid-call: asking
+            # somebody to cover a morning they are already working is how
+            # people stop answering the phone.
+            facts["already_working"] = clash
+        return facts
+    except Exception:  # noqa: BLE001 - a missing rota must never stop a call
+        return {}
 
 
 def _languages_of(provider_id: str) -> str:
