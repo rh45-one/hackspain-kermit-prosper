@@ -1,3 +1,5 @@
+import importlib
+import importlib.util
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,10 +13,33 @@ from evaluator.compare import compare
 from evaluator.models import Scenario
 from evaluator.runner.experiment import _to_submit_bodies
 
-agent_client = pytest.importorskip(
-    "agent.clinic.client", reason="Opt-in contract check: expose the main agent via PYTHONPATH"
-)
-agent_recorder = pytest.importorskip("agent.scheduling.recorder")
+AGENT_ABSENT_REASON = "Opt-in contract check: expose the main agent via PYTHONPATH=backend/src"
+
+
+def _load_agent_modules():
+    """Import the agent's own modules, or state plainly why that is impossible.
+
+    `pytest.importorskip` also swallows a missing third-party dependency of
+    `agent.*`, so a broken checkout could report a green skip and hide real
+    drift. Absent source is a deliberate opt-in skip; source that is present
+    but not importable is a collection failure instead.
+    """
+    try:
+        present = importlib.util.find_spec("agent") is not None
+    except (ImportError, ValueError):  # a broken parent package is not a skip
+        present = False
+    if not present:
+        pytest.skip(AGENT_ABSENT_REASON, allow_module_level=True)
+    try:
+        return (
+            importlib.import_module("agent.clinic.client"),
+            importlib.import_module("agent.scheduling.recorder"),
+        )
+    except ImportError as exc:
+        pytest.fail(f"agent source is on the path but not importable: {exc}", pytrace=False)
+
+
+agent_client, agent_recorder = _load_agent_modules()
 
 ROOT = Path(__file__).resolve().parent.parent
 SCENARIOS = sorted((ROOT / "scenarios").glob("**/*.yaml"))
