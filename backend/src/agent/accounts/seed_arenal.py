@@ -107,7 +107,11 @@ TEAM: tuple[dict[str, Any], ...] = (
         "must_not_ask": "",
     },
     {
-        "slug": "recepcion",
+        # `front_desk`, not `recepcion`: the rule is that a configured row
+        # replaces the default with the SAME key. A new slug adds a second
+        # Recepción beside the declared one instead of replacing it, which is
+        # exactly what happened the first time this ran.
+        "slug": "front_desk",
         "name": "Recepción",
         "role": "Mostrador",
         "detail": "Atiende y resuelve lo que no necesita un médico.",
@@ -127,12 +131,12 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("medical_emergency", "gines-martinez", "now"),
     ("caller_not_authorised", "gines-martinez", "today"),
     ("patient_history", "gines-martinez", "today"),
-    ("referral_required", "recepcion", "today"),
-    ("specialty_not_covered", "recepcion", "today"),
-    ("location_not_covered", "recepcion", "today"),
-    ("provider_not_in_network", "recepcion", "today"),
-    ("insurer_referral_required", "recepcion", "today"),
-    ("allowance_exhausted", "recepcion", "today"),
+    ("referral_required", "front_desk", "today"),
+    ("specialty_not_covered", "front_desk", "today"),
+    ("location_not_covered", "front_desk", "today"),
+    ("provider_not_in_network", "front_desk", "today"),
+    ("insurer_referral_required", "front_desk", "today"),
+    ("allowance_exhausted", "front_desk", "today"),
 )
 
 
