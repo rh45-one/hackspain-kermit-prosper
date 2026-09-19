@@ -16,6 +16,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     has_visited_before: true
     wants: "cita con la doctora Sáez en Centro lo antes posible"
@@ -26,6 +27,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez. Quiero pedir cita con la doctora Sáez en Centro, lo antes posible."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

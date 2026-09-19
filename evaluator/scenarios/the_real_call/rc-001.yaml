@@ -19,6 +19,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     wants: "cancelar la cita del 24 y pedir una de general el lunes a primera hora"
     appointment: "la cita del 24 con la doctora Sáez"
@@ -32,6 +33,7 @@ turns:
       24 con la doctora Sáez, así que canceladla, y en su lugar quiero una
       de general a primera hora del lunes.
     hold_ms: 5000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

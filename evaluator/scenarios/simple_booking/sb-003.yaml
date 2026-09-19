@@ -27,6 +27,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez, DNI 87654321-X. Quiero pedir cita de medicina general, lo antes posible."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

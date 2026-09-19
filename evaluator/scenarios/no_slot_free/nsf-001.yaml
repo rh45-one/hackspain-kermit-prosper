@@ -17,6 +17,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     wants: "cita con la doctora Iglesias (dermatología) esta semana o la que viene"
     prefer: "esta semana o la que viene"
@@ -26,6 +27,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez. Me han dado volante para dermatología y quiero ir con la doctora Iglesias esta semana o la que viene."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

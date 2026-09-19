@@ -31,6 +31,7 @@ turns:
       con la pediatra el viernes que viene pero no podemos ir; ¿podéis
       pasarla al lunes a primera hora?
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

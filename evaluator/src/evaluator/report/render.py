@@ -14,6 +14,59 @@ from pathlib import Path
 
 from evaluator.models import MAX_LOCAL_POINTS, PROBLEM_WEIGHTS
 
+# Size of the real Clínica Arenal, for contrast with the local fixture
+# (PROJECT_CONTEXT.md §10). The local dataset is a hand-written miniature:
+# passing against it validates the agent's logic, not that the answer is the
+# one the official platform expects.
+REAL_CLINIC = {
+    "patients": "~3.000",
+    "providers": "12",
+    "locations": "n/d",
+    "plans": "10",
+    "specialties": "n/d",
+    "appointment_types": "11",
+}
+_COUNT_LABELS = {
+    "patients": "pacientes",
+    "providers": "médicos",
+    "locations": "sedes",
+    "plans": "planes",
+    "specialties": "especialidades",
+    "appointment_types": "tipos de cita",
+}
+
+
+def _fixture_banner(manifest: dict) -> str:
+    """The loudest thing on the page: this is a local fixture, not the board.
+
+    Printed in the report itself rather than the README because the report
+    is what gets shown around, and a green cell here is not a point.
+    """
+    profile = manifest.get("dataset_profile") or {}
+    counts = profile.get("counts") or {}
+    rows = "".join(
+        f"<tr><td>{_esc(_COUNT_LABELS.get(k, k))}</td><td>{_esc(v)}</td>"
+        f"<td>{_esc(REAL_CLINIC.get(k, 'n/d'))}</td></tr>"
+        for k, v in counts.items()
+    )
+    table = (
+        "<table><tr><th>elemento</th><th>fixture local</th><th>clínica real</th></tr>"
+        f"{rows}</table>"
+        if rows
+        else ""
+    )
+    note = profile.get("note") or ""
+    return f"""<div class="banner">
+<b>Esto no es el veredicto oficial.</b> Los casos corren contra un fixture local
+en miniatura (<code>{_esc(manifest.get('dataset', '?'))}</code>, <code>{_esc(profile.get('name') or manifest.get('dataset_hash', '?'))}</code>),
+inventado para este evaluador. Pasar aquí valida la <b>lógica</b> del agente
+(prompt, herramientas, agenda, envío), <b>no</b> que la respuesta coincida con
+los datos reales de la clínica. Un verde en esta página no es un punto en el
+tablero de Prosper.
+{table}
+{f'<p class="meta">meta.note del dataset: {_esc(note)}</p>' if note else ''}
+</div>"""
+
 
 def _esc(x: object) -> str:
     return html.escape(str(x))
@@ -134,6 +187,8 @@ def render_report(run_dir: str | Path) -> Path:
         n_interrupts = len(c.get("interrupts") or [])
         if n_interrupts:
             evidence.append(f"{n_interrupts} barge-in")
+        for check in c.get("checks_not_run") or []:
+            evidence.append(f'<span class="warn">{_esc(check)} sin evaluar</span>')
         detail_rows.append(
             "<tr>"
             f"<td>{_esc(c['candidate'])}</td>"
@@ -148,6 +203,21 @@ def render_report(run_dir: str | Path) -> Path:
             "</tr>"
         )
 
+    # Checks the rig could not run (e.g. leak_check needs a transcript, and
+    # the voice path has no STT): never silently reported as a clean result.
+    not_run: dict[str, int] = defaultdict(int)
+    for c in cases:
+        for check in c.get("checks_not_run") or []:
+            not_run[check] += 1
+    unevaluated_note = (
+        '<p class="meta"><b>Comprobaciones no evaluadas:</b> '
+        + "; ".join(f"{_esc(k)} en {v} caso(s)" for k, v in sorted(not_run.items()))
+        + ". El check de fuga (problema 14) necesita transcripción y solo la vía "
+        "de texto la produce: por WebSocket queda inerte.</p>"
+        if not_run
+        else ""
+    )
+
     page = f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <title>Evaluador local - {_esc(manifest['experiment'])}</title>
@@ -159,8 +229,12 @@ th {{ background: #f3f3f3; }}
 .pass {{ background: #e2f6e3; }} .warn {{ background: #fff4d6; }}
 .fail {{ background: #fbe0e0; }}
 .meta {{ color: #666; font-size: .9rem; }}
+.banner {{ border: 2px solid #c47f00; background: #fff8e6; padding: .8rem 1rem;
+           margin: 1rem 0; border-radius: 6px; }}
+.banner table {{ margin: .6rem 0 .2rem; }}
 </style></head><body>
 <h1>Resultado local — {_esc(manifest['experiment'])}</h1>
+{_fixture_banner(manifest)}
 <p class="meta">
 run_id <code>{_esc(manifest['run_id'])}</code> ·
 rules {_esc(manifest['rules_version'])} ·
@@ -185,6 +259,7 @@ Los puntos locales estiman el veredicto oficial; no lo certifican.
 <th>categorías</th><th>diferencias de campos</th><th>evidencia</th><th>duración</th></tr>
 {"".join(detail_rows)}
 </table>
+{unevaluated_note}
 </body></html>"""
     out = run_dir / "report.html"
     out.write_text(page, encoding="utf-8")

@@ -17,6 +17,7 @@ caller:
     name: "Carmen Díaz Pardo"
     patient_id: P00045
     national_id: "34567890V"
+    date_of_birth: "1969-05-20"
     insurer: asisa
     has_visited_before: true
     wants: "cita con dermatología por un sarpullido"
@@ -26,6 +27,7 @@ caller:
 turns:
   - text: "Buenos días, soy Carmen Díaz Pardo. Querría cita con dermatología, me ha salido un sarpullido."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

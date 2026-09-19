@@ -22,8 +22,8 @@ el servidor ni el túnel con el que otro compañero está ejecutando Prosper.
 | Clínica local | `src/evaluator/clinic/` | API de lectura (`/api/v1/directory`, `/availability`, `/appointments`, catálogo) sobre un dataset versionado + receptor `/api/v1/submit/*` con la semántica del contrato: 404 call desconocida, 410 ventana cerrada (30 s), 409 reintento idéntico, 422 malformado (incluida la letra del DNI). Registra además los `attempts` por llamada para diagnóstico. |
 | Llamador | `src/evaluator/harness/wsclient.py` | Cliente WebSocket que habla el formato Twilio Media Streams del contrato (camelCase, `sequenceNumber`/`chunk`/`timestamp` como strings, frames µ-law 20 ms). Mide latencia de respuesta por turno y primer audio, captura el audio en ambos sentidos y soporta barge-in (`interrupt_on_agent_audio`). |
 | Audio/TTS | `src/evaluator/harness/audio.py`, `tts.py` | Codec µ-law↔PCM, WAV, mezcla de ruido con SNR, ruido sintético determinista; síntesis por subprocess (`espeak-ng`/`pico2wave`) con caché por texto. |
-| Doble de prueba | `src/evaluator/harness/double_agent.py` | Agente mínimo que responde el wire format y envía acciones enlatadas vía `/control` **por call_id** (FIFO legacy sigue disponible). Expone `/usage/calls/{id}` con coste determinista para probar la telemetría. |
-| Paciente simulado | `src/evaluator/simulator/patient.py`, `llm_patient.py` | Caller por reglas para el adaptador de texto: responde solo desde `caller.facts`, aplica `behavior` y nunca conoce el oráculo. `caller.llm` lo sustituye por un LLM restringido (endpoint OpenAI-compatible) con fallback automático a reglas. |
+| Doble de prueba | `src/evaluator/harness/double_agent.py` | Agente mínimo que habla **las dos vías** —WebSocket `/ws` y adaptador de texto `/turns`— y envía acciones enlatadas vía `/control` **por call_id** (FIFO legacy sigue disponible). Expone `/usage/calls/{id}` con coste determinista para probar la telemetría. |
+| Paciente simulado | `src/evaluator/simulator/patient.py`, `llm_patient.py` | Caller por reglas para el adaptador de texto: responde solo desde `caller.facts`, aplica `behavior` y nunca conoce el oráculo. Responde primero a la pregunta en curso (las correcciones programadas van después, nunca por delante de la identificación) y, si le preguntan un dato que el escenario no le dio, lo dice —queda en `log.unanswerable`, no en `log.missed`— en vez de pedir que le repitan. `caller.llm` lo sustituye por un LLM restringido (endpoint OpenAI-compatible) con fallback automático a reglas. |
 | Comparador | `src/evaluator/compare.py` | Veredicto binario: la lista de acciones grabadas debe coincidir con alguna `accepted_outcome` tras normalización, respetando `forbidden_actions`. Diagnóstico por campo, check de fuga (problema 14) y categorías de fallo del plan §14. |
 | Normalización | `src/evaluator/normalize.py` | La tabla de tolerancia del scorer: DNI/NIE, nombres (NFKD, ñ→n), teléfonos, emails, slots en `Europe/Madrid` al minuto, enums. |
 | Escenarios | `scenarios/**/*.yaml` | Casos versionados con esquema `caller`/`oracle`/`limits` del plan, `split` (development/holdout) y `leak_check`. |
@@ -35,10 +35,23 @@ el servidor ni el túnel con el que otro compañero está ejecutando Prosper.
 ```sh
 uv sync --project evaluator
 
-# 1) Smoke test del propio evaluador (tres dobles: acierta / muta / calla)
+# 1) Smoke test del propio evaluador por WebSocket
+#    (tres dobles: acierta / muta / calla)
 uv run --project evaluator python -m evaluator.cli run \
     --config evaluator/experiments/smoke.yaml
 # → evaluator/experiments/results/<run_id>/{manifest.json,cases.jsonl,report.html}
+
+# 2) Lo mismo por la vía de texto: verifica el contrato `/turns` de punta a
+#    punta (paciente simulado → adaptador → envío dentro de la ventana)
+uv run --project evaluator python -m evaluator.cli run \
+    --config evaluator/experiments/smoke-text.yaml
+```
+
+Para la vía de voz hace falta un TTS local:
+
+```sh
+brew install espeak-ng        # macOS
+sudo apt install espeak-ng    # Debian/Ubuntu
 ```
 
 ## Verificación aislada
@@ -83,23 +96,148 @@ Su responsable lo arranca con estas variables y su comando habitual:
 # terminal A — agente; el runner arranca la clínica local en 18090
 export PROSPER_API_BASE_URL=http://127.0.0.1:18090
 export PROSPER_API_KEY=pk-local-eval
-export PORT=17860
+export VOICE_WS_PORT=17860     # `python -m agent.voice.server`
+# export PORT=17860            # solo si se arranca con `python -m agent.serve`
 
 # terminal B — experimento (no arrancar otra clínica en 18090)
 uv run --project evaluator python -m evaluator.cli run \
     --config evaluator/experiments/agent-local.yaml
 ```
 
+**Nunca uses el 7860.** Ese proceso tiene el túnel ngrok registrado en Prosper
+y atiende llamadas puntuadas de verdad; meterle tráfico de pruebas puede
+tumbar una. Un test del repositorio comprueba que ningún experimento lo
+menciona.
+
 El bloque `env` del candidato solo se aplica si se configura `start_command`;
-no cambia el entorno de un agente que ya está arrancado. La plantilla no
+no cambia el entorno de un agente que ya está arrancado. Con `start_command`
+el runner **espera a que el puerto acepte conexiones** antes del primer caso
+(TCP, 60 s de tope) y aborta si nunca escucha: arrancar el proceso no es lo
+mismo que tener el servicio en pie, y sin esa espera el primer caso se
+perdía. La plantilla no
 arranca, reinicia ni modifica ningún agente. Cada candidato describe una
 configuración externa (modelo, prompts, proveedores); compara varias con
 `candidates` y `repetitions`.
 
-La plantilla necesita escenarios con audio o `tts: true` y un TTS instalado
-para una prueba de voz; los turnos solo de texto se convierten en silencio.
 El reloj del fixture no cambia automáticamente el reloj del agente externo;
 coordina ambos antes de interpretar pruebas con fechas relativas.
+
+### Las dos vías, y cuál usar
+
+| | vía de texto (`text_url`) | vía de voz (`ws_url`) |
+| --- | --- | --- |
+| qué prueba | prompt, brain, herramientas, agenda, envío | además STT, TTS, turn-taking, ruido |
+| paciente | simulado y **reactivo** (responde a lo que dice el agente) | guion fijo, con pausas adaptativas |
+| transcripción | sí → el check de fuga del problema 14 se evalúa | no (el evaluador no hace STT) |
+| coste por caso | segundos | el tiempo real de la llamada |
+
+`text_url` tiene prioridad sobre `ws_url` en el mismo candidato. Para iterar
+sobre la lógica usa texto; para comprobar que la llamada suena, voz.
+
+## Adaptador de texto `/turns`
+
+Contrato exacto que consume `_run_text_call` (`runner/experiment.py`). El
+doble de prueba lo implementa entero (`harness/double_agent.py`), así que se
+puede verificar sin el agente real:
+
+```sh
+uv run --project evaluator python -m evaluator.cli run \
+    --config evaluator/experiments/smoke-text.yaml
+```
+
+**Obligatorio**
+
+```http
+POST {text_url}/turns
+Content-Type: application/json
+
+{"call_id": "9f8e…", "text": "Buenos días, quiero una cita."}
+```
+
+```http
+200 OK
+{"reply": "Clínica Arenal, ¿en qué puedo ayudarle?", "ended": false}
+```
+
+- `call_id` es el mismo identificador que el `start.callSid` de la vía de
+  voz y el `call_id` de `POST /api/v1/submit/*`. **La primera petición con un
+  `call_id` nuevo abre la llamada**; no hay ruta de apertura.
+- `reply` es **una sola intervención del agente**, en texto. `null` o cadena
+  vacía significa "no dije nada"; no rompe la llamada, pero no entra en la
+  transcripción.
+- **Un turno es un turno entero del agente**: varias vueltas al LLM y sus
+  llamadas a herramientas dentro de un mismo POST. Medido contra el agente
+  real (65 turnos): p50 3,4 s, p90 12,3 s, p95 13,6 s, max 20,2 s. El tope
+  es `text_timeout_seconds` del candidato, **120 s por defecto**: un seguro
+  contra cuelgues, no un presupuesto de latencia. El adaptador tiene su
+  propio cliente HTTP; el de la clínica local sigue en 10 s.
+- `scenario.limits.max_call_seconds` acota la **conversación entera** (como
+  los 3 minutos de la plataforma). Al agotarse, el evaluador cuelga y
+  puntúa lo que se haya enviado: no invalida el caso.
+
+**Opcional pero recomendado**
+
+- `"ended": true` en la respuesta: el agente da la llamada por terminada y el
+  evaluador deja de hablar. Si se omite, la llamada acaba cuando el paciente
+  simulado se despide o agota `limits.max_turns`.
+- Cierre explícito de la ventana:
+
+  ```http
+  POST {text_url}/turns
+  {"call_id": "9f8e…", "text": null, "event": "hangup"}
+  ```
+
+  Es el equivalente a que se caiga el socket: el momento de vaciar las
+  acciones encoladas. **Es best-effort**: el evaluador ignora el código de
+  estado y el cuerpo, así que un agente que no lo implemente no pierde
+  ningún caso por ello (devolverá 422 y no pasa nada). Debe ser idempotente.
+
+**Ventana de envío.** Igual que en la vía de voz: el receptor local acepta
+`POST /api/v1/submit/*` mientras la llamada está abierta y hasta 30 s después
+de cerrarla (410 pasado ese plazo, 404 si el `call_id` no existe, 409 si se
+repite una acción idéntica, 422 si faltan campos o la letra del DNI no
+cuadra). Tras el `hangup` el evaluador **sondea el registro** durante
+`submit_drain_s` segundos (2 s por defecto) antes de puntuar, para que un
+flush tardío no se pierda.
+
+**Errores.** Si el adaptador no responde, responde algo que no sea 200 o
+devuelve un cuerpo que no es JSON, el caso se marca `invalid_evaluation`
+—defecto del rig, no fallo del agente— salvo que aun así hubiera envíos
+grabados.
+
+**Lo que el adaptador no tiene que hacer**: ni audio, ni ngrok, ni estado
+global. Un `call_id` por conversación, aislado de los demás.
+
+## La vía de voz: qué mide de verdad
+
+Todos los turnos de `scenarios/**` llevan `tts: true`, y
+`experiments/agent-local.yaml` define `tts_command: espeak-ng`. El llamante
+sintetiza cada línea a µ-law 8 kHz (caché en `.tts-cache/` por texto, así
+que dos candidatos oyen exactamente la misma voz) y la reproduce en tiempo
+real por el socket.
+
+**Sé honesto con lo que eso significa:**
+
+- `espeak-ng` es un sintetizador formántico. Suena a robot: prosodia plana,
+  sin respiraciones, sin dudas, sin acento, sin ruido de línea. **No es una
+  voz humana ni se le parece.** Un STT que entienda a espeak-ng puede fallar
+  con una persona, y al revés.
+- Sirve para lo que estaba roto: comprobar que el agente **oye algo**,
+  arranca, hace preguntas, usa herramientas y envía. No sirve para concluir
+  nada sobre la calidad del reconocimiento ni sobre el turn-taking real.
+- El guion es fijo: el llamante dice sus líneas en orden, pase lo que pase.
+  Espera a que el agente termine de hablar (silencio de 800 ms, tope de 15 s
+  por turno, `VOICE_MAX_HOLD_MS`) antes de soltar la siguiente, pero no
+  improvisa. Si el agente pregunta otra cosa, el guion no se entera.
+- El ruido de `scenarios/noise/no-001.yaml` se mezcla ahora sobre voz de
+  verdad, no sobre silencio, pero es ruido marrón sintético: una
+  aproximación, no las texturas oficiales (calle, TV, coche).
+- Sin `tts_command`, o si falla el binario, el caso sale
+  `invalid_evaluation` con el motivo. **Ya no se puntúa a un agente al que
+  se le ha reproducido silencio.**
+
+Para una prueba con voz humana, graba los turnos y ponlos en `audio:`
+(µ-law 8 kHz crudo, relativo al escenario): tiene prioridad sobre el TTS.
 
 ## Formato de escenario
 
@@ -130,7 +268,9 @@ caller:
 turns:                            # script para la vía de voz (WS)
   - text: "..."        # turno del caller (adaptador de texto / transcript)
     audio: turno1.ulaw # opcional: audio µ-law 8 kHz para la vía de voz
-    tts: false         # true = sintetiza `text` con el TTS del experimento
+    tts: true          # sintetiza `text` con el TTS del experimento.
+                       # Todos los escenarios del repo lo llevan: sin él
+                       # (o sin `audio:`) el caso sale invalid_evaluation.
     hold_ms: 2000
     noise:             # opcional: mezcla ruido sobre el audio del turno
       synth: brown     # o file: ruido.ulaw para un asset grabado
@@ -184,8 +324,11 @@ imprescindible bajo concurrencia.
 
 **TTS.** `tts_command: espeak-ng` (o `pico2wave`) en el experimento sintetiza
 los turnos con `tts: true` a µ-law 8 kHz, cacheado por texto en
-`.tts-cache/`. Sin binario, el turno cae a silencio (límite del rig, no
-fallo del agente).
+`.tts-cache/`. Todos los escenarios llevan ya `tts: true`. Sin binario el
+turno cae a silencio **y el caso se marca `invalid_evaluation`** con el
+motivo: es un defecto del rig, no un fallo del agente, y puntuarlo era el
+error que hacía fallar los 21 casos. Ver «La vía de voz: qué mide de
+verdad».
 
 **Paciente LLM.** `caller.llm` activa un paciente con endpoint
 OpenAI-compatible (Ollama, llama.cpp…). El prompt solo lleva persona +
@@ -215,9 +358,10 @@ Lo que el evaluador necesita del agente (ver plan, §6):
 - `CLINIC_API_BASE_URL` / `SUBMISSION_API_BASE_URL` configurables — con
   `PROSPER_API_BASE_URL` basta (el receptor local usa las mismas rutas).
 - `WS` compatible con el contrato Twilio (`ws://host/ws`).
-- Opcional: adaptador de texto `POST {text_url}/turns {call_id, text}` →
-  `{reply}` — activa escenarios por texto y transcript para el check de
-  fuga del problema 14.
+- Adaptador de texto `POST {text_url}/turns {call_id, text}` → `{reply}`:
+  la vía de más valor, porque corre los 21 escenarios en segundos y sin
+  gastar ninguna llamada puntuada. Contrato completo en «Adaptador de texto
+  `/turns`»; el doble lo implementa y `smoke-text.yaml` lo verifica.
 - `call_id` = `start.callSid` exacto; ventana de submission 30 s tras el
   cierre del socket.
 
@@ -231,10 +375,23 @@ Lo que el evaluador necesita del agente (ver plan, §6):
   vez de contarlos contra el agente.
 - Evidencia: audio caller/agente por caso (`evidence/*.wav`), intentos de
   submission, latencias por turno, eventos de barge-in.
-- Voz: turnos con fixture µ-law, TTS local opcional (`espeak-ng`/
-  `pico2wave`, con caché) o silencio. El ruido por defecto es sintético
-  determinista — las texturas oficiales (calle/TV/coche) irían como assets
-  `noise.file` cuando existan.
+- Voz: turnos con fixture µ-law o TTS local (`espeak-ng`/`pico2wave`, con
+  caché). La voz sintética es robótica y el guion es fijo: mide que el
+  agente oye y reacciona, no la calidad del reconocimiento. El ruido por
+  defecto es sintético determinista — las texturas oficiales
+  (calle/TV/coche) irían como assets `noise.file` cuando existan.
+- **El check de fuga (problema 14) solo se evalúa en la vía de texto.** Por
+  WebSocket no hay transcripción porque el evaluador no hace STT, así que
+  no puede comprobar si el agente dijo un DNI en voz alta. En ese caso el
+  resultado marca `checks_not_run: ["leak_check"]` y el informe lo imprime:
+  un caso puede pasar con la comprobación de privacidad sin ejecutar, y eso
+  tiene que verse. Para cubrir el problema 14 de verdad, corre ese
+  escenario por texto.
+- El dataset local es una miniatura inventada (6 pacientes, 7 médicos, 3
+  sedes, 4 planes, 8 tipos de cita) frente a la clínica real (~3.000
+  pacientes, 12 médicos, 10 planes, 11 tipos). `report.html` abre con ese
+  aviso y la tabla comparativa: pasar aquí valida **lógica**, no
+  corrección contra los datos oficiales.
 - `availability` local es una aproximación fiel (calendario, schedules,
   `blocked` por baja y por aseguradora rechazada) — no reproduce cada
   restricción del backend oficial.

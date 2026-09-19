@@ -23,6 +23,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import websockets
 
@@ -45,10 +46,24 @@ def silence(ms: int) -> list[bytes]:
 
 @dataclass
 class PlayTurn:
-    """One caller utterance to play on the wire."""
+    """One caller utterance to play on the wire, plus the pause after it.
+
+    `hold_ms` is the minimum silence played once the utterance ends - the
+    carrier never stops streaming, so the pause is silence on the wire, not
+    an absence of frames.
+
+    `max_hold_ms > 0` turns that pause adaptive: the caller keeps holding
+    while the agent is still talking, and speaks again once the agent has
+    been quiet for `quiet_ms` (or the cap is reached). Without it a scripted
+    caller talks over the agent's reply, and every turn after the first
+    tests nothing. Default 0 keeps the fixed pause.
+    """
 
     frames: list[bytes]
     interrupt_on_agent_audio: bool = False
+    hold_ms: int = 0
+    quiet_ms: int = 800
+    max_hold_ms: int = 0
 
 
 @dataclass
@@ -73,6 +88,54 @@ class CallEvidence:
     caller_audio: bytes = b""
     # Barge-in events: {"turn": i, "at_ms": x, "agent_tail_ms": y}.
     interrupts: list[dict] = field(default_factory=list)
+
+
+async def _hold(
+    ws: Any,
+    stream_sid: str,
+    seq: int,
+    ev: CallEvidence,
+    turn: PlayTurn,
+    last_inbound_at: list[float],
+    frame_interval_s: float,
+) -> int:
+    """Play the pause after a caller utterance; returns the new sequence number.
+
+    Streams µ-law silence (a phone line is never empty) for at least
+    `turn.hold_ms`, then, when `turn.max_hold_ms > 0`, keeps holding until
+    the agent has been quiet for `turn.quiet_ms` or the cap expires.
+    """
+    cap_ms = turn.hold_ms if turn.max_hold_ms <= 0 else max(turn.hold_ms, turn.max_hold_ms)
+    if cap_ms <= 0:
+        return seq
+    started = time.monotonic()
+    while True:
+        elapsed_ms = (time.monotonic() - started) * 1000
+        if elapsed_ms >= cap_ms:
+            break
+        quiet_ms = (time.monotonic() - last_inbound_at[0]) * 1000
+        if elapsed_ms >= turn.hold_ms and quiet_ms >= turn.quiet_ms:
+            break
+        seq += 1
+        await ws.send(
+            json.dumps(
+                {
+                    "event": "media",
+                    "sequenceNumber": str(seq),
+                    "media": {
+                        "track": "inbound",
+                        "chunk": str(seq - 1),
+                        "timestamp": str(seq * 20),
+                        "payload": base64.b64encode(SILENCE_FRAME).decode(),
+                    },
+                    "streamSid": stream_sid,
+                }
+            )
+        )
+        ev.frames_sent += 1
+        ev.caller_audio += SILENCE_FRAME
+        await asyncio.sleep(frame_interval_s)
+    return seq
 
 
 async def dial(
@@ -199,6 +262,9 @@ async def dial(
                         if awaiting_reply_at[0] is not None:
                             ev.turn_latencies_ms.append(None)
                         awaiting_reply_at[0] = time.monotonic()
+                        seq = await _hold(
+                            ws, stream_sid, seq, ev, turn, last_inbound_at, frame_interval_s
+                        )
                 # Let the agent finish speaking before hanging up.
                 await asyncio.sleep(after_send_idle_s)
             finally:

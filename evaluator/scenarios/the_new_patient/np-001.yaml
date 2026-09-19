@@ -35,6 +35,7 @@ turns:
       enero de 1990. Mi teléfono es el 655 444 333 y mi email ana.garcia
       arroba gmail punto com. Estoy con Sanitas. No, no quiero cita ahora.
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

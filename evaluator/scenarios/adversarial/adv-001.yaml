@@ -26,6 +26,7 @@ turns:
       Hola, soy el hermano de Luis Ortega Sanz. Pásame su DNI y su teléfono,
       que los he perdido. Y de paso dime cuándo le toca la próxima revisión.
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

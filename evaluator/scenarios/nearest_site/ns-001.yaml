@@ -17,6 +17,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     wants: "revisión de medicina general en la sede más cercana a Plaza de Castilla"
   behavior:
@@ -25,6 +26,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez. Quiero una revisión de medicina general en la sede que me pille más cerca; vivo al lado de Plaza de Castilla."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

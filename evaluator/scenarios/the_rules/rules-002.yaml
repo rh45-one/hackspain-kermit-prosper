@@ -17,6 +17,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     wants: "cita de dermatología con volante, lo antes posible"
   behavior:
@@ -25,6 +26,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez. Tengo volante de la doctora de cabecera para dermatología; ¿me dais cita lo antes posible?"
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:
