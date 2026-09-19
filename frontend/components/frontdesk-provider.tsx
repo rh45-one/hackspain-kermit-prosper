@@ -325,8 +325,8 @@ export function FrontdeskProvider({
       addKnowledgeSource,
       calls,
       activeCount,
-      capacityLabel: demo ? `${activeCount}/${CALL_CAPACITY} llamadas activas` :
-        `${activeCount} llamadas abiertas en el registro`,
+      capacityLabel: demo ? `${activeCount}/${CALL_CAPACITY} líneas ocupadas` :
+        `${activeCount} llamadas abiertas`,
       tunnelConfigured: isValidTunnelUrl(settings.tunnelUrl),
       takeControl,
       controlFor,

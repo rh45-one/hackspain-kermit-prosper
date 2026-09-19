@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { TriageLevelBadge } from "@/components/leaderboard/triage-level-badge";
+import { toBusinessCase } from "@/lib/arena-business";
 import type { EvaluationResult, IdentityStatus } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -71,24 +72,34 @@ export function LeaderboardDetailDialog({
   onOpenChange,
 }: LeaderboardDetailDialogProps) {
   const identity = result ? IDENTITY_LABEL[result.identityStatus] : null;
+  const business = result ? toBusinessCase(result) : null;
 
   return (
     <Dialog open={result !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg border-mist bg-canvas-white sm:max-w-lg">
-        {result ? (
+        {result && business ? (
           <>
             <DialogHeader>
               <DialogTitle className="pr-10 font-heading text-[clamp(1.5rem,4vw,1.85rem)] font-medium tracking-[-0.04em]">
                 {result.personaScenario}
               </DialogTitle>
               <DialogDescription className="font-heading text-steel">
-                {result.aiProvider} · diagnóstico del motor
+                {business.resultLabel} · {business.urgencyLabel}
               </DialogDescription>
             </DialogHeader>
 
+            <div className="rounded-lg bg-fog px-4 py-3">
+              <p className="text-[14px] leading-relaxed text-graphite">
+                {business.assistantDid}
+              </p>
+              <p className="mt-2 text-[13px] leading-relaxed text-steel">
+                {business.clinicMeaning}
+              </p>
+            </div>
+
             <div className="space-y-1">
               <p className="mb-2 font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-                Negocio / auditoría
+                Etiquetas de seguimiento
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <TriageLevelBadge level={result.triageLevel} />
