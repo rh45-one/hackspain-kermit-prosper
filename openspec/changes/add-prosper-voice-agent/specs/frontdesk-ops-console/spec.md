@@ -5,7 +5,7 @@
 ### Requirement: Staff dashboard shell
 The FrontDesk SHALL live in `frontend/` as a Next.js App Router app and SHALL
 present a Ventriloc observatory chrome: brand wordmark, a centered pill nav
-(Llamadas, Calendario, Pacientes, Agente), and a header that shows
+(Llamadas, Calendario, Pacientes, Problemas, Agente), and a header that shows
 public-tunnel connection state and capacity as `n/10` active calls. The
 palette is achromatic paper (Graphite, Ash, Ivory) with Ember Orange and
 Brass as the only chromatic accents.
@@ -13,7 +13,7 @@ Brass as the only chromatic accents.
 #### Scenario: Receptionist lands
 - **WHEN** a staff member opens the app
 - **THEN** they see the dashboard shell and can reach `/calls`, `/patients`,
-  `/calendar` and `/settings` without leaving the layout.
+  `/calendar`, `/problems` and `/settings` without leaving the layout.
 
 #### Scenario: Capacity at a glance
 - **WHEN** three mock (or live) calls are active
@@ -101,3 +101,38 @@ Orange and Brass as the only chromatic chart strokes.
 #### Scenario: Refusal mix is closed-vocabulary
 - **WHEN** mock (or later audit) records include `NO_ACTION`
 - **THEN** the chart names the restriction reason, not a free-text label.
+
+### Requirement: Practice problem catalog
+The `/problems` view SHALL render the eighteen-problem Prosper roster as a
+static, mock-first catalog (not a live harness API). Each row SHALL show
+number, title, official `problem_id`, public-case count, weight (or
+diagnostic for `switchboard`), and open/closed state. Closed problems SHALL
+remain visible as a roadmap and SHALL NOT be dialable from FrontDesk. The
+browser SHALL NOT attach to Twilio Media Streams `/ws` and SHALL NOT expose
+a Call / practice-dial control.
+
+`/problems/[problem_id]` SHALL show the problem brief, the expected answer
+verbs as Ventriloc outcome chips, and any published structured extras
+(date vocabulary, triage routes, red flags, noise textures, protected
+fields). Official public cases SHALL NOT be invented: until a vendored
+`public-cases.json` exists the cases list is empty and the page states the
+expected public count. An unknown `problem_id` SHALL 404.
+
+#### Scenario: Roster is a roadmap
+- **WHEN** a staff member opens `/problems`
+- **THEN** they see all eighteen rows in published order, problems 1–6
+  marked open, and unopened rows still readable.
+
+#### Scenario: Switchboard is diagnostic
+- **WHEN** the `switchboard` row is shown
+- **THEN** it has no weight, is labelled diagnostic, and is not treated as
+  a scored problem.
+
+#### Scenario: Detail without invented cases
+- **WHEN** they open `/problems/simple_booking`
+- **THEN** they see the brief, expected `BOOK` chip, and an empty public
+  cases list that names the expected count of 4.
+
+#### Scenario: Unknown problem
+- **WHEN** they open `/problems/not-a-problem`
+- **THEN** the app returns not found.

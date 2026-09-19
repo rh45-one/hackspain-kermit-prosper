@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Activity, CalendarDays, ContactRound, Radio, SlidersHorizontal } from "lucide-react";
+import { Activity, CalendarDays, ClipboardList, ContactRound, Radio, SlidersHorizontal } from "lucide-react";
 
 import { useFrontdesk } from "@/components/frontdesk-provider";
 import { formatMadrid } from "@/lib/timezone";
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/calls", label: "Llamadas", icon: Radio },
   { href: "/calendar", label: "Calendario", icon: CalendarDays },
   { href: "/patients", label: "Pacientes", icon: ContactRound },
+  { href: "/problems", label: "Problemas", icon: ClipboardList },
   { href: "/settings", label: "Agente", icon: SlidersHorizontal },
 ] as const;
 
@@ -66,7 +67,8 @@ export function ObservatoryChrome() {
 
         <nav className="hidden items-center gap-1 rounded-xl border border-mist bg-canvas-white p-1 shadow-[var(--shadow-sm)] md:flex">
           {NAV.map((item) => {
-            const active = pathname === item.href;
+            const active =
+              pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link
                 key={item.href}
@@ -108,9 +110,10 @@ export function ObservatoryChrome() {
           </span>
         </div>
       </div>
-      <nav className="mx-auto grid max-w-[var(--page-max-width)] grid-cols-4 border-t border-mist/80 md:hidden">
+      <nav className="mx-auto grid max-w-[var(--page-max-width)] grid-cols-5 border-t border-mist/80 md:hidden">
         {NAV.map((item) => {
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (
             <Link

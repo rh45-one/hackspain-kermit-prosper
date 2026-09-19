@@ -158,7 +158,8 @@ Run All) decides whether `gemini_live` becomes the default in place of
 ### D15. FrontDesk is Next.js, mock-first
 Clinic staff use a Next.js App Router + Tailwind + shadcn/ui app in
 `frontend/`. Routes: `/calls` (live monitor), `/patients` (directory),
-`/calendar` (week/day), `/settings` (tunnel, voice, knowledge sources).
+`/calendar` (week/day), `/problems` (practice catalog), `/settings`
+(tunnel, voice, knowledge sources).
 Spanish UI, English code. Until `/ops/api/*` is wired, the UI runs on
 typed mock data shaped like directory / appointments / call audit records.
 
@@ -173,7 +174,9 @@ action verbs onto that palette: `BOOK`/`REGISTER`/`RESCHEDULE` → BOOKED
 reason shown), `ESCALATE` → DIVERTED (Ember). Patient "triaje" is a
 reception flag derived from the latest agent action, not a clinical
 score. Handover is an ESCALATE seam in the UI. Shell is a floating pill
-nav, not a sidebar. `/calls` carries a Ventriloc metrics cluster (capacity
+nav, not a sidebar. `/problems` is a static rehearsal catalog of the
+eighteen-problem roster (open/closed, expected verbs); it does not dial
+the harness. `/calls` carries a Ventriloc metrics cluster (capacity
 ring, hourly sockets vs submissions, closed outcome mix) on mock series
 shaped like the audit log; Ember and Brass are the only chart strokes.
 

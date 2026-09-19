@@ -54,8 +54,9 @@ the Deepgram → OpenAI-compatible LLM → ElevenLabs cascade as rollback.
 
 ### frontdesk-ops-console
 - Staff dashboard in `frontend/`: up to 10 live call cards, patient search
-  (name + DNI/NIE), appointment calendar in Europe/Madrid, tunnel/voice
-  settings. FastAPI `/ops` stays the JSON/HTML fallback.
+  (name + DNI/NIE), appointment calendar in Europe/Madrid, read-only
+  practice catalog at `/problems`, tunnel/voice settings. FastAPI `/ops`
+  stays the JSON/HTML fallback.
 
 ## Impact
 

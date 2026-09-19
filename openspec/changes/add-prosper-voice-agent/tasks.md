@@ -54,6 +54,7 @@ module; live-gate items stay unchecked.
 - [ ] 6.8 ClinicReflow demo seam: "doctor unavailable" → affected list → negotiation call → plan delta
 - [x] 6.9 Observatory metrics on `/calls`: capacity ring, hourly load/submissions, closed outcome mix (mock-first)
 - [x] 6.10 Call management modal from "Canales de llamada" cards: full transcript, local operator-control UI, unwired composer, secondary action placeholders
+- [x] 6.11 Practice catalog: `/problems` roster (18 rows, open/closed, switchboard diagnostic) + `/problems/[problem_id]` brief with answer chips; no Call button; public cases empty until official JSON is vendored
 
 ## 7. Gemini Live audio host (new)
 
