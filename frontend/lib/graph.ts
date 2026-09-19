@@ -322,7 +322,31 @@ export type RoutingLayout = {
  * no route is a fact about the clinic, not an empty slot to hide.
  */
 export function layoutRouting(graph: ClinicGraph, visible: Set<Urgency>): RoutingLayout {
-  const roleNodes = graph.nodes.filter((n) => n.kind === "role");
+  const everyone = graph.nodes.filter((n) => n.kind === "role");
+
+  /**
+   * Who substitutes for whom. Read first, because it is what splits this
+   * column in two.
+   *
+   * With forty-three people the old rule — one big box each, anchored to the
+   * routes that reach them — drew a four-thousand-pixel ladder in which the
+   * eight people a route actually reaches were indistinguishable from the
+   * thirty-five who step in when one of those eight cannot. Same size, same
+   * column, no order. The information was all there and none of it was
+   * legible.
+   *
+   * So the column keeps the listeners, and everybody else hangs off the
+   * person they cover, to the right and smaller. The shape of the picture
+   * then says the thing the data says: a route reaches somebody, and behind
+   * that somebody there is a chain.
+   */
+  const parentOf = new Map<string, string>();
+  for (const edge of graph.edges) {
+    if (edge.kind === "covers_for" && edge.source !== edge.target) {
+      parentOf.set(edge.source, edge.target);
+    }
+  }
+  const roleNodes = everyone.filter((n) => !parentOf.has(n.id));
   const declared = new Map(roleNodes.map((n, i) => [n.id, i]));
   const reasonNodes = new Map(
     graph.nodes.filter((n) => n.kind === "reason").map((n) => [n.meta.reason ?? n.id, n]),
@@ -441,12 +465,8 @@ export function layoutRouting(graph: ClinicGraph, visible: Set<Urgency>): Routin
    * column keeps its own cursor, so two chains of different lengths never
    * land on top of each other.
    */
-  const parentOf = new Map<string, string>();
-  for (const edge of graph.edges) {
-    if (edge.kind === "covers_for") parentOf.set(edge.source, edge.target);
-  }
   const children = new Map<string, GraphNode[]>();
-  for (const node of roleNodes) {
+  for (const node of everyone) {
     const parent = parentOf.get(node.id);
     if (parent === undefined || parent === node.id) continue;
     const list = children.get(parent);
@@ -486,9 +506,11 @@ export function layoutRouting(graph: ClinicGraph, visible: Set<Urgency>): Routin
   // Roots first, in the order the listener column already settled on, so a
   // chain starts level with the person it belongs to.
   for (const seat of roles) walk(seat.node.id, seat, 1);
-  // Anybody left is in a chain whose root nobody routes to. They are still
-  // staff and still have to be on the picture.
-  for (const node of roleNodes) {
+  // Anybody left covers somebody who is not on the picture — a chain whose
+  // root was deleted, or one that loops. They are still staff and still have
+  // to be drawn; a person who vanishes because their row is odd is worse than
+  // a person sitting slightly out of place.
+  for (const node of everyone) {
     if (seated.has(node.id)) continue;
     seated.add(node.id);
     const floor = cursors.get(1) ?? ROUTE_TOP;
