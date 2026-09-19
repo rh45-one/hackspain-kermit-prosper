@@ -419,6 +419,12 @@ async def _run_case(
                 )
                 if ev.error:
                     errors.append(ev.error)
+            if ev is not None:
+                # Measured for every websocket path, doubles included: how fast
+                # the agent answered is a metric of the rig's runs, not a
+                # privilege of candidates that speak with a real voice. Those
+                # runs are the only ones that work without provider keys, and
+                # they were reporting n/d for latency.
                 latencies = [x for x in ev.turn_latencies_ms if x is not None]
                 first_audio_ms = ev.first_audio_ms
                 interrupts = ev.interrupts
