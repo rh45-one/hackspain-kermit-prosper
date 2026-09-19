@@ -1,5 +1,5 @@
-import { AppointmentsCalendar } from "@/components/calendar/appointments-calendar";
+import { redirect } from "next/navigation";
 
 export default function CalendarPage() {
-  return <AppointmentsCalendar />;
+  redirect("/patients?tab=calendar");
 }

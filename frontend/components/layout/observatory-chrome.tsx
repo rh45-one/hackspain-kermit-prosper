@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Activity, CalendarDays, ClipboardList, ContactRound, Radio, SlidersHorizontal } from "lucide-react";
+import {
+  Activity,
+  ContactRound,
+  Radio,
+  SlidersHorizontal,
+  Trophy,
+} from "lucide-react";
 
 import { useFrontdesk } from "@/components/frontdesk-provider";
 import { formatMadrid } from "@/lib/timezone";
@@ -11,11 +17,28 @@ import { CALL_CAPACITY } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/calls", label: "Llamadas", icon: Radio },
-  { href: "/calendar", label: "Calendario", icon: CalendarDays },
-  { href: "/patients", label: "Pacientes", icon: ContactRound },
-  { href: "/problems", label: "Problemas", icon: ClipboardList },
-  { href: "/settings", label: "Agente", icon: SlidersHorizontal },
+  { href: "/calls", label: "Llamadas", icon: Radio, match: (path: string) => path === "/calls" || path.startsWith("/calls/") },
+  {
+    href: "/leaderboard",
+    label: "Arena",
+    icon: Trophy,
+    match: (path: string) =>
+      path === "/leaderboard" ||
+      path.startsWith("/leaderboard/") ||
+      path === "/problems" ||
+      path.startsWith("/problems/"),
+  },
+  {
+    href: "/patients",
+    label: "Clínica",
+    icon: ContactRound,
+    match: (path: string) =>
+      path === "/patients" ||
+      path.startsWith("/patients/") ||
+      path === "/calendar" ||
+      path.startsWith("/calendar/"),
+  },
+  { href: "/settings", label: "Agente", icon: SlidersHorizontal, match: (path: string) => path === "/settings" || path.startsWith("/settings/") },
 ] as const;
 
 export function ObservatoryChrome() {
@@ -67,8 +90,7 @@ export function ObservatoryChrome() {
 
         <nav className="hidden items-center gap-1 rounded-xl border border-mist bg-canvas-white p-1 shadow-[var(--shadow-sm)] md:flex">
           {NAV.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active = item.match(pathname);
             return (
               <Link
                 key={item.href}
@@ -110,10 +132,9 @@ export function ObservatoryChrome() {
           </span>
         </div>
       </div>
-      <nav className="mx-auto grid max-w-[var(--page-max-width)] grid-cols-5 border-t border-mist/80 md:hidden">
+      <nav className="mx-auto grid max-w-[var(--page-max-width)] grid-cols-4 border-t border-mist/80 md:hidden">
         {NAV.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = item.match(pathname);
           const Icon = item.icon;
           return (
             <Link

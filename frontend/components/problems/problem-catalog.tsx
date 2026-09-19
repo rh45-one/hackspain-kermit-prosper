@@ -22,19 +22,30 @@ function publicCountLabel(problem: ProblemBrief): string {
   return String(problem.publicCaseCount);
 }
 
-export function ProblemCatalog() {
+export function ProblemCatalog({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const openCount = PROBLEMS.filter((problem) => problem.open).length;
 
   return (
     <div>
-      <PageHeader kicker="Ensayo" title="Problemas">
-        Dieciocho problemas, diecisiete puntuados. Esta pantalla es la hoja de
-        ruta: los cerrados se leen, no se marcan. FrontDesk no llama al harness.
-      </PageHeader>
+      {!embedded ? (
+        <PageHeader kicker="Ensayo" title="Problemas">
+          Dieciocho problemas, diecisiete puntuados. Esta pantalla es la hoja de
+          ruta: los cerrados se leen, no se marcan. FrontDesk no llama al harness.
+        </PageHeader>
+      ) : (
+        <p className="mb-6 max-w-2xl text-[14px] leading-relaxed text-steel sm:mb-8">
+          Dieciocho problemas, diecisiete puntuados. Hoja de ruta del harness:
+          los cerrados se leen, no se marcan. FrontDesk no llama al harness.
+        </p>
+      )}
 
       <p
         data-reveal=""
-        data-delay="1"
+        data-delay={embedded ? undefined : "1"}
         className="mb-8 font-heading text-[13px] text-steel sm:mb-10"
       >
         <span className="text-brass">{openCount} abiertos</span>
@@ -46,7 +57,7 @@ export function ProblemCatalog() {
 
       <section
         data-reveal=""
-        data-delay="2"
+        data-delay={embedded ? undefined : "2"}
         className="surface overflow-hidden rounded-[18px]"
       >
         <Table className="min-w-[860px]">

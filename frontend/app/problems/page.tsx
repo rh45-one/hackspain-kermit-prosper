@@ -1,5 +1,5 @@
-import { ProblemCatalog } from "@/components/problems/problem-catalog";
+import { redirect } from "next/navigation";
 
 export default function ProblemsPage() {
-  return <ProblemCatalog />;
+  redirect("/leaderboard?tab=problems");
 }

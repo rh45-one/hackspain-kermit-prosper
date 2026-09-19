@@ -1,5 +1,11 @@
-import { PatientDirectory } from "@/components/patients/patient-directory";
+import { Suspense } from "react";
+
+import { ClinicDashboard } from "@/components/clinic/clinic-dashboard";
 
 export default function PatientsPage() {
-  return <PatientDirectory />;
+  return (
+    <Suspense fallback={null}>
+      <ClinicDashboard />
+    </Suspense>
+  );
 }

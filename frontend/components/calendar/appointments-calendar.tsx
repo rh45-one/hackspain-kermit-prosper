@@ -89,7 +89,11 @@ function Legend() {
   );
 }
 
-export function AppointmentsCalendar() {
+export function AppointmentsCalendar({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { appointments, demo } = useFrontdesk();
   const [dayKey, setDayKey] = useState(() => madridDayKey(new Date()));
   const [mode, setMode] = useState<"week" | "day">("week");
@@ -123,18 +127,29 @@ export function AppointmentsCalendar() {
 
   return (
     <div>
-      <div className="mb-10 flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
-        <PageHeader className="mb-0" kicker="Agenda Europe/Madrid" title="Calendario de citas">
-          {demo ? "Agenda simulada con resultados del agente." :
-            "Citas de los pacientes de la última búsqueda en Directorio, actualizadas cada minuto. Busca un paciente en Directorio para cargar su agenda. Los envíos del agente no modifican este EHR."}
-          {" "}Horas en Europe/Madrid.
-        </PageHeader>
-        <Legend />
-      </div>
+      {!embedded ? (
+        <div className="mb-10 flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
+          <PageHeader className="mb-0" kicker="Agenda Europe/Madrid" title="Calendario de citas">
+            {demo ? "Agenda simulada con resultados del agente." :
+              "Citas de los pacientes de la última búsqueda en Directorio, actualizadas cada minuto. Busca un paciente en Directorio para cargar su agenda. Los envíos del agente no modifican este EHR."}
+            {" "}Horas en Europe/Madrid.
+          </PageHeader>
+          <Legend />
+        </div>
+      ) : (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-2xl text-[14px] leading-relaxed text-steel">
+            {demo
+              ? "Agenda simulada con resultados del agente. Horas en Europe/Madrid."
+              : "Citas de la última búsqueda en Pacientes, actualizadas cada minuto. Horas en Europe/Madrid."}
+          </p>
+          <Legend />
+        </div>
+      )}
 
       <div
         data-reveal=""
-        data-delay="1"
+        data-delay={embedded ? undefined : "1"}
         className="mb-5 flex flex-wrap items-center gap-2 sm:gap-3"
       >
         <Button
@@ -179,7 +194,7 @@ export function AppointmentsCalendar() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <div
           data-reveal=""
-          data-delay="1"
+          data-delay={embedded ? undefined : "1"}
           className="surface overflow-x-auto rounded-[18px]"
         >
           <div
@@ -260,7 +275,7 @@ export function AppointmentsCalendar() {
         </div>
         <aside
           data-reveal=""
-          data-delay="2"
+          data-delay={embedded ? undefined : "2"}
           className="surface h-fit rounded-[18px] p-5 sm:p-7"
         >
           <p className="mb-4 font-heading text-[16px] text-graphite">Ir a fecha</p>

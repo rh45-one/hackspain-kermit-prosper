@@ -35,7 +35,7 @@ import {
 import { formatMadrid } from "@/lib/timezone";
 import type { Patient } from "@/lib/types";
 
-export function PatientDirectory() {
+export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
   const { patients, appointments, demo, searchPatients, clinicLoading, clinicSearched, clinicError } = useFrontdesk();
   const [nameQuery, setNameQuery] = useState("");
   const [idQuery, setIdQuery] = useState("");
@@ -77,11 +77,13 @@ export function PatientDirectory() {
 
   return (
     <div>
-      <PageHeader kicker="Directorio" title="Pacientes">
-        {demo ? "Directorio simulado." : "Directorio de la clínica configurada en el backend."}
-        {demo ? " Filtra los resultados por nombre o DNI/NIE." :
-          " Busca por nombre y apellido o DNI/NIE completo. La búsqueda se actualiza cada minuto."}
-      </PageHeader>
+      {!embedded ? (
+        <PageHeader kicker="Directorio" title="Pacientes">
+          {demo ? "Directorio simulado." : "Directorio de la clínica configurada en el backend."}
+          {demo ? " Filtra los resultados por nombre o DNI/NIE." :
+            " Busca por nombre y apellido o DNI/NIE completo. La búsqueda se actualiza cada minuto."}
+        </PageHeader>
+      ) : null}
 
       <form
         onSubmit={(event) => {
@@ -94,7 +96,7 @@ export function PatientDirectory() {
           }
         }}
         data-reveal=""
-        data-delay="1"
+        data-delay={embedded ? undefined : "1"}
         className="mb-8 rounded-[18px] border border-mist bg-ash/70 p-[var(--card-padding)] shadow-[var(--shadow-sm)] sm:mb-10"
       >
         <p className="font-heading text-[17px] text-graphite">{demo ? "Filtros" : "Buscar pacientes"}</p>
@@ -155,7 +157,7 @@ export function PatientDirectory() {
 
       <section
         data-reveal=""
-        data-delay="2"
+        data-delay={embedded ? undefined : "2"}
         className="surface overflow-hidden rounded-[18px]"
       >
         <Table className="min-w-[760px]">

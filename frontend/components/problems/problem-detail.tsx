@@ -25,11 +25,11 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
   return (
     <div>
       <Link
-        href="/problems"
+        href="/leaderboard?tab=problems"
         className="mb-8 inline-flex items-center gap-2 font-heading text-[13px] text-steel transition-colors hover:text-graphite"
       >
         <ArrowLeft className="size-3.5" strokeWidth={1.8} />
-        Volver al roster
+        Volver a Arena · Problemas
       </Link>
 
       <PageHeader kicker={`Problema ${problem.number}`} title={problem.titleEs}>
