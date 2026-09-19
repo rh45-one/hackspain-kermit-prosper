@@ -106,7 +106,7 @@ In a second terminal:
 make tunnel
 ```
 
-Or use one terminal for both processes:
+Or use one terminal for both processes (from the repo root: `make -C backend public`):
 
 ```sh
 make public
@@ -114,7 +114,8 @@ make public
 
 `make public` reuses a healthy local voice server when one exists; otherwise it
 starts one, waits for `/healthz`, then opens ngrok. Press Ctrl-C to close the
-tunnel and any server it started itself.
+tunnel and any server it started itself. The same public host serves the
+browser phone at `https://<ngrok-host>/call`.
 
 On an ngrok Free plan, `make tunnel` prints a temporary public HTTPS URL. Copy
 its `wss://.../ws` form into `PUBLIC_WS_URL` and the Prosper dashboard. The URL
@@ -174,13 +175,26 @@ the calendar window all degrade — silently, which is the worst part.
 
 ## Local simulator (no harness)
 
-Open `http://localhost:7860/call` after `make run`, press **Call**, and allow
-microphone access. Press the same button to hang up. The page exchanges the
-Twilio Media Streams format with the real agent pipeline, but browser demo
-calls are retained only in the local audit and never submitted to Prosper.
+The browser phone is `GET /call` (static client in `serverwebsock/`) talking to
+`/ws/demo`. Microphone access needs HTTPS or `localhost`. The one-command
+path, from the repository root:
 
-Microphone access requires `localhost` or HTTPS. The deployed page is available
-at `https://<host>/call` and connects to same-origin `wss://<host>/ws/demo`.
+```sh
+make -C backend public
+```
+
+That starts the voice server if it is not already up, then opens ngrok. Open
+`https://<ngrok-host>/call`, press **Call**, allow the microphone. Press the
+same button to hang up.
+
+On this machine only, `make run` and `http://localhost:7860/call` also work.
+From a phone or another device on the LAN, use the ngrok URL — a raw
+`http://<lan-ip>:7860/call` will not get a microphone.
+
+The page exchanges the Twilio Media Streams format with the real agent
+pipeline. Browser demo calls stay in the local audit and are never submitted
+to Prosper. The deployed page is the same: `https://<host>/call` →
+`wss://<host>/ws/demo`.
 
 The scripted WAV simulator remains available:
 

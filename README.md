@@ -45,8 +45,21 @@ The same targets are wrapped by the backend Makefile:
 make -C backend sync
 make -C backend run
 make -C backend ops
-make -C backend public        # local voice server + public ngrok URL
+make -C backend public        # voice server + ngrok; phone UI at https://<host>/call
 ```
+
+### Browser phone (WebSocket call)
+
+`make -C backend public` is the one-command way to talk to the agent from a
+browser. It starts the voice server if needed, then opens ngrok so the
+microphone page is served over HTTPS. Open `https://<ngrok-host>/call`, press
+**Call**, allow the mic. Hang up with the same button.
+
+The page connects to same-origin `wss://<host>/ws/demo`: same pipeline as a
+scored call, no submissions to Prosper. On this machine only,
+`make -C backend run` and [http://localhost:7860/call](http://localhost:7860/call)
+also work (`localhost` counts as a secure origin). From a phone or another
+device you need the ngrok URL. See [`backend/README.md`](backend/README.md).
 
 ## Deploying
 
