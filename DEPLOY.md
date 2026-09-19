@@ -88,3 +88,47 @@ Endpoint nuevo: `wss://prosper-clinicreflow.fly.dev/ws`.
 - El volumen `/data` es de **una** máquina. Dos máquinas serían dos verdades
   sobre las mismas llamadas, y por eso `fly.toml` fija `min_machines_running = 1`
   sin escalado automático.
+
+---
+
+# Desplegar el frontend
+
+El panel es Next.js y su única salida a red es **desde el servidor**, no desde
+el navegador: `app/api/live/[...path]` y `app/api/frontdesk/[resource]` hacen de
+proxy y añaden la cabecera `X-Ops-Token`. Por eso el token vive en el entorno
+del proceso Next y **nunca lleva prefijo `NEXT_PUBLIC_`**: si lo llevara,
+acabaría en el paquete que descarga el navegador y cualquiera tendría la llave
+de `/ops`.
+
+## Vercel, que es lo que encaja
+
+```sh
+cd frontend
+npx vercel --prod
+```
+
+Variables, las tres, como **entorno de servidor**:
+
+```
+AGENT_HTTP_BASE_URL = https://prosper-clinicreflow.fly.dev
+OPS_TOKEN           = <el mismo secreto que en Fly>
+FRONTDESK_DEMO      = false
+```
+
+`FRONTDESK_DEMO=true` levanta el panel con datos inventados y sin backend. Sirve
+para enseñarlo sin exponer nada; con `false` manda el agente real.
+
+## La alternativa: una segunda app de Fly
+
+Si no quieres una cuenta más, `frontend/` puede ir como otra app de Fly con su
+propio Dockerfile de Node. Son dos apps, no una: la máquina del agente corre
+Python y no debe compartir proceso con nada.
+
+## Antes de dar la URL a nadie
+
+1. `/en-vivo` es la vista de producto y la que funciona.
+2. `/calls`, `/patients`, `/calendar` y `/directory` son el panel anterior.
+   Su endpoint existe desde hoy, pero la navegación mezcla los dos mundos.
+3. `/leaderboard` son datos inventados, siempre, con cualquier configuración.
+4. El panel no enseña DNI ni teléfono de ningún paciente. Es deliberado y hay
+   un test que lo fija; si alguien "lo arregla" para que se vean, ha roto algo.

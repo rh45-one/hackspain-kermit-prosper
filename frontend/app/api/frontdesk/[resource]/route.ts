@@ -16,10 +16,23 @@ export async function GET(
     }
   }
   try {
+    // The ops routes refuse anything without this, and the token stays in the
+    // server's environment: never NEXT_PUBLIC_, never in the browser bundle.
+    // The live proxy next door already did this; this one did not, so every
+    // page hanging off it answered 401 the moment the door went on.
+    const headers: Record<string, string> = { "Cache-Control": "no-store" };
+    const token = process.env.OPS_TOKEN;
+    if (token) headers["X-Ops-Token"] = token;
     const upstream = await fetch(
       `${base.replace(/\/$/, "")}/ops/api/frontdesk/${resource}?${query}`,
-      { cache: "no-store", signal: AbortSignal.timeout(30000) },
+      { cache: "no-store", headers, signal: AbortSignal.timeout(30000) },
     );
+    if (upstream.status === 401 || upstream.status === 403) {
+      return Response.json(
+        { detail: "El panel no tiene acceso al agente. Revisa OPS_TOKEN." },
+        { status: upstream.status, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     return Response.json(await upstream.json(), {
       status: upstream.status,
       headers: { "Cache-Control": "no-store" },
