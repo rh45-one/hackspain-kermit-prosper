@@ -65,3 +65,27 @@ def test_a_wrong_token_is_refused_even_on_loopback(ops_token):
         with pytest.raises(HTTPException) as caught:
             require_ops_access(req)
         assert caught.value.status_code == 401
+
+
+def test_a_forwarded_request_is_never_loopback(ops_token):
+    """uvicorn rewrites client.host from X-Forwarded-For for trusted peers.
+
+    Today the default trusts only loopback, so this is not exploitable. But
+    FORWARDED_ALLOW_IPS=* is the first thing anyone sets in a container to see
+    a real client address, and from that moment `X-Forwarded-For: 127.0.0.1`
+    sent from the open internet would read as local and open the console with
+    no token. If something is proxying for you, you are not local.
+    """
+    ops_token("")
+    for header in ("x-forwarded-for", "forwarded", "x-real-ip"):
+        with pytest.raises(HTTPException) as caught:
+            require_ops_access(FakeRequest("127.0.0.1", headers={header: "203.0.113.7"}))
+        assert caught.value.status_code == 403
+
+
+def test_a_token_still_works_from_behind_a_proxy(ops_token):
+    """The secret is the check; a proxy in front is then irrelevant."""
+    ops_token("s3cret")
+    require_ops_access(
+        FakeRequest("10.0.0.1", headers={"x-ops-token": "s3cret", "x-forwarded-for": "203.0.113.7"})
+    )

@@ -15,6 +15,10 @@ from agent.config import settings
 
 _LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
 
+# Any of these means somebody else forwarded the request, so the address on it
+# was written by that somebody and is not evidence of anything.
+_FORWARDED_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip")
+
 
 def require_ops_access(request: Request) -> None:
     """Gate every ops view. Fails closed off-host.
@@ -37,6 +41,15 @@ def require_ops_access(request: Request) -> None:
         if offered == token:
             return
         raise HTTPException(401, "ops token required")
+    # `request.client.host` is not the peer when a proxy is in front: uvicorn
+    # rewrites it from X-Forwarded-For for peers it trusts, and everyone sets
+    # FORWARDED_ALLOW_IPS=* in a container the first time they want to see a
+    # real client address. The day somebody does, `X-Forwarded-For: 127.0.0.1`
+    # from the open internet would read as loopback and open this with no
+    # token at all. So a forwarded request is never loopback, whatever the
+    # address says — if something is proxying for you, you are not local.
+    if any(h in request.headers for h in _FORWARDED_HEADERS):
+        raise HTTPException(403, "ops console is loopback-only until OPS_TOKEN is set")
     host = (request.client.host if request.client else "") or ""
     if host in _LOOPBACK:
         return
