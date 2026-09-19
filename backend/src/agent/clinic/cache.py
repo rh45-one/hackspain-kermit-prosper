@@ -328,6 +328,34 @@ class CatalogueCache:
     def plan_by_id(self, plan_id: str) -> ClinicPlan | None:
         return self.plans_by_id.get(plan_id)
 
+    def plans_sounding_like(self, name: str) -> list[ClinicPlan]:
+        """Plans whose name is a word away from what the caller seems to have said.
+
+        A plan is one or two words over a telephone line and the line is the
+        worst part of this system. "Mapfre Salud" arrived on a scored call as
+        "ma phrase salue" — unsearchable, and the model invented a plan rather
+        than ask. Every token of that noise is still one edit from `salud`,
+        which is enough to put two real names in front of the caller.
+
+        Deliberately does NOT resolve: "salue" is one edit from the `salud` in
+        both Mapfre Salud and Caser Salud, and picking one of those would be
+        the same guess in a smarter coat. It names the candidates so the agent
+        can ask which. Derived from the catalogue, so a plan added tomorrow is
+        offered too.
+        """
+        heard = [t for t in _fold(name).replace(".", " ").split() if len(t) >= 4]
+        if not heard:
+            return []
+        found: dict[str, ClinicPlan] = {}
+        for plan in self.plans_by_id.values():
+            for word in _fold(plan.name).split():
+                if len(word) < 4:
+                    continue
+                if any(word == t or _one_edit_apart(word, t) for t in heard):
+                    found[plan.id] = plan
+                    break
+        return sorted(found.values(), key=lambda p: p.id)
+
     def providers_sounding_like(self, name: str) -> list[ClinicProvider]:
         """Providers whose surname is one edit from a token of ``name``.
 

@@ -1101,9 +1101,22 @@ class ToolBox:
         if self.cache is not None and self.cache.plan_by_id(plan_id or "") is None:
             # Caught here, not at submit time: a rejected registration is only
             # discovered once the call is over and nothing can be asked again.
-            known = ", ".join(p.name for p in self.cache.plans_by_id.values())
+            # Name the ones it could have been. A bad line does not produce a
+            # plausible wrong plan, it produces noise, and the answer to noise
+            # is to read the real names back — not to pick the nearest, which
+            # is guessing with extra steps.
+            near = [p.name for p in self.cache.plans_sounding_like(insurer)]
             await params.result_callback(
-                {"error": f"no such insurer: {insurer!r}", "the_clinic_knows": known}
+                {
+                    "error": f"no such insurer: {insurer!r}",
+                    "did_you_mean": near,
+                    "ask_them": (
+                        "say these names to them and let them pick one"
+                        if near
+                        else "ask them to say their insurer again"
+                    ),
+                    "the_clinic_knows": ", ".join(p.name for p in self.cache.plans_by_id.values()),
+                }
             )
             return
         self.ctx.queued_actions.append(

@@ -1216,3 +1216,23 @@ async def test_the_registration_carries_every_field(box, ctx):
     assert queued["insurer"] == "asisa"
     assert queued["email"] == "sergio_martinez77@gmail.com"
     assert queued["national_id"] == "31426012P"
+
+
+async def test_an_unheard_plan_comes_back_with_the_names_to_read_out(box, ctx):
+    """Noise on the line is answered with real names, never with a nearest pick."""
+    params = FakeParams()
+    await box.register_new_patient(
+        params,
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="sanitos",
+    )
+
+    assert not ctx.queued_actions
+    assert params.result["did_you_mean"] == ["Sanitas"]
+    assert "let them pick" in params.result["ask_them"]
