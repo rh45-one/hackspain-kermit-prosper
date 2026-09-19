@@ -178,7 +178,12 @@ class Submitter:
                     route, "terminal", status, detail=response.text[:200], attempts=attempts
                 )
             if status == 422:
-                logger.error("submit {} -> 422 DATA BUG body={}", path, body)
+                logger.error(
+                    "submit {} -> 422 DATA BUG body={} said={}",
+                    path,
+                    body,
+                    response.text[:400],
+                )
                 return SubmitOutcome(
                     route, "data_bug", status, detail=response.text[:200], attempts=attempts
                 )

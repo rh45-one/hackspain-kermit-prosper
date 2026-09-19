@@ -1043,3 +1043,61 @@ async def test_toolbox_aclose_closes_the_sidecar(box, ctx):
     await box.aclose()  # idempotent
     assert closed["n"] == 1
     assert box.jev is None
+
+
+async def test_a_spoken_insurer_name_is_submitted_as_its_id(box, ctx):
+    """The submit enum takes ids; callers say names. Four scored calls died here.
+
+    `Mapfre Salud`, `Sanitas`, `AXA` and `Adeslas` were each queued verbatim
+    and each came back 422, so the registration never landed and the case was
+    scored missing_record.
+    """
+    await box.register_new_patient(
+        FakeParams(),
+        given_name="Paula",
+        first_surname="Castro",
+        second_surname="Marín",
+        national_id="Z0255440F",
+        date_of_birth="1972-12-13",
+        phone="713273252",
+        email="paula.castro71@gmail.com",
+        insurer="ASISA",
+    )
+
+    assert ctx.queued_actions[-1]["insurer"] == "asisa"
+
+
+async def test_an_insurer_id_passes_through_untouched(box, ctx):
+    await box.register_new_patient(
+        FakeParams(),
+        given_name="Paula",
+        first_surname="Castro",
+        second_surname="Marín",
+        national_id="Z0255440F",
+        date_of_birth="1972-12-13",
+        phone="713273252",
+        email="paula.castro71@gmail.com",
+        insurer="dkv",
+    )
+
+    assert ctx.queued_actions[-1]["insurer"] == "dkv"
+
+
+async def test_an_unknown_insurer_is_refused_while_the_caller_is_still_there(box, ctx):
+    """A 422 only surfaces once the call is over, so the guard runs now."""
+    params = FakeParams()
+    await box.register_new_patient(
+        params,
+        given_name="Paula",
+        first_surname="Castro",
+        second_surname="Marín",
+        national_id="Z0255440F",
+        date_of_birth="1972-12-13",
+        phone="713273252",
+        email="paula.castro71@gmail.com",
+        insurer="Sanitos Premium",
+    )
+
+    assert not ctx.queued_actions
+    assert "no such insurer" in params.result["error"]
+    assert "Sanitas" in params.result["the_clinic_knows"]

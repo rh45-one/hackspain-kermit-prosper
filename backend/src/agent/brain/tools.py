@@ -108,6 +108,23 @@ def _fold_plain(text: str) -> str:
 # Refusals that are only true for the plan on file. A second plan the caller
 # holds can overturn every one of them, so none may be sent before they have
 # been asked.
+def _plan_id(cache: Any, spoken: str | None) -> str | None:
+    """The submit enum wants the plan's id; a caller says its name.
+
+    `Mapfre Salud`, `Sanitas`, `AXA` are what people say and what the model
+    passes back, and every one of them is a 422 on a field the API declares
+    as an enum of ids. The catalogue holds both spellings, so resolve through
+    it and let an id pass straight through unchanged.
+    """
+    if not spoken:
+        return None
+    spoken = spoken.strip()
+    if cache is None:
+        return spoken
+    plan = cache.plan_by_id(spoken) or cache.plan_by_name(spoken)
+    return plan.id if plan is not None else spoken
+
+
 _COVERAGE_REASONS = frozenset({
     "specialty_not_covered",
     "location_not_covered",
@@ -929,7 +946,7 @@ class ToolBox:
             "location_id": slot.get("location_id"),
             "appointment_type_id": slot.get("appointment_type_id"),
             "slot": slot.get("start_time"),
-            "policy_id": policy_id or patient.get("insurer"),
+            "policy_id": _plan_id(self.cache, policy_id or patient.get("insurer")),
         }
         self.ctx.queued_actions.append(action)
         self.ctx.audit("action_queued", action)
@@ -999,7 +1016,9 @@ class ToolBox:
             "provider_id": slot.get("provider_id"),
             "location_id": slot.get("location_id"),
             "slot": slot.get("start_time"),
-            "policy_id": policy_id or (self.ctx.confirmed_patient or {}).get("insurer"),
+            "policy_id": _plan_id(
+                self.cache, policy_id or (self.ctx.confirmed_patient or {}).get("insurer")
+            ),
         }
         self.ctx.queued_actions.append(action)
         self.ctx.audit("action_queued", action)
@@ -1033,6 +1052,15 @@ class ToolBox:
         if not valid:
             await params.result_callback({"error": "national id check letter does not match; ask again"})
             return
+        plan_id = _plan_id(self.cache, insurer)
+        if self.cache is not None and self.cache.plan_by_id(plan_id or "") is None:
+            # Caught here, not at submit time: a rejected registration is only
+            # discovered once the call is over and nothing can be asked again.
+            known = ", ".join(p.name for p in self.cache.plans_by_id.values())
+            await params.result_callback(
+                {"error": f"no such insurer: {insurer!r}", "the_clinic_knows": known}
+            )
+            return
         self.ctx.queued_actions.append(
             {
                 "route": "register",
@@ -1043,7 +1071,7 @@ class ToolBox:
                 "date_of_birth": date_of_birth.strip(),
                 "phone": phone.strip(),
                 "email": email.strip(),
-                "insurer": insurer.strip(),
+                "insurer": plan_id,
             }
         )
         self.ctx.audit("action_queued", {"route": "register", "national_id": normalized_id})
