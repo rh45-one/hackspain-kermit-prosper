@@ -26,12 +26,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   callCardElementId,
   callDisplayName,
+  callLineLabel,
   formatElapsed,
 } from "@/lib/call-format";
 import { DEFAULT_CALL_CONTROL, type LiveCall } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const UNWIRED = "Sin API de escritura en el agente. Queda listo para conectar.";
+const UNWIRED = "Esta acción aún no está disponible. Quedará lista cuando se conecte.";
 
 function StatusDot({ live }: { live: boolean }) {
   return (
@@ -149,8 +150,8 @@ export function CallManagementDialog({
   const controllerLabel = ended
     ? "Conversación cerrada"
     : held
-      ? "Control en recepción"
-      : "Atendida por el agente";
+      ? "La lleva recepción"
+      : "La lleva el asistente de citas";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -182,7 +183,7 @@ export function CallManagementDialog({
                 <header className="flex shrink-0 items-start justify-between gap-4 border-b border-mist px-5 py-4 sm:px-6">
                   <div className="min-w-0">
                     <p className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-                      Canal de llamada
+                      Conversación
                     </p>
                     <DialogTitle
                       id={titleId}
@@ -196,13 +197,11 @@ export function CallManagementDialog({
                     >
                       <span className="inline-flex items-center gap-1.5 text-steel">
                         <StatusDot live={Boolean(live)} />
-                        {live ? "En vivo" : ended ? "Finalizada" : "Sin cierre"}
+                        {live ? "Al teléfono ahora" : ended ? "Ya colgaron" : "Sin estado claro"}
                       </span>
+                      <span>{callLineLabel(call.socketId)}</span>
                       <span>{call.virtualPhone}</span>
-                      <span className="font-mono">{duration}</span>
-                      <span className="truncate font-mono text-[12px]">
-                        {call.callId}
-                      </span>
+                      <span>{duration}</span>
                     </DialogDescription>
                   </div>
                   <Button
@@ -236,7 +235,7 @@ export function CallManagementDialog({
                       variant="outline"
                       onClick={() => releaseOperatorControl(call.callId)}
                     >
-                      Devolver al agente
+                      Devolver al asistente
                     </Button>
                   ) : null}
                 </div>
@@ -280,10 +279,10 @@ export function CallManagementDialog({
                       (ended
                         ? "Esta llamada ya no admite intervención."
                         : composerEnabled
-                          ? "El envío no está conectado al agente. El borrador se conserva aquí."
+                          ? "Tus mensajes se guardan aquí. El envío en directo se conectará más adelante."
                           : held
                             ? controllerLabel
-                            : "El agente sigue al mando hasta que tomes el control.")}
+                            : "El asistente sigue al mando hasta que tomes el control.")}
                   </p>
                 </div>
               </div>
@@ -300,8 +299,8 @@ export function CallManagementDialog({
                     {ended
                       ? "Esta llamada ya no admite intervención."
                       : held
-                        ? "La automatización está en pausa en este panel."
-                        : "La conversación la lleva el agente de citas."}
+                        ? "El asistente está en pausa. Tú respondes desde aquí."
+                        : "El asistente de citas habla con la persona al teléfono."}
                   </p>
                 </div>
 
@@ -321,7 +320,7 @@ export function CallManagementDialog({
                     className="hidden w-full lg:inline-flex"
                     onClick={() => releaseOperatorControl(call.callId)}
                   >
-                    Devolver al agente
+                    Devolver al asistente
                   </Button>
                 ) : (
                   <Button
@@ -337,31 +336,31 @@ export function CallManagementDialog({
 
                 <div>
                   <p className="mb-3 font-heading text-[13px] text-quiet">
-                    Paciente
+                    Datos que va captando
                   </p>
                   <dl className="space-y-3 text-[13px]">
                     <div>
-                      <dt className="text-quiet">Nombre</dt>
+                      <dt className="text-quiet">Quién llama</dt>
                       <dd className="mt-0.5 break-words text-graphite">
-                        {call.entities.name ?? "—"}
+                        {call.entities.name ?? "Aún no lo ha dicho"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-quiet">DNI</dt>
+                      <dt className="text-quiet">Documento</dt>
                       <dd className="mt-0.5 truncate font-mono text-graphite">
                         {call.entities.nationalId ?? "—"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-quiet">Tipo</dt>
+                      <dt className="text-quiet">Qué pide</dt>
                       <dd className="mt-0.5 break-words text-graphite">
-                        {call.entities.appointmentType ?? "—"}
+                        {call.entities.appointmentType ?? "Por confirmar"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-quiet">Socket</dt>
-                      <dd className="mt-0.5 font-mono text-graphite">
-                        {call.socketId}
+                      <dt className="text-quiet">Línea</dt>
+                      <dd className="mt-0.5 text-graphite">
+                        {callLineLabel(call.socketId)}
                       </dd>
                     </div>
                   </dl>
@@ -379,8 +378,8 @@ export function CallManagementDialog({
                   >
                     <Pause />
                     {control.automationPaused
-                      ? "Reanudar automatización"
-                      : "Pausar automatización"}
+                      ? "Que el asistente vuelva a hablar"
+                      : "Pausar al asistente"}
                   </Button>
                   <Button
                     type="button"

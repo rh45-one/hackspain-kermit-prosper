@@ -3,14 +3,23 @@
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { AppointmentsCalendar } from "@/components/calendar/appointments-calendar";
+import { DoctorDirectory } from "@/components/directory/doctor-directory";
 import { PageHeader } from "@/components/layout/page-header";
 import { PatientDirectory } from "@/components/patients/patient-directory";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type ClinicTab = "patients" | "calendar";
+type ClinicTab = "patients" | "calendar" | "staff";
 
 function parseTab(value: string | null): ClinicTab {
-  return value === "calendar" ? "calendar" : "patients";
+  if (value === "calendar") return "calendar";
+  if (value === "staff") return "staff";
+  return "patients";
+}
+
+function hrefForTab(tab: ClinicTab) {
+  if (tab === "calendar") return "/patients?tab=calendar";
+  if (tab === "staff") return "/patients?tab=staff";
+  return "/patients";
 }
 
 export function ClinicDashboard() {
@@ -21,18 +30,14 @@ export function ClinicDashboard() {
   return (
     <div>
       <PageHeader kicker="Clínica Arenal" title="Clínica">
-        Directorio de pacientes y agenda de citas en un solo sitio. Busca un
-        paciente para cargar su historial; la agenda refleja esa misma
-        consulta.
+        Pacientes, agenda y directorio médico en un solo sitio. Marca ausencias
+        del personal para iniciar la Recovery Campaign.
       </PageHeader>
 
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          const next = parseTab(value);
-          const href =
-            next === "calendar" ? "/patients?tab=calendar" : "/patients";
-          router.replace(href, { scroll: false });
+          router.replace(hrefForTab(parseTab(value)), { scroll: false });
         }}
         className="gap-6 sm:gap-8"
       >
@@ -53,6 +58,12 @@ export function ClinicDashboard() {
           >
             Agenda
           </TabsTrigger>
+          <TabsTrigger
+            value="staff"
+            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm"
+          >
+            Personal
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="patients" className="mt-0 outline-none">
@@ -60,6 +71,9 @@ export function ClinicDashboard() {
         </TabsContent>
         <TabsContent value="calendar" className="mt-0 outline-none">
           <AppointmentsCalendar embedded />
+        </TabsContent>
+        <TabsContent value="staff" className="mt-0 outline-none">
+          <DoctorDirectory embedded />
         </TabsContent>
       </Tabs>
     </div>
