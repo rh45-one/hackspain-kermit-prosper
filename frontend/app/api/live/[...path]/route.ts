@@ -8,7 +8,7 @@
  *
  * Read-only by construction: only GET is exported.
  */
-const ALLOWED = new Set(["calls"]);
+const ALLOWED = new Set(["calls", "clinic"]);
 
 export async function GET(
   request: Request,
@@ -19,8 +19,11 @@ export async function GET(
   if (!path?.length || !ALLOWED.has(path[0]) || path.length > 2) {
     return Response.json({ detail: "Recurso desconocido" }, { status: 404 });
   }
-  if (path.length === 2 && !/^[A-Za-z0-9._-]{1,128}$/.test(path[1])) {
-    return Response.json({ detail: "Identificador no válido" }, { status: 400 });
+  if (path.length === 2) {
+    // Only `calls` has a second segment, and only ever a call id.
+    if (path[0] !== "calls" || !/^[A-Za-z0-9._-]{1,128}$/.test(path[1])) {
+      return Response.json({ detail: "Identificador no válido" }, { status: 400 });
+    }
   }
 
   const base = (process.env.AGENT_HTTP_BASE_URL ?? "http://127.0.0.1:7861").replace(/\/$/, "");

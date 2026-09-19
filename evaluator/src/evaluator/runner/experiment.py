@@ -21,6 +21,7 @@ import subprocess
 import threading
 import time
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -171,12 +172,22 @@ def _scenario_turns(
     return (groups or [PlayTurn(silence(8000))]), rig_errors
 
 
+@dataclass
+class TextCall:
+    """What driving one call over the text adapter produced."""
+
+    transcript: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)  # count against the rig
+    latencies: list[float] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)  # visible, never scored
+
+
 async def _run_text_call(
     scenario: Scenario,
     text_url: str,
     call_id: str,
     timeout_s: float = 120.0,
-) -> tuple[list[str], list[str], list[float]]:
+) -> TextCall:
     """Drive a call over the text adapter; returns (agent_turns, errors, latencies).
 
     The contract is documented in README, "Adaptador de texto `/turns`":
@@ -198,9 +209,8 @@ async def _run_text_call(
     When the scenario defines a caller, the rules-based patient answers;
     otherwise the scripted turn texts are replayed verbatim.
     """
-    transcript: list[str] = []
-    errors: list[str] = []
-    latencies: list[float] = []
+    out = TextCall()
+    transcript, errors, latencies = out.transcript, out.errors, out.latencies
     ended = False
     call_started = time.monotonic()
     http = httpx.AsyncClient(timeout=timeout_s)
@@ -247,13 +257,25 @@ async def _run_text_call(
         return str(reply) if reply else ""
 
     async def hangup() -> None:
-        """Best-effort end-of-call signal; never scored against the agent."""
+        """Best-effort end-of-call signal; never scored against the agent.
+
+        Best effort is not the same as invisible. The outcome goes to `notes`,
+        which no verdict reads: an agent whose model rejects `text: null`
+        answers 422 here, keeps every point it earned, and can still see in
+        the report that the evaluator tried to close the call and could not.
+        """
         try:
-            await http.post(
+            resp = await http.post(
                 f"{text_url}/turns", json={"call_id": call_id, "text": None, "event": "hangup"}
             )
-        except httpx.HTTPError:
-            pass
+        except httpx.HTTPError as exc:
+            out.notes.append(f"hangup no entregado: {type(exc).__name__}")
+            return
+        if resp.status_code != 200:
+            out.notes.append(
+                f"hangup rechazado con HTTP {resp.status_code}: el agente no "
+                "implementa el cierre opcional (no penaliza)"
+            )
 
     patient = (
         make_patient(scenario.caller, scenario.limits, language=scenario.language)
@@ -277,7 +299,7 @@ async def _run_text_call(
         await hangup()
     finally:
         await http.aclose()
-    return transcript, errors, latencies
+    return out
 
 
 async def _drain_record(
@@ -361,6 +383,7 @@ async def _run_case(
     latencies: list[float] = []
     first_audio_ms: float | None = None
     interrupts: list[dict[str, Any]] = []
+    notes: list[str] = []
     audio: dict[str, str] = {}
     ev = None  # set on the WS paths (double + external)
     rig_errors: list[str] = []
@@ -387,12 +410,16 @@ async def _run_case(
                         "/control", json={"call_id": call_id, "actions": actions}
                     )
             if candidate.text_url:
-                transcript, errors, latencies = await _run_text_call(
+                text_call = await _run_text_call(
                     scenario,
                     candidate.text_url,
                     call_id,
                     timeout_s=candidate.text_timeout_seconds,
                 )
+                transcript = text_call.transcript
+                errors = text_call.errors
+                latencies = text_call.latencies
+                notes = text_call.notes
             elif candidate.kind == "double":
                 ev = await dial(
                     f"ws://127.0.0.1:{double_port}/ws",
@@ -513,6 +540,7 @@ async def _run_case(
         audio=audio,
         interrupts=interrupts,
         checks_not_run=checks_not_run,
+        notes=notes,
         duration_s=round(time.monotonic() - started, 2),
         errors=errors,
     )

@@ -1341,3 +1341,34 @@ async def test_the_confirmed_patient_is_named_not_just_numbered(box, ctx):
     assert confirmed["given_name"] == "Marta"
     assert "national_id" not in confirmed
     assert "phone" not in confirmed
+
+
+def _plan_case(box, on_file: str, payable: list[str]) -> str | None:
+    box.ctx.confirmed_patient = {"patient_id": "P1", "insurer": on_file}
+    return box._billing_plan({"payable_with": payable}, None, box.ctx.confirmed_patient)
+
+
+async def test_the_second_policy_is_what_gets_billed(box):
+    """Problem 17: the plan on file is the one that does NOT cover it."""
+    assert _plan_case(box, "dkv", ["privado"]) == "privado"
+
+
+async def test_the_plan_on_file_wins_when_it_pays(box):
+    """The control case, included on purpose to catch an invented second plan."""
+    assert _plan_case(box, "sanitas", ["sanitas", "privado"]) == "sanitas"
+
+
+async def test_two_possibilities_are_never_guessed_between(box):
+    """One possibility is not a guess; two are. Fall back rather than pick."""
+    assert _plan_case(box, "dkv", ["privado", "asisa"]) == "dkv"
+
+
+async def test_a_named_plan_beats_everything(box):
+    """The model heard the caller; the slot did not."""
+    box.ctx.confirmed_patient = {"patient_id": "P1", "insurer": "dkv"}
+    chosen = box._billing_plan({"payable_with": ["privado"]}, "ASISA", box.ctx.confirmed_patient)
+    assert chosen == "asisa"
+
+
+async def test_a_slot_that_says_nothing_changes_nothing(box):
+    assert _plan_case(box, "dkv", []) == "dkv"

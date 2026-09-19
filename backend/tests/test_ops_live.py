@@ -333,3 +333,54 @@ def test_a_registration_still_wins_over_the_confirmed_name(calls_dir, client):
     )
     row = client.get("/ops/api/live/calls", headers=HEADERS).json()[0]
     assert row["patient"] == "Sergio Martínez Ramírez"
+
+
+def test_a_broken_clinic_client_does_not_become_a_500(calls_dir, client, monkeypatch):
+    """`deps.try_clinic_client` calls the constructor outside its own try, so
+    bad configuration raises out of it. A reader whose job is to answer must
+    degrade to ids instead of failing the request."""
+    from agent.brain import deps
+
+    monkeypatch.setattr(live, "_WARM_TRIED", False)
+    monkeypatch.setattr(
+        live, "settings",
+        lambda: type("S", (), {"calls_dir": str(calls_dir), "prosper_api_key": "k"})(),
+    )
+    def explode(_config):
+        raise RuntimeError("bad base url")
+    monkeypatch.setattr(deps, "try_clinic_client", explode)
+
+    write_trace(calls_dir, "c1", [say("caller", "hola"),
+                                  ("action_queued", {"route": "book", "provider_id": "PR10"})])
+    response = client.get("/ops/api/live/calls", headers=HEADERS)
+    assert response.status_code == 200
+    assert "PR10" in response.json()[0]["headline"]
+
+
+def test_an_empty_search_says_which_rule_blocked_it(calls_dir, client):
+    """"No hay hueco" and "your plan does not cover that site" are different
+    answers, and only the second one a receptionist can act on."""
+    write_trace(
+        calls_dir,
+        "c1",
+        [say("caller", "quiero cita en Norte"),
+         ("availability_query", {"asked": "mañana", "slots": 0,
+                                 "blocked": ["location_not_covered", "provider_on_leave"]})],
+    )
+    text = client.get("/ops/api/live/calls/c1", headers=HEADERS).json()["events"][0]["text"]
+    assert text == (
+        'Buscó huecos para "mañana" y no había ninguno libre: '
+        "el centro no está cubierto y el profesional está de baja."
+    )
+
+
+def test_a_search_with_slots_does_not_explain_itself(calls_dir, client):
+    """The "why" only matters when the answer was no."""
+    write_trace(
+        calls_dir,
+        "c1",
+        [say("caller", "quiero cita"),
+         ("availability_query", {"asked": "mañana", "slots": 3, "blocked": ["provider_on_leave"]})],
+    )
+    text = client.get("/ops/api/live/calls/c1", headers=HEADERS).json()["events"][0]["text"]
+    assert text == 'Buscó huecos para "mañana": 3 disponibles.'

@@ -242,6 +242,59 @@ class TestReportEvidence:
         # The shape of a real loss: almost right, and still zero points.
         assert "1 de 6 campos mal" in page
 
+    def test_report_separates_stable_from_flaky(self, tmp_path):
+        """1/3 and 3/3 are not the same result and must not read the same."""
+        run = tmp_path / "run"
+        run.mkdir()
+        manifest = {
+            "run_id": "r", "experiment": "e", "rules_version": "v",
+            "dataset": "d", "dataset_hash": "h", "candidates": [{"name": "A"}],
+        }
+        (run / "manifest.json").write_text(json.dumps(manifest))
+
+        def case(scenario, rep, verdict):
+            return {
+                "case_id": f"A/{scenario}/r{rep}", "call_id": "c",
+                "scenario_id": scenario, "problem_id": "simple_booking",
+                "candidate": "A", "repetition": rep, "verdict": verdict,
+                "duration_s": 1.0,
+            }
+
+        cases = [
+            case("steady", 0, "pass"), case("steady", 1, "pass"),
+            case("broken", 0, "fail"), case("broken", 1, "fail"),
+            case("flaky", 0, "pass"), case("flaky", 1, "fail"),
+        ]
+        (run / "cases.jsonl").write_text(
+            "\n".join(json.dumps(c) for c in cases) + "\n"
+        )
+
+        from evaluator.report.render import render_report
+
+        page = render_report(run).read_text()
+        assert "Estabilidad por escenario" in page
+        assert "INESTABLE" in page
+        assert "1 de 3 escenarios" in page  # the noise band, spelled out
+        assert "una sola ejecución no" in page
+        assert "siempre incorrecta" in page
+
+    def test_report_omits_stability_with_one_repetition(self, tmp_path):
+        run = tmp_path / "run"
+        run.mkdir()
+        (run / "manifest.json").write_text(json.dumps({
+            "run_id": "r", "experiment": "e", "rules_version": "v",
+            "dataset": "d", "dataset_hash": "h", "candidates": [{"name": "A"}],
+        }))
+        (run / "cases.jsonl").write_text(json.dumps({
+            "case_id": "A/s/r0", "call_id": "c", "scenario_id": "s",
+            "problem_id": "simple_booking", "candidate": "A", "repetition": 0,
+            "verdict": "pass", "duration_s": 1.0,
+        }) + "\n")
+
+        from evaluator.report.render import render_report
+
+        assert "Estabilidad por escenario" not in render_report(run).read_text()
+
     def test_report_warns_about_the_fixture(self, tmp_path):
         """A green local run is not a point: the report has to say so."""
         run = tmp_path / "run"
@@ -269,4 +322,5 @@ class TestReportEvidence:
         assert "no es el veredicto oficial" in page.lower()
         assert "No es la clínica oficial" in page
         assert "~3.000" in page  # real clinic size, next to the fixture's 6
-        assert "leak_check" in page  # unevaluated check is printed, not hidden
+        # The unevaluated check is printed, and in Spanish.
+        assert "comprobación de privacidad" in page

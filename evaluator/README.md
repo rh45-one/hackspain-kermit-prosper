@@ -49,6 +49,14 @@ respeta las reglas de cobertura y **envía la acción exacta que espera la
 plataforma, campo por campo**. Un campo mal y el caso es incorrecto, igual
 que en el reto: no hay puntos parciales.
 
+**Un solo run no compara dos versiones del agente.** El agente no es
+determinista: dos ejecuciones idénticas del mismo código movieron **6 de 21
+escenarios, en las dos direcciones** (medido el 19 sep 2026). Si tocas el
+backend y pasas de 13 a 15 correctas, eso cabe entero dentro del ruido. Usa
+`repetitions: 3` o más, mira la **tabla de estabilidad** del informe, y basa
+las decisiones en los escenarios que salen *siempre incorrectos*: ésos son
+fallos de verdad. El total no es un número que se pueda leer.
+
 **Qué no mide**:
 - **No dice si vas a puntuar.** Los datos son un fixture inventado de 6
   pacientes y 7 médicos; la clínica real tiene ~3.000 y 12. Verde aquí es
@@ -251,6 +259,13 @@ Content-Type: application/json
   acciones encoladas. **Es best-effort**: el evaluador ignora el código de
   estado y el cuerpo, así que un agente que no lo implemente no pierde
   ningún caso por ello (devolverá 422 y no pasa nada). Debe ser idempotente.
+
+  Best-effort **no es invisible**: el resultado del `hangup` queda en
+  `notes` del caso y el informe lo imprime junto a la evidencia. `notes` es
+  diagnóstico que ningún veredicto lee. Pasó de verdad —un adaptador que
+  declaraba `text: str` devolvía 422 a todos los `hangup` y nadie lo veía—,
+  y en este proyecto una señal que se traga en silencio es exactamente cómo
+  se pierde un run.
 
 **Ventana de envío.** Igual que en la vía de voz: el receptor local acepta
 `POST /api/v1/submit/*` mientras la llamada está abierta y hasta 30 s después
