@@ -14,6 +14,7 @@ from loguru import logger
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport
 from pipecat.workers.runner import WorkerRunner
 
+from agent.accounts.store import ensure_database
 from agent.config import Settings, settings
 from agent.logging import setup_logging
 from agent.ops import turns as text_turns
@@ -34,6 +35,11 @@ CATALOGUE_WARM_TIMEOUT_SECONDS = 5.0
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Users, organisations and their credentials. Migrations run here, on
+    # every boot, so a deploy can never serve a schema it has not applied.
+    # `ensure_database` never raises: a console feature is not allowed to be
+    # the reason a scored call does not connect.
+    ensure_database(app_settings)
     # Warm the immutable clinic catalogue once, only with credentials: the
     # warm call is the app's single outbound request at boot, and an offline
     # host must never be pushed against the Prosper API.
@@ -42,7 +48,7 @@ async def lifespan(app: FastAPI):
             from agent.brain import deps
 
             org_id = app_settings.org_id
-            client = deps.try_clinic_client(app_settings)
+            client = deps.try_clinic_client(app_settings, org_id)
             cache = deps.try_catalogue_cache(org_id)
             if client and cache:
                 await deps.warm_shared_catalogue(client, org_id)

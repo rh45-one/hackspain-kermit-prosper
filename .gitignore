@@ -31,6 +31,13 @@ backend/data/*/calls/*
 !backend/data/*/calls/.gitkeep
 backend/data/reflow/*
 !backend/data/reflow/.gitkeep
+
+# The platform database: organisations, users, memberships, sessions. It holds
+# password hashes and encrypted clinic credentials and lives on the Fly volume
+# next to the traces. It is created and migrated at boot; it is never source.
+backend/data/platform.db
+backend/data/platform.db-wal
+backend/data/platform.db-shm
 *.raw
 *.wav
 *.mp3

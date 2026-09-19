@@ -13,8 +13,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from agent.accounts.store import reset_store_cache
 from agent.config import Settings
-from agent.ops import console, live
+from agent.ops import auth, console, live
 
 TOKEN = "s3cret"
 HEADERS = {"x-ops-token": TOKEN}
@@ -46,6 +47,11 @@ def calls_dir(tmp_path, monkeypatch):
     directory.mkdir(parents=True)
     monkeypatch.setattr(live, "settings", lambda: config)
     monkeypatch.setattr(console, "settings", lambda: config)
+    # The accounts layer answers "is anybody signed in" on every request, and
+    # it must answer it about this throwaway DATA_DIR and not about whatever
+    # database happens to sit in `backend/data`.
+    monkeypatch.setattr(auth, "settings", lambda: config)
+    reset_store_cache()
     monkeypatch.setattr(live, "_WARM_TRIED", set())
     return directory
 
@@ -357,7 +363,7 @@ def test_a_broken_clinic_client_does_not_become_a_500(calls_dir, client, monkeyp
 
     config = _settings(calls_dir.parent.parent, prosper_api_key="k")
     monkeypatch.setattr(live, "settings", lambda: config)
-    def explode(_config):
+    def explode(_config, _org_id=None):
         raise RuntimeError("bad base url")
     monkeypatch.setattr(deps, "try_clinic_client", explode)
 

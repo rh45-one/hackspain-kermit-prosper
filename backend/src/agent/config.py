@@ -81,13 +81,25 @@ class Settings(BaseSettings):
     # Shared secret for the ops console. Unset, the console answers only to
     # loopback — so a deployed host serves nothing until this is set on
     # purpose. See agent/ops/console.py.
+    #
+    # Since step 4 this is a *service* credential, not a person's: the Next
+    # panel proxies with it in a header. A person signs in and gets a session
+    # instead, and the moment the first person exists the `?token=` door — the
+    # only one a person could use by pasting a URL — closes.
     ops_token: str = ""
+
+    # Encrypts each organisation's Prosper API key at rest. It belongs with
+    # the other secrets (a Fly secret), never on the volume, so the database
+    # file on its own is not enough to read a clinic's credential. Unset,
+    # storing one is refused rather than written in the clear.
+    ops_secret_key: str = ""
 
     # The organisation this process answers for. One clinic today; the value
     # rides on every CallContext and decides which directory its trace and
-    # which catalogue cache it gets. Credentials are still global (one
-    # PROSPER_API_KEY): that is the next step, and the one that needs a
-    # database.
+    # which catalogue cache it gets. Its credential is no longer global:
+    # `agent.accounts.credentials` resolves the clinic's own stored key first
+    # and falls back to PROSPER_API_KEY below for this default organisation,
+    # which is why a single-clinic deployment behaves exactly as before.
     org_id: str = DEFAULT_ORG_ID
 
     # Behaviour

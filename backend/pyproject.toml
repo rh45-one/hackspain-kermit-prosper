@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "websockets>=13.0",
     "audiolab<0.5",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]

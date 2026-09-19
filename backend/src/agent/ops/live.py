@@ -30,7 +30,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from agent.config import settings
-from agent.orgs import DEFAULT_ORG_ID, InvalidOrgId, normalize_org_id
+from agent.ops.auth import request_org_id
+from agent.orgs import DEFAULT_ORG_ID
 
 
 def require_access(request: Request) -> None:
@@ -518,28 +519,21 @@ def _duration(parsed: dict[str, Any]) -> int | None:
 
 
 # ---- routes --------------------------------------------------------------
-def _org_of(raw: str) -> str:
-    """The organisation a request asks for. An unknown shape is a 400, never a path."""
-    try:
-        return normalize_org_id(raw)
-    except InvalidOrgId as exc:
-        raise HTTPException(400, "organización no válida") from exc
-
-
 @router.get("/ops/api/live/calls")
-async def live_calls(org: str = DEFAULT_ORG_ID) -> list[dict[str, Any]]:
+async def live_calls(request: Request, org: str | None = None) -> list[dict[str, Any]]:
     """Recent calls, newest first, as a receptionist would skim them.
 
     Calls with no transcript at all are left out: 24 of the 164 traces on disk
     are sockets that opened and never produced a word, and they tell a person
     at the front desk nothing.
 
-    `org` defaults to the one clinic this process serves, so a panel that
-    knows nothing about organisations sees exactly what it always saw. Until
-    there are sessions (PLATFORM.md step 4) it is the whole of the tenancy
-    boundary on this route — it is behind the ops door and nothing more.
+    Which clinic: the session's, for a signed-in person, who may only name
+    another one they belong to. A caller with no session — the Next proxy, the
+    local bench — reads the one clinic this process serves, which is exactly
+    what this route returned before sessions existed. `auth.request_org_id`
+    is the only place that decision is made.
     """
-    org_id = _org_of(org)
+    org_id = request_org_id(request, org)
     now = time.time()
     cache = await _catalogue(org_id)
     out: list[dict[str, Any]] = []
@@ -578,12 +572,12 @@ async def live_calls(org: str = DEFAULT_ORG_ID) -> list[dict[str, Any]]:
 
 
 @router.get("/ops/api/live/calls/{call_id}")
-async def live_call(call_id: str, org: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+async def live_call(call_id: str, request: Request, org: str | None = None) -> dict[str, Any]:
     """One call: the conversation and the story of the decision, in Spanish."""
     # The id lands in a filesystem path, so it may only ever be a bare name.
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", call_id) or call_id.startswith("."):
         raise HTTPException(400, "identificador de llamada no válido")
-    org_id = _org_of(org)
+    org_id = request_org_id(request, org)
     path = settings().call_trace_path(call_id, org_id)
     parsed = _read(path)
     if parsed is None:

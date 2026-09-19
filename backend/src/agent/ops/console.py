@@ -1,9 +1,12 @@
 """Ops console: what the jury sees. Live calls, transcripts, reflow plan.
 
 Mounts read-only views over data/<org_id>/calls/*.jsonl and data/reflow/*.json.
-There is no session here yet — one shared token, no idea who you are — so
-every view reads the default organisation. When step 4 of PLATFORM.md brings
-users, that is the line that changes.
+
+Which organisation a view reads is no longer a constant. A signed-in person
+reads the clinic their session is pointed at, and everything else — a service
+token, a loopback caller — reads the one clinic this process serves, which is
+what it read before sessions existed. The resolution lives in one function,
+`auth.request_org_id`, and never in a route.
 
 Run: uv run uvicorn agent.ops.console:app --port 7861
 """
@@ -11,13 +14,15 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from agent.accounts.store import ensure_database
 from agent.config import settings
-from agent.orgs import DEFAULT_ORG_ID
+from agent.ops import auth
 
 _LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
 
@@ -36,14 +41,40 @@ def require_ops_access(request: Request) -> None:
     mounts these routes, and `fly.toml` puts port 8080 on the public internet.
     Anyone holding the URL could have read every patient's id.
 
-    With `OPS_TOKEN` set, a request must present it. Without it, only loopback
-    is served — so a laptop keeps working untouched while a deployed host
-    answers nothing until somebody sets the secret deliberately. Unset plus
-    public is the one combination that must never quietly work.
+    Three ways in, in this order, and they are not three doors for the same
+    caller:
+
+    1. **A session cookie.** A person who signed in at `/ops/login`. This is
+       how a person gets in once anybody has an account, and it is the only
+       one of the three that knows who you are and which clinics you may see.
+    2. **`OPS_TOKEN` in the `X-Ops-Token` header.** A service, which here
+       means the Next panel's server-side proxy. It has one job and no
+       identity to have. The `?token=` form of it is the *person's* version —
+       the one you use by pasting a URL — and it closes the moment the first
+       person is provisioned, which is the whole of "the login replaces the
+       token for people".
+    3. **Loopback with no `OPS_TOKEN` set.** Untouched. A laptop keeps working
+       with no configuration, and the evaluator bench drives `POST /turns`
+       through this same gate from 127.0.0.1.
+
+    Unset plus public remains the one combination that must never quietly
+    work.
     """
+    # A person, with a session. Checked first: a signed-in person never falls
+    # through to a shared secret.
+    #
+    # A *principal*, not merely a session row: the row outlives an account
+    # being disabled and a membership being revoked, and a session that no
+    # longer resolves to a person in an organisation must be a refusal rather
+    # than a caller who silently reads the default clinic.
+    if auth.principal_of(request) is not None:
+        return
+
     token = settings().ops_token
     if token:
-        offered = request.headers.get("x-ops-token") or request.query_params.get("token")
+        offered = request.headers.get("x-ops-token")
+        if offered is None and not auth.people_are_provisioned():
+            offered = request.query_params.get("token")
         if offered == token:
             return
         raise HTTPException(401, "ops token required")
@@ -64,7 +95,19 @@ def require_ops_access(request: Request) -> None:
         "ops console is loopback-only until OPS_TOKEN is set",
     )
 
-app = FastAPI(title="Pronto ops", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Migrate the platform database when this console runs on its own.
+
+    Inside `agent.serve` only this app's *router* is mounted, so this never
+    runs there and the voice server's lifespan does the same job once. Both
+    paths call the same idempotent function.
+    """
+    ensure_database()
+    yield
+
+
+app = FastAPI(title="Pronto ops", docs_url=None, redoc_url=None, lifespan=_lifespan)
 
 _INDEX = """<!doctype html><html><head><title>Pronto — ops</title>
 <meta charset="utf-8">
@@ -74,7 +117,11 @@ header{padding:18px 24px;border-bottom:1px solid #232a35;display:flex;justify-co
 h1{font-size:17px;margin:0;display:flex;align-items:center;gap:10px;letter-spacing:-.03em}
 h1 svg{width:20px;height:20px;flex-shrink:0}
 h1 .clinic{font-weight:500;color:#9fb0c3;letter-spacing:0;font-size:13px}
-.pill{background:#1d2634;border-radius:99px;padding:4px 12px;font-size:12px;color:#9fb0c3}
+.pill{background:#1d2634;border-radius:99px;padding:4px 12px;font-size:12px;color:#9fb0c3;
+border:0;font-family:inherit;cursor:inherit}
+#out button{cursor:pointer}
+select{background:#1d2634;color:#e6e8ee;border:1px solid #232a35;border-radius:99px;
+padding:4px 10px;font-size:12px;font-family:inherit}
 main{padding:24px;display:grid;gap:20px;grid-template-columns:1fr 1fr}
 .card{background:#151b24;border:1px solid #232a35;border-radius:12px;padding:16px}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#9fb0c3;margin:0 0 10px}
@@ -83,7 +130,13 @@ main{padding:24px;display:grid;gap:20px;grid-template-columns:1fr 1fr}
 #timeline{font-family:ui-monospace,monospace;font-size:12px;max-height:340px;overflow:auto;line-height:1.7}
 metrics span{margin-right:14px}
 </style></head><body>
-<header><h1><svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(0.31 0)"><path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/></g></svg>Pronto <span class="clinic">Clínica Arenal</span></h1><span class="pill" id="clock"></span></header>
+<header><h1><svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(0.31 0)"><path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/></g></svg>Pronto <span class="clinic" id="clinic">Clínica Arenal</span></h1>
+<div style="display:flex;align-items:center;gap:10px">
+<select id="org" hidden onchange="switchOrg(this.value)"></select>
+<span class="pill" id="who" hidden></span>
+<span class="pill" id="clock"></span>
+<form method="post" action="/ops/logout" id="out" hidden style="margin:0"><button class="pill" type="submit">Salir</button></form>
+</div></header>
 <main>
 <div class="card"><h2>Reflow plan — médico no disponible</h2><div id="reflow">—</div>
 <div style="margin-top:12px"><b style="font-size:22px" id="recovered">—</b> <span style="color:#9fb0c3">citas recuperadas</span></div></div>
@@ -92,6 +145,33 @@ metrics span{margin-right:14px}
 </main>
 <script>
 async function j(u){return (await fetch(u)).json()}
+// Who is looking, and at which clinic. A 401 here means nobody is signed in —
+// a service token or a loopback caller — and the console then shows exactly
+// what it always showed: the one clinic this process serves.
+let session=null;
+async function loadSession(){
+  const r=await fetch('/ops/api/session');
+  if(!r.ok){return}
+  session=await r.json();
+  const here=session.organizations.find(o=>o.id===session.org_id);
+  document.getElementById('clinic').textContent=(here&&here.name)||session.org_id;
+  const who=document.getElementById('who');
+  who.textContent=session.email; who.hidden=false;
+  document.getElementById('out').hidden=false;
+  const sel=document.getElementById('org');
+  if(session.organizations.length>1){
+    // Built with the DOM and not with a template string: an organisation name
+    // is somebody else's text and must never become somebody else's markup.
+    sel.replaceChildren(...session.organizations.map(o=>{
+      const opt=new Option(o.name,o.id); opt.selected=o.id===session.org_id; return opt;}));
+    sel.hidden=false;
+  }
+}
+async function switchOrg(id){
+  const r=await fetch('/ops/api/session/org',{method:'POST',
+    headers:{'content-type':'application/json'},body:JSON.stringify({org_id:id})});
+  if(r.ok){await loadSession(); refresh();}
+}
 async function refresh(){
   const calls=await j('/ops/api/calls'); const reflow=await j('/ops/api/reflow');
   document.getElementById('calls').innerHTML = calls.map(c=>
@@ -111,23 +191,38 @@ async function openCall(id){
   document.getElementById('timeline').innerHTML=events.map(e=>
     `<div><span style="color:#5b6b7f">${(e.ts||'').slice(11,19)}</span> <b>${e.event}</b> ${e.data?JSON.stringify(e.data).slice(0,220):''}</div>`).join('');
 }
-refresh(); setInterval(refresh,3000);
+loadSession().then(refresh); setInterval(refresh,3000);
 </script></body></html>"""
 
 
 @app.get("/ops", response_class=HTMLResponse)
-async def index(_: None = Depends(require_ops_access)) -> str:
-    return _INDEX
+async def index(request: Request) -> Response:
+    """The console. A person with no session is sent to the login page.
+
+    Only this route redirects. Every API route below keeps answering 401 and
+    403, because a poll that follows a redirect and gets an HTML login page
+    back is a failure that arrives looking like data.
+    """
+    try:
+        require_ops_access(request)
+    except HTTPException:
+        if auth.people_are_provisioned():
+            return RedirectResponse("/ops/login", status_code=303)
+        raise
+    return HTMLResponse(_INDEX)
 
 
 @app.get("/ops/api/calls")
-async def calls(_: None = Depends(require_ops_access)) -> list[dict[str, object]]:
+async def calls(
+    request: Request, _: None = Depends(require_ops_access)
+) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
+    org_id = auth.request_org_id(request)
     # Sorted by call id, not by full path: the traces of one organisation now
     # come from two directories (the current layout and the pre-organisation
     # one), and sorting by path would group them by directory instead of
     # listing the newest ids first the way this console always has.
-    paths = sorted(settings().call_trace_paths(DEFAULT_ORG_ID), key=lambda p: p.name, reverse=True)
+    paths = sorted(settings().call_trace_paths(org_id), key=lambda p: p.name, reverse=True)
     for path in paths[:30]:
         actions = 0
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -141,11 +236,13 @@ async def calls(_: None = Depends(require_ops_access)) -> list[dict[str, object]
 
 
 @app.get("/ops/api/calls/{call_id}")
-async def call_detail(call_id: str, _: None = Depends(require_ops_access)) -> list[dict[str, object]]:
+async def call_detail(
+    call_id: str, request: Request, _: None = Depends(require_ops_access)
+) -> list[dict[str, object]]:
     # The id lands in a filesystem path, so it may only ever be a bare name.
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", call_id) or call_id.startswith("."):
         raise HTTPException(400, "invalid call id")
-    path = settings().call_trace_path(call_id, DEFAULT_ORG_ID)
+    path = settings().call_trace_path(call_id, auth.request_org_id(request))
     if not path.exists():
         raise HTTPException(404, "call not found")
     events = []
@@ -180,6 +277,7 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
 # it must not grow inside this debugging console. `live` reaches back for
 # `require_ops_access` lazily, so this import is one-way and order-independent.
 from agent.ops.agent_config import router as agent_config_router
+from agent.ops.auth import router as auth_router
 from agent.ops.frontdesk import router as frontdesk_router
 from agent.ops.graph import router as graph_router
 from agent.ops.live import router as live_router
@@ -198,3 +296,8 @@ app.include_router(graph_router)
 # paragraph telling you to edit a file, and it named an engine that cannot
 # start, so it was documentation that was also wrong.
 app.include_router(agent_config_router)
+# Sign in, sign out, switch clinic, and write a clinic's Prosper key. The only
+# routes here that are NOT behind `require_ops_access`: /ops/login cannot be,
+# or nobody could ever reach it. Every route on it that does anything checks
+# a session for itself.
+app.include_router(auth_router)

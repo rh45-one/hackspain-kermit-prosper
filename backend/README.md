@@ -222,3 +222,64 @@ Runtime artifacts live under `backend/data/`:
 Call data and recordings must not be committed. The root `.gitignore` excludes
 `backend/data/calls/*`, `backend/data/*/calls/*`, `backend/data/reflow/*` and
 common audio extensions.
+
+## Organisations, people and credentials
+
+`data/platform.db` — SQLite, on the same volume as the traces. Four tables:
+`organizations`, `users`, `memberships`, `sessions`. Migrations run at boot
+(`PRAGMA user_version`), so no deploy can serve a schema it has not applied
+and nobody has to remember a migration step.
+
+**Why SQLite and not Postgres:** `fly.toml` runs one machine
+(`min_machines_running = 1`, `auto_stop_machines = false`) with one volume
+mounted at `/data`, and its own comment says *"One machine owns the volume and
+the in-process call state; never two."* A single-writer database on the same
+host as its only reader is what SQLite is for. Postgres would add a second Fly
+app, a network hop between a scored call and the credential it needs, and a
+second thing that can be down mid-call — for a handful of rows. It is also on
+the same volume snapshot, so there is one backup and not two.
+
+### Signing in
+
+There is no sign-up over HTTP. The first account is created with a shell:
+
+```sh
+# on the deployed host: fly ssh console -a prosper-clinicreflow
+python -m agent.accounts.bootstrap --email ana@clinica.es
+```
+
+The password is read from `OPS_BOOTSTRAP_PASSWORD` or prompted for — never
+passed as an argument, where it would land in the shell history and in `ps`.
+
+Then `/ops/login`. A person rides a session cookie and reads the organisation
+their session points at; `/ops` shows a picker when they belong to more than
+one. `OPS_TOKEN` stays for **service to service** — the Next panel proxies
+with it in `X-Ops-Token`. The `?token=` form of it is the door a *person*
+would use by pasting a URL, and it closes automatically the moment the first
+account exists.
+
+With **no account provisioned, nothing changes**: the URL token still opens
+the console and every view reads `clinica-arenal`, exactly as before.
+
+### Per-organisation Prosper keys
+
+`OPS_SECRET_KEY` (a Fly secret, never on the volume) encrypts each clinic's
+Prosper API key with AES-256-GCM, with the organisation id as authenticated
+data so a row copied between clinics fails to open. Unset, storing a
+credential is **refused** rather than written in the clear.
+
+```sh
+PROSPER_KEY_SAGASTA=... python -m agent.accounts.bootstrap \
+    --org clinica-sagasta --org-name "Clínica Sagasta" \
+    --credential-from-env PROSPER_KEY_SAGASTA
+```
+
+A key goes in and does not come back out: no HTTP route returns one, and the
+response models have no field that could hold one. What is served is
+`has_credential` and an eight-character fingerprint.
+
+Which key a call uses, in order: **the clinic's own stored key**, else
+**`PROSPER_API_KEY` from the environment for `clinica-arenal` only**, else
+**nothing** — a clinic nobody configured never inherits somebody else's key.
+The middle step is what keeps a scored call resolving the exact credential it
+resolved before any of this existed.

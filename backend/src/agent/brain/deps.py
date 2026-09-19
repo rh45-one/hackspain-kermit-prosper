@@ -178,13 +178,20 @@ async def ensure_catalogue_warm(settings: Any, org_id: str | None = None) -> Any
     cache = get_shared_catalogue_cache(org_id)
     if cache is None or cache.warmed:
         return cache
-    if not getattr(settings, "prosper_api_key", ""):
-        return None
     client: Any = None
     try:
-        # Inside the guard on purpose: try_clinic_client calls the constructor
-        # outside its own try, so bad configuration raises out of it.
-        client = try_clinic_client(settings)
+        # Inside the guard on purpose: both of the calls below reach settings
+        # attributes directly, so broken configuration raises out of them —
+        # and this function answers a reader whose job is to answer.
+        #
+        # "Has this organisation a usable credential" is not the same question
+        # as "is PROSPER_API_KEY set": a second clinic has its own key in the
+        # database, and the default one may have nothing but the environment's.
+        from agent.accounts.credentials import prosper_api_key_for
+
+        if not prosper_api_key_for(settings, org_id):
+            return None
+        client = try_clinic_client(settings, org_id)
         if client is None:
             return None
         await warm_shared_catalogue(client, org_id)
@@ -197,13 +204,30 @@ async def ensure_catalogue_warm(settings: Any, org_id: str | None = None) -> Any
     return cache if cache.warmed else None
 
 
-def try_clinic_client(settings: Any) -> Any | None:
-    """Return a ProsperClient, or None when the clinic layer is not ready."""
+def try_clinic_client(settings: Any, org_id: str | None = None) -> Any | None:
+    """Return a ProsperClient for an organisation, or None when the layer is absent.
+
+    The credential is resolved per organisation: the clinic's own stored key
+    if it has one, and `PROSPER_API_KEY` from the environment for the default
+    clinic if it does not. With one organisation and no database only the
+    second branch is ever taken, so this builds exactly the client it always
+    built — same base url, same key.
+
+    With no `org_id` the organisation is the one bound to the current task,
+    which is how `brain/tools.py` gets its own clinic's credential while
+    still calling this with a single argument.
+
+    Broken configuration still raises out of this function rather than
+    becoming a silent None: `ensure_catalogue_warm` and `ops/live.py` both
+    depend on that and guard the call themselves.
+    """
     try:
         client_cls = _import("agent.clinic.client.ProsperClient")
     except (ImportError, AttributeError):
         return None
-    return client_cls(settings)
+    from agent.accounts.credentials import clinic_credentials
+
+    return client_cls(clinic_credentials(settings, org_id))
 
 
 def try_date_resolver() -> Any | None:

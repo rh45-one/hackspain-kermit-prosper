@@ -10,8 +10,24 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from agent.ops import console
+from agent.accounts.store import reset_store_cache, store
+from agent.config import Settings
+from agent.ops import auth, console
 from agent.ops.console import require_ops_access
+
+
+@pytest.fixture(autouse=True)
+def _isolated_store(tmp_path, monkeypatch):
+    """Point the accounts layer at a throwaway DATA_DIR with no database.
+
+    Without this these tests would read whichever `backend/data/platform.db`
+    happens to be on the machine, and "does the URL token still open this"
+    would start depending on whether somebody had run the bootstrap locally.
+    """
+    reset_store_cache()
+    monkeypatch.setattr(auth, "settings", lambda: Settings(_env_file=None, data_dir=str(tmp_path)))
+    yield
+    reset_store_cache()
 
 
 @pytest.fixture
@@ -22,6 +38,21 @@ def ops_token(monkeypatch):
         monkeypatch.setattr(console, "settings", lambda: type("S", (), {"ops_token": value})())
 
     return _set
+
+
+@pytest.fixture
+def provision_somebody(tmp_path, monkeypatch):
+    """Create one account, which is what closes the `?token=` door."""
+
+    def _provision() -> None:
+        config = Settings(_env_file=None, data_dir=str(tmp_path), ops_secret_key="k" * 32)
+        monkeypatch.setattr(auth, "settings", lambda: config)
+        platform = store(config)
+        platform.migrate()
+        user = platform.create_user("ana@clinica.es", "una-contraseña-larga")
+        platform.add_membership(user.id, "clinica-arenal", "owner")
+
+    return _provision
 
 
 class FakeRequest:
@@ -53,9 +84,21 @@ def test_a_client_with_no_address_is_refused(ops_token):
 
 
 def test_the_token_opens_it_from_anywhere(ops_token):
+    """Both forms, for as long as nobody has an account to sign in with."""
     ops_token("s3cret")
     require_ops_access(FakeRequest("203.0.113.7", headers={"x-ops-token": "s3cret"}))
     require_ops_access(FakeRequest("203.0.113.7", query={"token": "s3cret"}))
+
+
+def test_the_url_token_closes_once_somebody_can_sign_in(ops_token, provision_somebody):
+    """A token in a URL is the door a *person* uses, and people have a login
+    now. The header stays: that one is the Next panel, which is a service."""
+    ops_token("s3cret")
+    provision_somebody()
+    with pytest.raises(HTTPException) as caught:
+        require_ops_access(FakeRequest("203.0.113.7", query={"token": "s3cret"}))
+    assert caught.value.status_code == 401
+    require_ops_access(FakeRequest("203.0.113.7", headers={"x-ops-token": "s3cret"}))
 
 
 def test_a_wrong_token_is_refused_even_on_loopback(ops_token):
