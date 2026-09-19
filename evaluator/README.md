@@ -256,6 +256,39 @@ grabados.
 **Lo que el adaptador no tiene que hacer**: ni audio, ni ngrok, ni estado
 global. Un `call_id` por conversación, aislado de los demás.
 
+### Cómo se conecta, y en qué orden
+
+El candidato necesita `text_url` apuntando al adaptador; con eso basta, y
+tiene prioridad sobre `ws_url`.
+
+**El orden de arranque importa y no es intercambiable:**
+
+1. **La clínica local primero.** El backend calienta su catálogo una sola vez,
+   en el lifespan del servidor. Si la clínica no está escuchando cuando el
+   agente arranca, la caché se queda fría y `describe_clinic`,
+   `find_nearest_site` y la ventana de calendario **degradan en silencio**:
+   no hay excepción ni log, simplemente responden peor. Es la peor forma de
+   fallar y la más fácil de atribuir al agente.
+2. **El agente después**, apuntando a esa clínica (`PROSPER_API_BASE_URL`).
+3. **Los casos al final.**
+
+Con `start_command` en el candidato, el runner espera a que el puerto acepte
+TCP antes del primer caso, pero **eso no reordena nada**: si el
+`start_command` arranca el agente antes de que exista la clínica, la caché
+sigue quedándose fría. Arranca la clínica tú.
+
+### Control de acceso
+
+`/turns` está detrás del control de acceso del ops console del backend:
+
+- Sin `OPS_TOKEN`, solo se sirve a **loopback**.
+- Con `OPS_TOKEN` puesto, hace falta la cabecera `X-Ops-Token`.
+
+El banco corre en `127.0.0.1`, así que por defecto no hay que hacer nada. Si
+alguna vez lo corres **desde otra máquina**, necesitas el token. La razón de
+que esté cerrado: un `/turns` alcanzable desde fuera ejecuta el ToolBox real
+y puede enviar acciones contra la API de Prosper con la clave del equipo.
+
 ## La vía de voz: qué mide de verdad
 
 Todos los turnos de `scenarios/**` llevan `tts: true`, y
