@@ -156,7 +156,7 @@ async def test_gemini_engine_builds_bridged_pipeline(tmp_path):
 
     parts = FakePipeline.built[-1]
     kinds = [type(p).__name__ for p in parts]
-    # input -> caller tap -> input bridge -> service -> output bridge -> assistant tap -> output
+    # input -> caller tap -> input bridge -> service -> output bridge -> assistant tap -> audio tap -> output
     assert kinds == [
         "FrameProcessor",
         "TranscriptTap",
@@ -164,6 +164,7 @@ async def test_gemini_engine_builds_bridged_pipeline(tmp_path):
         "RecordedGeminiService",
         "GeminiOutputBridge",
         "TranscriptTap",
+        "AudioOutputTap",
         "FrameProcessor",
     ]
     service = next(p for p in parts if isinstance(p, RecordedGeminiService))

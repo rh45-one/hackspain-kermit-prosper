@@ -71,13 +71,19 @@ async def calls() -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     for path in sorted(Path(settings().calls_dir).glob("*.jsonl"), reverse=True)[:30]:
         actions = 0
+        summary: dict[str, object] | None = None
         for line in path.read_text(encoding="utf-8").splitlines():
             try:
-                if json.loads(line).get("event") == "action_queued":
+                record = json.loads(line)
+                if record.get("event") == "action_queued":
                     actions += 1
+                elif record.get("event") == "call_outcome_summary":
+                    data = record.get("data")
+                    if isinstance(data, dict):
+                        summary = data
             except json.JSONDecodeError:
                 continue
-        out.append({"call_id": path.stem, "actions": actions})
+        out.append({"call_id": path.stem, "actions": actions, "summary": summary})
     return out
 
 

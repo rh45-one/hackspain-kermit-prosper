@@ -69,5 +69,7 @@ class ProsperTwilioSerializer(TwilioFrameSerializer):
             return None
         if event in ("connected", "heartbeat"):
             return None
+        if event == "media":
+            self._ctx.mark_pipeline_stage("caller_audio_received")
         # media / dtmf / anything else: stock Twilio handling.
         return await super().deserialize(data)

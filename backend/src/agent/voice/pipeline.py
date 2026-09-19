@@ -34,7 +34,7 @@ from pipecat.transports.websocket.fastapi import (
 from agent.brain import prompts
 from agent.brain.tools import ToolBox
 from agent.voice.context import CallContext
-from agent.voice.tap import TranscriptTap
+from agent.voice.tap import AudioOutputTap, TranscriptTap
 from agent.voice.twilio import ProsperTwilioSerializer
 
 # Twilio Media Streams wire rate. 20 ms frames of 8 kHz µ-law.
@@ -178,6 +178,7 @@ def build_worker(
             service,
             GeminiOutputBridge(ctx, audio_converter),
             TranscriptTap(ctx, "assistant"),
+            AudioOutputTap(ctx),
         ]
     elif with_services:
         stt = DeepgramSTTService(
@@ -221,6 +222,7 @@ def build_worker(
             llm,
             TranscriptTap(ctx, "assistant"),
             tts,
+            AudioOutputTap(ctx),
         ]
 
     parts.append(transport.output())
@@ -252,6 +254,7 @@ def build_worker(
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport: Any, client: Any) -> None:
+        ctx.mark_pipeline_stage("client_connected")
         ctx.audit("client_connected", {})
         # Caller-id hint: bounded wait for the harness `start` event, then a
         # private directory search. Never authenticates anyone; the hint only
