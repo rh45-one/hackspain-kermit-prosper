@@ -171,6 +171,7 @@ def system_prompt_for(ctx: CallContext) -> str:
         ("Qué ha pasado", "because"),
         ("Urgencia", "urgency"),
         ("Hueco a cubrir", "gap"),
+        ("Habla", "speaks"),
     ):
         value = brief.get(key)
         if value:

@@ -87,8 +87,50 @@ async def voice_ws(websocket: WebSocket) -> None:
 
 @app.websocket("/ws/demo")
 async def demo_voice_ws(websocket: WebSocket) -> None:
-    """One browser demo call using the production pipeline without submissions."""
-    await _run_voice_socket(websocket, submit_actions=False)
+    """One browser demo call using the production pipeline without submissions.
+
+    With `?reason=` it is the other direction: the clinic ringing a colleague
+    because the diary broke. The brief comes off the escalation the panel was
+    looking at, so the call opens knowing what happened instead of asking.
+    """
+    query = websocket.query_params
+    reason = (query.get("reason") or "").strip()
+    brief: dict[str, str] | None = None
+    if reason:
+        from agent.clinic import graph
+
+        route = graph.who_to_call(reason)
+        brief = {
+            "reason": reason,
+            "who": query.get("who") or (route.target if route else ""),
+            "because": query.get("because") or (route.detail if route else ""),
+            "urgency": query.get("urgency") or (route.urgency if route else ""),
+            "gap": query.get("gap") or "",
+            # Which language to open in, read off the catalogue rather than
+            # guessed. An inbound caller is a stranger and Gemini works their
+            # language out from what they say; here we know exactly who is
+            # picking up, so opening in Spanish and waiting to be corrected
+            # would be choosing to ignore what we already know.
+            "speaks": _languages_of(query.get("provider_id") or ""),
+        }
+    await _run_voice_socket(websocket, submit_actions=False, cover_brief=brief)
+
+
+def _languages_of(provider_id: str) -> str:
+    """The languages a colleague speaks, named the way a person says them."""
+    if not provider_id:
+        return ""
+    try:
+        from agent.brain import deps
+
+        cache = deps.try_catalogue_cache(app_settings.org_id)
+        provider = cache.provider_by_id(provider_id) if cache is not None else None
+    except Exception:  # noqa: BLE001 - never let this stop a call opening
+        return ""
+    if provider is None:
+        return ""
+    said = {"es": "español", "en": "inglés", "ca": "català"}
+    return ", ".join(said.get(code, code) for code in (provider.languages or ()))
 
 
 async def _warm_catalogue_for(org_id: str) -> None:

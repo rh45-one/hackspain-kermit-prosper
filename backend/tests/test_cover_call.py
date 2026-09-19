@@ -45,3 +45,21 @@ def test_the_cover_call_cannot_reach_a_patient_tool(tmp_path):
     assert "record_cover_answer" in names
     for patient_tool in ("book_appointment", "register_new_patient", "lookup_patient"):
         assert patient_tool not in names
+
+
+def test_the_brief_says_which_language_to_open_in(tmp_path):
+    """We know who is picking up, so guessing would be ignoring what we know."""
+    prompt = system_prompt_for(
+        _ctx(tmp_path, {"who": "Dra. Carmen Ortiz Vidal", "speaks": "català, inglés, español"})
+    )
+
+    assert "català, inglés, español" in prompt
+    assert "Open in that language" in prompt
+
+
+def test_a_colleague_we_cannot_place_leaves_the_language_unsaid(tmp_path):
+    """Better unsaid than invented: the model then does what it does inbound."""
+    from agent.voice.server import _languages_of
+
+    assert _languages_of("") == ""
+    assert _languages_of("PR-does-not-exist") == ""
