@@ -197,32 +197,102 @@ def request_org_id(request: Any, asked: str | None = None) -> str:
 # ---- the login page -------------------------------------------------------
 _LOGIN_PAGE = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>Pronto — entrar</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-body{font-family:-apple-system,Inter,sans-serif;background:#0e1116;color:#e6e8ee;margin:0;
-display:flex;min-height:100vh;align-items:center;justify-content:center}
-form{background:#151b24;border:1px solid #232a35;border-radius:12px;padding:28px;width:320px}
-h1{font-size:17px;margin:0 0 4px;letter-spacing:-.03em}
-p{color:#9fb0c3;font-size:13px;margin:0 0 18px}
-label{display:block;font-size:12px;color:#9fb0c3;margin:12px 0 5px;text-transform:uppercase;
-letter-spacing:.08em}
-input{width:100%;box-sizing:border-box;background:#0e1116;border:1px solid #232a35;border-radius:8px;
-padding:9px 11px;color:#e6e8ee;font-size:14px}
-button{width:100%;margin-top:20px;background:#2b7cd3;border:0;border-radius:8px;padding:10px;
-color:#fff;font-size:14px;cursor:pointer}
-.err{background:#2a1a1d;border:1px solid #5a2a30;color:#f08a8a;border-radius:8px;padding:9px 11px;
-font-size:13px;margin-bottom:6px}
+/* The panel's palette, not a second product's. This page and /equipo are the
+   same thing to whoever is looking at them, and a dark blue form in front of a
+   warm ivory panel says they were built by different people on different days. */
+:root{
+  --canvas:#fffefb; --fog:#f4f4f0; --ivory:#eee9df; --mist:#dcdfd9;
+  --graphite:#1d211f; --steel:#4c534e; --quiet:#777e78; --ember:#e76432;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+  background:var(--canvas); color:var(--graphite); padding:24px;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-feature-settings:"cv05","ss01";
+  /* A little warmth behind the card so it does not float on flat white. */
+  background-image:radial-gradient(120% 90% at 50% -20%, var(--ivory) 0%, var(--canvas) 62%);
+}
+.card{width:100%; max-width:380px}
+.mark{
+  width:40px; height:40px; border-radius:11px; background:var(--graphite); color:var(--canvas);
+  display:flex; align-items:center; justify-content:center;
+  font-weight:600; font-size:19px; letter-spacing:-.04em; margin-bottom:22px;
+}
+h1{font-size:27px; line-height:1.15; letter-spacing:-.035em; margin:0 0 6px; font-weight:600}
+.sub{color:var(--steel); font-size:14px; line-height:1.5; margin:0 0 28px}
+form{
+  background:var(--canvas); border:1px solid var(--mist); border-radius:18px;
+  padding:24px; box-shadow:0 1px 2px rgba(29,33,31,.04), 0 12px 32px -18px rgba(29,33,31,.22);
+}
+label{
+  display:block; font-size:11px; font-weight:500; color:var(--quiet);
+  text-transform:uppercase; letter-spacing:.09em; margin:0 0 7px;
+}
+.field + .field{margin-top:18px}
+input{
+  width:100%; background:var(--fog); border:1px solid transparent; border-radius:11px;
+  padding:11px 13px; font:inherit; font-size:15px; color:var(--graphite);
+  transition:background .15s, border-color .15s, box-shadow .15s;
+}
+input::placeholder{color:var(--quiet)}
+input:focus{
+  outline:none; background:var(--canvas); border-color:var(--graphite);
+  box-shadow:0 0 0 3px rgba(29,33,31,.08);
+}
+button{
+  width:100%; margin-top:24px; background:var(--graphite); color:var(--canvas);
+  border:0; border-radius:11px; padding:12px; font:inherit; font-size:15px; font-weight:500;
+  cursor:pointer; transition:transform .08s, opacity .15s;
+}
+button:hover{opacity:.9}
+button:active{transform:translateY(1px)}
+.err{
+  display:flex; gap:9px; align-items:flex-start;
+  background:#fdf1ec; border:1px solid #f6d6c8; color:#8c3714;
+  border-radius:11px; padding:11px 13px; font-size:13.5px; line-height:1.45; margin-bottom:20px;
+}
+.err b{color:var(--ember)}
+.foot{margin-top:20px; font-size:12.5px; color:var(--quiet); line-height:1.5; text-align:center}
+@media (prefers-color-scheme: dark){
+  :root{
+    --canvas:#14171a; --fog:#1b1f23; --ivory:#1b1f23; --mist:#2a2f35;
+    --graphite:#eceee9; --steel:#a2aaa4; --quiet:#7d857f;
+  }
+  body{background-image:radial-gradient(120% 90% at 50% -20%, #1a1e22 0%, #14171a 62%)}
+  button{background:var(--graphite); color:#14171a}
+  .err{background:#2a1a14; border-color:#5a3020; color:#f0a884}
+}
 </style></head><body>
-<form method="post" action="/ops/login">
-<h1>Pronto</h1><p>Consola de operaciones</p>
-__ERROR__
-<label for="email">Correo</label><input id="email" name="email" type="email" autocomplete="username" required autofocus>
-<label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-<button type="submit">Entrar</button>
-</form></body></html>"""
+<div class="card">
+  <div class="mark">P</div>
+  <h1>Pronto</h1>
+  <p class="sub">Consola de Clínica Arenal. Entra para ver las llamadas y gestionar el equipo.</p>
+  <form method="post" action="/ops/login">
+    __ERROR__
+    <div class="field">
+      <label for="email">Correo</label>
+      <input id="email" name="email" type="email" autocomplete="username"
+             placeholder="tu@clinica.es" required autofocus>
+    </div>
+    <div class="field">
+      <label for="password">Contraseña</label>
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" placeholder="••••••••" required>
+    </div>
+    <button type="submit">Entrar</button>
+  </form>
+  <p class="foot">Las cuentas las crea quien administra la clínica.</p>
+</div>
+</body></html>"""
 
 
 def _login_page(error: str = "") -> str:
-    block = f'<div class="err">{error}</div>' if error else ""
+    block = f'<div class="err"><b>·</b><span>{error}</span></div>' if error else ""
     return _LOGIN_PAGE.replace("__ERROR__", block)
 
 
