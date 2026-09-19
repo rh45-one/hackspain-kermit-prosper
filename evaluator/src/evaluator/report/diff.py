@@ -148,6 +148,19 @@ def format_diff(result: RunDiff) -> str:
         f"fallo cambiado:     {s['changed_failure']}",
         f"sin cambio:         {s['unchanged']}",
     ]
+    # Two identical runs of the same agent moved 6 of 21 scenarios, in both
+    # directions. Without this line the numbers above read as a verdict on
+    # the change, and they are not one.
+    moved = s["newly_passing"] + s["newly_failing"] + s["verdict_changed"]
+    if moved:
+        lines += [
+            "",
+            f"AVISO: {moved} caso(s) cambiaron de veredicto. El agente no es",
+            "determinista: dos ejecuciones del MISMO código mueven casos en las",
+            "dos direcciones. Antes de leer esto como una mejora, mira la tabla",
+            "de estabilidad del informe (necesita repetitions > 1) y quédate con",
+            "los escenarios que salen siempre incorrectos.",
+        ]
     for kind, label in (
         ("newly_passing", "NUEVOS ACIERTOS"),
         ("newly_failing", "NUEVOS FALLOS"),

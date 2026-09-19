@@ -14,6 +14,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 from evaluator.clinic.dataset import Dataset
 from evaluator.clinic.server import create_app as create_clinic_app
@@ -192,6 +193,56 @@ def _slow_adapter(delay_s: float, submit_on_hangup: bool = True):
             return {"reply": None, "ended": True}
         await asyncio.sleep(delay_s)
         return {"reply": "¿Me dice su nombre?", "ended": False}
+
+    return app
+
+
+class TestHangupIsBestEffortButVisible:
+    """An agent that rejects the optional hangup keeps every point - and
+    the report still says the evaluator could not close the call."""
+
+    def test_rejected_hangup_is_recorded_without_penalty(self, rig):
+        agent = serve_in_thread(_strict_adapter(), "127.0.0.1", 18991)
+        try:
+            candidate = CandidateConfig(
+                name="strict", kind="external", text_url="http://127.0.0.1:18991"
+            )
+            result = _run(_scenario(), candidate)
+            assert result.verdict == "pass"  # not penalised
+            assert result.errors == []  # not a rig failure either
+            assert any("hangup rechazado con HTTP 422" in n for n in result.notes)
+        finally:
+            agent.stop()
+
+
+class _StrictBody(BaseModel):
+    """`text: str` - a model that rejects the hangup's `text: null` with 422.
+
+    Module level on purpose: this file uses `from __future__ import
+    annotations`, so a model declared inside a function is a string
+    annotation FastAPI cannot resolve, and every request 422s for the wrong
+    reason.
+    """
+
+    call_id: str
+    text: str
+
+
+def _strict_adapter():
+    """An adapter whose model requires `text: str`, like the first real one."""
+    from fastapi import FastAPI
+
+    app = FastAPI()
+
+    @app.post("/turns")
+    async def turns(body: _StrictBody):
+        async with httpx.AsyncClient(base_url=CLINIC_URL, timeout=10) as clinic:
+            await clinic.post(
+                "/api/v1/submit/no-action",
+                json={"call_id": body.call_id, "reason": "out_of_scope"},
+                headers={"X-Api-Key": KEY},
+            )
+        return {"reply": "Queda anotado. Gracias por llamar.", "ended": True}
 
     return app
 
