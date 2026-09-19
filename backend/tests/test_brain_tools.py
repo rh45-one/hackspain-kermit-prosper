@@ -1172,3 +1172,47 @@ async def test_spanish_hides_nobody(box, ctx):
         with_es, when_phrase="tomorrow", specialty_name="General practice", language="español"
     )
     assert with_es.result.get("total_free") == plain.result.get("total_free")
+
+
+async def test_registration_names_the_plan_it_recorded(box, ctx):
+    """The caller has to hear which plan went down, because one word is all it is.
+
+    From a scored call: "Mapfre Salud" reached the model as "ma phrase salue"
+    and the registration went out under sanitas, a plan nobody had mentioned.
+    Six of seven fields matched and the case still failed.
+    """
+    params = FakeParams()
+    await box.register_new_patient(
+        params,
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="ASISA",
+    )
+
+    assert params.result["insurer_recorded"] == "ASISA"
+    assert params.result["read_this_back_to_them"] is True
+
+
+async def test_the_registration_carries_every_field(box, ctx):
+    """Auditing one field is how four 422s stayed invisible for a whole run."""
+    await box.register_new_patient(
+        FakeParams(),
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="ASISA",
+    )
+
+    queued = ctx.queued_actions[-1]
+    assert queued["insurer"] == "asisa"
+    assert queued["email"] == "sergio_martinez77@gmail.com"
+    assert queued["national_id"] == "31426012P"

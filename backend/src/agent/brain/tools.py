@@ -1119,8 +1119,25 @@ class ToolBox:
                 "insurer": plan_id,
             }
         )
-        self.ctx.audit("action_queued", {"route": "register", "national_id": normalized_id})
-        await params.result_callback({"registered_would_be": True})
+        # The whole body, not just the id. Four registrations were lost to a
+        # 422 nobody could see because this audit named one field; and one was
+        # lost to an insurer the caller never said, which this would have shown.
+        self.ctx.audit(
+            "action_queued",
+            {"route": "register", **{k: v for k, v in self.ctx.queued_actions[-1].items() if k != "route"}},
+        )
+        plan = self.cache.plan_by_id(plan_id or "") if self.cache is not None else None
+        await params.result_callback(
+            {
+                "registered_would_be": True,
+                # Say this back to them. A plan is one word over a telephone and
+                # the wrong one fails the registration as surely as a wrong id:
+                # "Mapfre Salud" came through as "ma phrase salue" on a scored
+                # call and the plan submitted was one nobody had mentioned.
+                "insurer_recorded": plan.name if plan is not None else plan_id,
+                "read_this_back_to_them": True,
+            }
+        )
 
     async def finish_without_booking(self, params: FunctionCallParams, reason: str) -> None:
         """End the call with no booking, for a named, allowed reason.
