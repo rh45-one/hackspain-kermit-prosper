@@ -80,12 +80,12 @@
   .lockup {
     display: flex;
     align-items: center;
-    gap: 14px;
-    font-weight: 700;
-    font-size: 32px;
-    letter-spacing: -0.03em;
   }
-  .lockup svg { width: 48px; height: 48px; }
+  .lockup img {
+    display: block;
+    height: 64px;
+    width: auto;
+  }
   .kicker {
     font-size: 24px;
     font-weight: 600;
@@ -277,6 +277,64 @@
     max-width: 14ch;
   }
 
+  .hits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 36px;
+    max-width: 1400px;
+  }
+  .hit {
+    border-radius: 999px;
+    padding: 14px 24px;
+    font-size: 24px;
+    font-weight: 700;
+    background: var(--mint);
+    color: var(--navy);
+  }
+  .hit.miss { background: #ffe3dc; color: #9a3412; }
+  .hit.warn { background: #fff1c2; color: #7a4b00; }
+
+  .trio {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+    width: 100%;
+  }
+  .stat {
+    background: var(--white);
+    border-radius: 28px;
+    padding: 36px 32px 32px;
+    min-height: 420px;
+    display: flex;
+    flex-direction: column;
+  }
+  .stat p {
+    margin: 12px 0 0;
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--taupe);
+    max-width: 16ch;
+  }
+  .stat h2 {
+    margin: 28px 0 0;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 42px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+  .stat .score {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 72px;
+    color: var(--coral);
+    line-height: 1;
+    margin: 0 0 auto;
+    max-width: none;
+  }
+
   .close h1 {
     font-size: 110px;
     max-width: 10ch;
@@ -329,28 +387,20 @@
 </style>
 </head>
 <body>
-  <svg width="0" height="0" aria-hidden="true">
-    <symbol id="mark" viewBox="0 0 64 64">
-      <polygon points="6,14 30,14 22,58 0,58" fill="currentColor"/>
-      <polygon points="34,6 60,6 50,42 26,42" fill="#ff5533"/>
-    </symbol>
-  </svg>
-
   <div class="board" id="board">
     <div class="progress" aria-hidden="true"><i id="bar"></i></div>
     <div class="stage" id="stage">
 
-      <section class="slide is-navy is-on" data-notes="Somos Kermit. Este fin de semana hemos construido ClinicReflow: un agente de voz que coge el teléfono de una clínica, y el mostrador con el que la recepción ve esa llamada. No vamos a explicaros el problema. Lo escribisteis vosotros.">
+      <section class="slide is-navy is-on" data-notes="Somos Kermit. El agente coge el teléfono de Clínica Arenal y envía la acción a vuestra plataforma. No os vamos a vender un modelo. Os vamos a enseñar cómo rinde contra los casos que escribisteis vosotros.">
         <div class="top">
           <div class="lockup">
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><use href="#mark"/></svg>
-            Prosper
+            <img src="./assets/prosper-logo-on-navy.png" alt="Prosper" />
           </div>
         </div>
         <div class="title-grid">
           <div>
             <h1 class="display">ClinicReflow</h1>
-            <p class="lede">The clinic reorganizes. The phone does not improvise.</p>
+            <p class="lede">Your cases. Our scoreboard. The phone does not improvise.</p>
           </div>
           <div class="hero-art" aria-hidden="true">
             <i class="phone" data-lucide="phone-call"></i>
@@ -359,92 +409,99 @@
         </div>
       </section>
 
-      <section class="slide" data-notes="Dijisteis que un modelo voz-a-voz no sabe cuál de las cuatro Marías García está al teléfono. Inventará una respuesta con mucha educación. El trabajo interesante no es el prompt. Es el sistema alrededor.">
-        <div class="top"><span class="kicker">From your brief</span></div>
-        <div class="quote">
-          <h1 class="display">A voice-to-voice model on its own will <em>happily invent</em> an answer.</h1>
-          <p class="src">Prosper · HackSpain 2026</p>
+      <section class="slide" data-notes="Mejor Run All sobre los problemas 1 a 10. Siete problemas a cuatro de cuatro. Third Party va tres de cuatro. New Patient sigue a cero: ahí fallamos el REGISTER, no el razonamiento de citas. No citéis los 54 failed: son intentos, no el tablero.">
+        <div class="top"><span class="kicker">Best Run All · problems 1–10</span></div>
+        <h1 class="display stack-head">Seven problems at four of four.</h1>
+        <div class="hits">
+          <span class="hit">Simple Booking</span>
+          <span class="hit">Doctor and the Site</span>
+          <span class="hit">When Exactly</span>
+          <span class="hit">The Rules</span>
+          <span class="hit">No Slot Free</span>
+          <span class="hit">Change and Cancel</span>
+          <span class="hit">Triage</span>
+          <span class="hit warn">Third Party 3/4</span>
+          <span class="hit miss">New Patient 0/4</span>
         </div>
       </section>
 
-      <section class="slide" data-notes="El modelo habla. El sistema decide. Tres capas, y ninguna puede hacer el trabajo de las otras. Luego B pone FrontDesk en /calls.">
-        <div class="top"><span class="kicker">Around the model</span></div>
-        <h1 class="display stack-head">The model talks. The system decides.</h1>
-        <div class="rows">
-          <article class="row">
-            <div class="tile coral"><i data-lucide="phone-call"></i></div>
-            <div>
-              <h2>Voice</h2>
-              <p>One socket. Ten lines. No shared state.</p>
-            </div>
+      <section class="slide" data-notes="Tres que importan en una clínica real. The Rules: se niega con la razón cerrada de la clínica, no con un texto libre. When Exactly: lunes es Madrid, no el modelo. Triage: dolor de pecho es 112, no un hueco. Doctor and the Site y Change and Cancel también están a pleno: se dice si preguntan.">
+        <div class="top"><span class="kicker">What a perfect run means</span></div>
+        <div class="trio">
+          <article class="stat">
+            <p class="score">12/12</p>
+            <h2>The Rules</h2>
+            <p>Refuses with the clinic’s reason. Not a polite guess.</p>
           </article>
-          <article class="row">
-            <div class="tile mint"><i data-lucide="clipboard-check"></i></div>
-            <div>
-              <h2>Clinic core</h2>
-              <p>Dates, rules, ids. Never invented.</p>
-            </div>
+          <article class="stat">
+            <p class="score">8/8</p>
+            <h2>When Exactly</h2>
+            <p>“Monday” is Europe/Madrid. Never same-day.</p>
           </article>
-          <article class="row">
-            <div class="tile sand"><i data-lucide="radio"></i></div>
-            <div>
-              <h2>FrontDesk</h2>
-              <p>Why it said that — on screen, not in a log.</p>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section class="slide is-navy" data-notes="Esto es recepción de Clínica Arenal. B enseña /calls, el modal, /calendar y /patients. No abras Settings. Si el live muere, quédate aquí y usa el plan B. No leas esta slide: alt-tab.">
-        <div class="top"><span class="kicker">Live</span></div>
-        <div class="demo">
-          <h1 class="display">FrontDesk</h1>
-          <p class="lede">Ten lines. Live transcript. Madrid calendar.</p>
-          <div class="verbs" style="margin-top: 48px">
-            <span class="pill">Calls</span>
-            <span class="pill">Calendar</span>
-            <span class="pill">Patients</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="slide" data-notes="ClinicReflow es lo que pasa cuando el médico no viene. El optimizador propone alternativas legales. La voz negocia. Si el paciente dice que no, guarda la restricción. Costura, no motor cerrado.">
-        <div class="top"><span class="kicker">When a doctor drops out</span></div>
-        <div class="flow">
-          <article class="step">
-            <div class="n">01</div>
-            <div class="ico"><i data-lucide="calendar-clock"></i></div>
-            <h2>Propose</h2>
-            <p>Legal slots. Already filtered.</p>
-          </article>
-          <article class="step">
-            <div class="n">02</div>
-            <div class="ico"><i data-lucide="phone-call"></i></div>
-            <h2>Negotiate</h2>
-            <p>Offer. Listen. Never promise a ghost slot.</p>
-          </article>
-          <article class="step">
-            <div class="n">03</div>
-            <div class="ico"><i data-lucide="check-check"></i></div>
-            <h2>Close</h2>
-            <p>The clinic recalculates.</p>
+          <article class="stat">
+            <p class="score">12/12</p>
+            <h2>Triage</h2>
+            <p>Chest pain is 112. Not a slot.</p>
           </article>
         </div>
       </section>
 
-      <section class="slide is-navy" data-notes="Si nos llevarais una sola cosa: que cada cita se trace a un id que la clínica ya había devuelto. El modelo narra. Ninguno escribe. Somos Kermit. Preguntad.">
-        <div class="top"><span class="kicker">What we will not give the model</span></div>
+      <section class="slide is-navy" data-notes="Esto no es solo un mando a distancia. En /calls la tarjeta enseña a quién identificamos (nombre, documento, tipo de cita), si el POST aterrizó (envíos aceptados o fallidos, y por qué una acción vacía), y el mix BOOKED / REFUSED / DIVERTED. Alt-tab y señala entidades, la línea de diagnóstico y los gráficos. No digáis que clonamos su tabla naranja: esa es su harness. Lo nuestro es el mostrador de la llamada.">
+        <div class="top"><span class="kicker">Our desk, not only yours</span></div>
+        <h1 class="display stack-head">Did we identify the case?</h1>
+        <div class="trio">
+          <article class="stat">
+            <p class="score">01</p>
+            <h2>Identify</h2>
+            <p>Name, document, visit type — live on the card.</p>
+          </article>
+          <article class="stat">
+            <p class="score">02</p>
+            <h2>Land</h2>
+            <p>Verb posted. Accepted or failed. Why it was empty.</p>
+          </article>
+          <article class="stat">
+            <p class="score">03</p>
+            <h2>Mix</h2>
+            <p>Booked, refused, diverted. Same screen as the call.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="slide" data-notes="New Patient es el agujero: REGISTER, DNI con letra, email al dictado. Cero de ocho. Third Party, un padre que llama por un hijo, va tres de cuatro. Lo decimos nosotros antes de que lo pregunten. No es el motor de reglas; es habla y ficha nueva.">
+        <div class="top"><span class="kicker">What still fails</span></div>
+        <div class="trio">
+          <article class="stat">
+            <p class="score">0/8</p>
+            <h2>New Patient</h2>
+            <p>Register. Check letter. Email spelled aloud.</p>
+          </article>
+          <article class="stat">
+            <p class="score">9/12</p>
+            <h2>Third Party</h2>
+            <p>A parent on the line. Three of four cases.</p>
+          </article>
+          <article class="stat">
+            <p class="score">—</p>
+            <h2>Switchboard</h2>
+            <p>Diagnostic only. Run All does not score it.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="slide is-navy" data-notes="Por eso el modelo no escribe. Un hueco inventado no suma medio punto: el caso falla entero. Cada llamada envía un verbo, incluida una negativa correcta. Somos Kermit. Preguntad.">
+        <div class="top"><span class="kicker">Why the board looks like that</span></div>
         <div class="close">
           <h1 class="display">The model does not write.</h1>
           <div class="verbs">
             <span class="pill ok">Book</span>
-            <span class="pill ok">Register</span>
+            <span class="pill">Register</span>
             <span class="pill ok">Reschedule</span>
-            <span class="pill">Cancel</span>
+            <span class="pill ok">Cancel</span>
             <span class="pill no">No action</span>
             <span class="pill alert">Escalate</span>
           </div>
-          <p class="lede">Every call files a verb. Including a correct no.</p>
+          <p class="lede">Exact match after the call. No partial credit.</p>
         </div>
       </section>
     </div>
