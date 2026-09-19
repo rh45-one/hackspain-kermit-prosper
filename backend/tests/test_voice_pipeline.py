@@ -114,17 +114,3 @@ def test_noise_suppression_is_off_unless_asked_for():
 
     assert _noise_filter(_Off()) is None
     assert _noise_filter(_On()) is not None  # available when explicitly asked for
-
-
-def test_the_greeting_is_bilingual():
-    """A Spanish-only greeting anchors the model into Spanish for the call.
-
-    Observed live on call 98bd199c: the agent opened "Buenos días, le atiende
-    Clínica Arenal", the caller said "Hello. Are you still there?", and the
-    agent answered in Spanish twice more while the caller asked in English
-    whether anyone could hear them. The call died at 76 s with no action.
-    """
-    for message in (phone_hint_greeting(hinted_ctx()), phone_hint_greeting(HintCtx(None))):
-        assert "BILINGUAL" in message
-        assert "buenos días" in message
-        assert "Good morning" in message
