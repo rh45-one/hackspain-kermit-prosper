@@ -182,3 +182,83 @@ def test_manifest_is_read_for_the_console(tmp_path):
     rows = client.get("/api/runs").json()
     assert rows[0]["experiment"] == "smoke"
     assert rows[0]["cases"] == 0
+
+
+def _open_and_say_audio(client, payload: str):
+    session = _open(client)
+    response = client.post(
+        f"/api/chat/{session['session_id']}/say-audio", json={"mulaw_base64": payload}
+    )
+    return session, response
+
+
+def test_microphone_audio_is_delivered_as_frames(stack, primed):
+    """Push-to-talk: the browser uploads µ-law, the rig sends it as 20 ms frames."""
+    import base64
+
+    primed([{"route": "no-action", "fields": {"reason": "out_of_scope"}}])
+    raw = bytes([0xFF]) * 3200  # 0.4 s of µ-law silence
+    _, response = _open_and_say_audio(stack, base64.b64encode(raw).decode())
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["caller"]["role"] == "caller"
+    assert body["caller"]["seconds"] == 0.4
+    # The rig saved what it really sent, and it answered the turn.
+    assert body["caller"]["wav"].endswith("-caller.wav")
+    assert body["agent"]["role"] == "agent"
+
+
+def test_a_partial_last_frame_is_padded_to_twenty_milliseconds(stack, primed):
+    """A capture that stops mid-frame must not send a short frame."""
+    import base64
+
+    from evaluator.api.chat import FRAME_BYTES
+
+    primed([{"route": "no-action", "fields": {"reason": "out_of_scope"}}])
+    raw = bytes([0xFF]) * (FRAME_BYTES + 7)
+    session = _open(stack)
+    response = stack.post(
+        f"/api/chat/{session['session_id']}/say-audio",
+        json={"mulaw_base64": base64.b64encode(raw).decode()},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    evidence = stack.get(
+        f"/api/chat/{session['session_id']}/audio/{body['caller']['wav']}"
+    )
+    assert evidence.status_code == 200
+    # A real WAV for what the rig sent: two padded 20 ms frames plus the tail,
+    # never a 7-byte fragment.
+    assert evidence.content[:4] == b"RIFF"
+    assert len(body["caller"]["wav"]) > 0
+
+
+def test_microphone_upload_rejects_garbage_and_oversized_audio(stack, primed):
+    import base64
+
+    from evaluator.api.chat import MAX_MIC_SECONDS
+
+    session = _open(stack)
+    too_long = bytes([0xFF]) * int((MAX_MIC_SECONDS + 1) * 8000)
+    oversized = stack.post(
+        f"/api/chat/{session['session_id']}/say-audio",
+        json={"mulaw_base64": base64.b64encode(too_long).decode()},
+    )
+    assert oversized.status_code == 413
+    for payload in ("no-es-base64!!", ""):
+        response = stack.post(
+            f"/api/chat/{session['session_id']}/say-audio", json={"mulaw_base64": payload}
+        )
+        assert response.status_code == 422
+    missing = stack.post(f"/api/chat/{session['session_id']}/say-audio", json={})
+    assert missing.status_code == 422
+
+
+def test_microphone_upload_needs_an_open_session(stack):
+    import base64
+
+    response = stack.post(
+        "/api/chat/nope/say-audio",
+        json={"mulaw_base64": base64.b64encode(bytes([0xFF]) * 160).decode()},
+    )
+    assert response.status_code == 404

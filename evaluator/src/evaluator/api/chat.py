@@ -12,6 +12,8 @@ says whether the agent heard the caller at all.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 import shutil
 import uuid
@@ -36,6 +38,11 @@ from evaluator.harness.wsclient import CallSession, silence
 from evaluator.models import Scenario
 from evaluator.tester import ChatOptions as TesterOptions
 from evaluator.tester import close_call_window, open_call_window, wait_for_actions
+
+# A push-to-talk upload is bounded: a browser that streams a stuck microphone
+# must not fill memory, and 60 s is far more than any single turn.
+MAX_MIC_SECONDS = 60.0
+FRAME_BYTES = 160  # 20 ms of 8 kHz µ-law, the contract's frame size
 
 
 @dataclass
@@ -101,17 +108,11 @@ class ChatSession:
         turn = await self._agent_turn("saludo", self.options.greeting_wait_ms)
         return turn if turn.wav else None
 
-    async def say(self, text: str) -> dict[str, Any]:
-        if self.closed:
-            raise HTTPException(409, "la sesión ya está cerrada")
-        frames = synthesize(text, self.options.tts, self.options.lang)
-        if self.options.turn_tail_ms > 0:
-            frames = frames + silence(int(self.options.turn_tail_ms))
+    async def _deliver(self, caller: ChatTurn, frames: list[bytes]) -> dict[str, Any]:
+        """Send one caller turn and return the pair (caller, agent) turns."""
         caller_wav = f"{len(self.turns):02d}-caller.wav"
         (self.directory / caller_wav).write_bytes(ulaw_to_wav(b"".join(frames)))
-        caller = ChatTurn(
-            role="caller", text=text, seconds=len(frames) * 0.02, wav=caller_wav
-        )
+        caller.wav = caller_wav
         self.turns.append(caller)
         await self.session.send_frames(frames)
         agent = await self._agent_turn("respuesta", self.options.reply_start_ms)
@@ -119,6 +120,53 @@ class ChatSession:
         if latencies:
             agent.latency_ms = latencies[-1]
         return {"caller": caller.as_dict(), "agent": agent.as_dict()}
+
+    async def say(self, text: str) -> dict[str, Any]:
+        """One caller turn spoken by the server's TTS."""
+        if self.closed:
+            raise HTTPException(409, "la sesión ya está cerrada")
+        frames = synthesize(text, self.options.tts, self.options.lang)
+        if self.options.turn_tail_ms > 0:
+            frames = frames + silence(int(self.options.turn_tail_ms))
+        caller = ChatTurn(
+            role="caller", text=text, seconds=len(frames) * 0.02, wav=None
+        )
+        return await self._deliver(caller, frames)
+
+    async def say_audio(self, mulaw: bytes) -> dict[str, Any]:
+        """One caller turn spoken by the person at the browser's microphone.
+
+        The browser captures 8 kHz µ-law (AudioWorklet, same pattern as the
+        backend's own demo page) and uploads it as bytes; nothing is decoded
+        server side beyond framing, so what the agent hears is exactly what
+        the microphone produced.
+        """
+        if self.closed:
+            raise HTTPException(409, "la sesión ya está cerrada")
+        if not mulaw:
+            raise HTTPException(422, "no llegó audio del micrófono")
+        if len(mulaw) > int(MAX_MIC_SECONDS * 8000):
+            raise HTTPException(413, f"audio demasiado largo (máximo {MAX_MIC_SECONDS:.0f}s)")
+        frames = [
+            mulaw[offset : offset + FRAME_BYTES]
+            for offset in range(0, len(mulaw), FRAME_BYTES)
+        ]
+        last = frames[-1]
+        if len(last) < FRAME_BYTES:
+            # µ-law 0xff is silence: pad the tail so the frame stays 20 ms.
+            frames[-1] = last + b"\xff" * (FRAME_BYTES - len(last))
+        if self.options.turn_tail_ms > 0:
+            frames = frames + silence(int(self.options.turn_tail_ms))
+        # Transcribe what the caller actually said, so the log shows the words
+        # the agent had a chance to hear (empty when STT is off).
+        text = await self._transcribe(mulaw)
+        caller = ChatTurn(
+            role="caller",
+            text=text or "(audio del micrófono)",
+            seconds=len(mulaw) / 8000,
+            wav=None,
+        )
+        return await self._deliver(caller, frames)
 
     async def close(self) -> dict[str, Any]:
         if self.closed:
@@ -264,6 +312,17 @@ def create_chat_router(manager: ChatSessionManager) -> APIRouter:
         if not text:
             raise HTTPException(422, "falta el texto")
         return await manager.get(session_id).say(text)
+
+    @router.post("/{session_id}/say-audio")
+    async def say_audio(session_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        payload = body.get("mulaw_base64")
+        if not isinstance(payload, str) or not payload:
+            raise HTTPException(422, "falta mulaw_base64")
+        try:
+            raw = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(422, "mulaw_base64 no es base64 válido") from None
+        return await manager.get(session_id).say_audio(raw)
 
     @router.post("/{session_id}/close")
     async def close(session_id: str) -> dict[str, Any]:
