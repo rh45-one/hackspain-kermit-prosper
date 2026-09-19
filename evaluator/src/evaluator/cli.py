@@ -49,11 +49,36 @@ def main() -> None:
     p = sub.add_parser("diff", help="compare two run directories (A -> B)")
     p.add_argument("run_a", help="results dir of run A (the baseline)")
     p.add_argument("run_b", help="results dir of run B (the candidate)")
+    p.add_argument(
+        "--candidate-a",
+        default=None,
+        help="candidate of run A to pair (needed only when A has several)",
+    )
+    p.add_argument(
+        "--candidate-b",
+        default=None,
+        help="candidate of run B to pair (needed only when B has several)",
+    )
     p.add_argument("--json", action="store_true", help="emit machine-readable diff")
 
     p = sub.add_parser("compare", help="side-by-side of every candidate inside one run")
     p.add_argument("run", help="results dir of the run")
     p.add_argument("--json", action="store_true", help="emit the machine-readable summary")
+
+    p = sub.add_parser("metrics", help="metric table of one run directory")
+    p.add_argument("run", help="results dir of the run")
+    p.add_argument("--json", action="store_true", help="emit the machine-readable summary")
+
+    p = sub.add_parser("observe", help="observe real backend calls from its audit dir")
+    p.add_argument("--data-dir", required=True, help="backend DATA_DIR or its calls/ dir")
+    p.add_argument(
+        "--map",
+        dest="oracle_map",
+        default=None,
+        help="YAML mapping call_id (or prefix) -> scenario yaml; untagged calls stay informational",
+    )
+    p.add_argument("--out", default="evaluator/experiments/results", help="results root")
+    p.add_argument("--run-id", default=None, help="default: timestamp + short hash")
 
     p = sub.add_parser("dev", help="developer console: read-only API plus a live chat")
     p.add_argument("--host", default="127.0.0.1")
@@ -159,7 +184,9 @@ def main() -> None:
     elif args.cmd == "diff":
         from evaluator.report.diff import diff_runs, format_diff
 
-        result = diff_runs(args.run_a, args.run_b)
+        result = diff_runs(
+            args.run_a, args.run_b, candidate_a=args.candidate_a, candidate_b=args.candidate_b
+        )
         if args.json:
             import dataclasses
 
@@ -167,6 +194,25 @@ def main() -> None:
             print()
         else:
             print(format_diff(result))
+    elif args.cmd == "metrics":
+        from pathlib import Path
+
+        from evaluator.report.metrics import format_metrics, summarize
+        from evaluator.report.side_by_side import load_cases
+
+        cases = load_cases(Path(args.run))
+        summary = summarize(cases)
+        if args.json:
+            json.dump(summary, sys.stdout, indent=2, ensure_ascii=False)
+            print()
+        else:
+            print(format_metrics(summary))
+    elif args.cmd == "observe":
+        from evaluator.observer import observe
+
+        out = observe(args.data_dir, args.oracle_map, args.out, args.run_id)
+        print(f"results: {out}")
+        print(f"report:  {out}/report.html")
     elif args.cmd == "dev":
         import uvicorn
 

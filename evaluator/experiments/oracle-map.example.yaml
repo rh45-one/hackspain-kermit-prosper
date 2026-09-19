@@ -1,0 +1,41 @@
+# Mapa de oráculos para el observador post-hoc — PLANTILLA.
+#
+# Copialo como `oracle-map.yaml` (está en .gitignore? no: este archivo fijo es
+# la plantilla y el mapa real conviene dejarlo fuera de Git) y completá UNA
+# entrada por llamada real que quieras PUNTUAR:
+#
+#   calls:
+#     <call_id o prefijo inequívoco>: <ruta al escenario>
+#
+# Cómo conseguir los call_id (los nombres de archivo del audit del backend):
+#
+#   ls backend/data/calls/
+#
+# Reglas del mapa:
+#
+# - La clave es el `call_id` completo o un prefijo que identifique UNA sola
+#   llamada. Si un prefijo coincide con dos entradas, `observe` falla en vez
+#   de puntuar la llamada equivocada.
+# - Las rutas son relativas a este archivo o a la raíz del repositorio.
+# - Las llamadas que no aparezcan acá NO se puntúan: quedan como evidencia en
+#   `real_calls.jsonl`, en el informe y en la pestaña «Llamadas reales».
+# - Etiquetá solo cuando sepas qué llamada del banco estaba jugando esa
+#   persona. Un veredicto contra el escenario equivocado es peor que no tener
+#   veredicto.
+#
+# Ejemplo (descomentá y reemplazá por call_id reales):
+#
+#   calls:
+#     060b5378-17ce-5b3d-b6ca-fe5f03a788ca: evaluator/scenarios/simple_booking/sb-001.yaml
+#     2d154827: evaluator/scenarios/the_rules/rules-001.yaml
+#
+# Uso:
+#
+#   uv run --project evaluator python -m evaluator.cli observe \
+#       --data-dir backend/data --map evaluator/experiments/oracle-map.yaml
+#
+# Después abrí la consola (`cli.py dev`) y elegí la corrida `backend-observe`
+# recién creada: las llamadas etiquetadas aparecen con veredicto y las demás
+# como informativas.
+
+calls: {}

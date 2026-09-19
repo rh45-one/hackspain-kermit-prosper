@@ -114,6 +114,23 @@ def create_app(
         directory = _run_dir(root, run_id)
         return [c.model_dump(mode="json") for c in _cases_or_empty(directory)]
 
+    @app.get("/api/runs/{run_id}/real-calls")
+    def run_real_calls(run_id: str) -> list[dict[str, Any]]:
+        """Observer runs only: every real backend call the run observed."""
+        directory = _run_dir(root, run_id)
+        path = directory / "real_calls.jsonl"
+        if not path.is_file():
+            return []
+        rows: list[dict[str, Any]] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        return rows
+
     @app.get("/api/runs/{run_id}/compare")
     def run_compare(run_id: str) -> dict[str, Any]:
         directory = _run_dir(root, run_id)
@@ -133,9 +150,15 @@ def create_app(
         }
 
     @app.get("/api/diff")
-    def diff(a: str, b: str) -> dict[str, Any]:
-        result = diff_runs(_run_dir(root, a), _run_dir(root, b))
-        return {"a": a, "b": b, "summary": result.summary()}
+    def diff(a: str, b: str, candidate_a: str | None = None, candidate_b: str | None = None) -> dict[str, Any]:
+        """Two runs, optionally pairing one candidate from each."""
+        try:
+            result = diff_runs(
+                _run_dir(root, a), _run_dir(root, b), candidate_a=candidate_a, candidate_b=candidate_b
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"a": a, "b": b, "summary": result.summary(), "metrics": result.metrics}
 
     @app.get("/api/runs/{run_id}/report")
     def report(run_id: str) -> FileResponse:

@@ -117,6 +117,13 @@ CHECK_LABELS = {
 }
 
 
+REAL_CALL_VERDICTS = {
+    "pass": ("CORRECTA", "pass"),
+    "fail": ("INCORRECTA", "fail"),
+    "invalid_evaluation": ("NO EVALUABLE", "warn"),
+}
+
+
 def _field_name(field: str) -> str:
     return FIELD_LABELS.get(field, field)
 
@@ -193,6 +200,14 @@ def _percentile(values: list[float], pct: float) -> float | None:
     lo = int(k)
     hi = min(lo + 1, len(s) - 1)
     return s[lo] + (s[hi] - s[lo]) * (k - lo)
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
 
 
 def _local_points(cases: list) -> tuple[float, float]:
@@ -275,9 +290,84 @@ def _stability(cases: list, candidates: list[str]) -> tuple[str, str]:
     table = (
         "<h2>Estabilidad por escenario</h2>"
         f"{headline}"
-        f"<table><tr><th>escenario</th>{header}</tr>{''.join(rows)}</table>"
+        f'<div class="tablewrap"><table><tr><th>escenario</th>{header}</tr>'
+        f"{''.join(rows)}</table></div>"
     )
     return headline, table
+
+
+def _real_calls_section(run_dir: Path) -> str:
+    """Observer appendix: every real backend call this run observed.
+
+    Sourced from `real_calls.jsonl`, written by `evaluator.observer.run`.
+    Untagged calls carry no verdict - they are shown as evidence (what was
+    sent, whether the identity was confirmed, what the agent said), never
+    scored. Transcripts stay inside the run directory, which Git ignores.
+    """
+    path = run_dir / "real_calls.jsonl"
+    if not path.is_file():
+        return ""
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    if not rows:
+        return ""
+
+    trs = []
+    for r in rows:
+        actions = "<br>".join(
+            f"{VERB_LABELS.get(a.get('action', ''), a.get('action', ''))} · "
+            + ", ".join(f"{_field_name(k)}={_esc(v)}" for k, v in sorted(a.items()) if k != "action")
+            for a in (r.get("actions") or [])
+        ) or "<span class='meta'>ninguna</span>"
+        scenario = r.get("tagged_scenario")
+        verdict = r.get("verdict")
+        if scenario and verdict:
+            label, cls = REAL_CALL_VERDICTS.get(verdict, (verdict.upper(), ""))
+            verdict_html = f'<span class="{cls}">{_esc(label)}</span>'
+        else:
+            verdict_html = "<span class='meta'>sin oráculo: informativa</span>"
+        leaks = r.get("leaks") or []
+        leak_html = f'<br><span class="warn">fuga: {_esc(", ".join(leaks))}</span>' if leaks else ""
+        identity = r.get("identity_patient_id") or "<span class='meta'>no confirmada</span>"
+        caller = (r.get("transcript") or {}).get("caller") or ""
+        assistant = (r.get("transcript") or {}).get("assistant") or ""
+        transcript = (
+            f"<details><summary class='meta'>transcript ({_esc(len(caller))}+{_esc(len(assistant))} car.)</summary>"
+            f"<p class='meta'><b>caller</b>: {_esc(caller) or '—'}</p>"
+            f"<p class='meta'><b>agente</b>: {_esc(assistant) or '—'}</p></details>"
+            if caller or assistant
+            else "<span class='meta'>sin transcript</span>"
+        )
+        problems = "".join(f"<br><span class='warn'>{_esc(p)}</span>" for p in r.get("problems") or [])
+        trs.append(
+            "<tr>"
+            f"<td><code>{_esc(str(r.get('call_id', ''))[:8])}</code>"
+            f"<br><span class='meta'>{_esc(r.get('started_at') or '—')}</span></td>"
+            f"<td>{_esc(r.get('engine') or 'n/d')}</td>"
+            f"<td>{identity}</td>"
+            f"<td>{actions}{problems}</td>"
+            f"<td>{verdict_html}{leak_html}</td>"
+            f"<td>{_esc(scenario) if scenario else '<span class=\'meta\'>—</span>'}</td>"
+            f"<td>{transcript}</td>"
+            "</tr>"
+        )
+    return (
+        "<h2>Llamadas reales observadas</h2>"
+        '<div class="banner">Sección del <b>observador post-hoc</b>: llamadas que el '
+        "backend registró en su audit. Las etiquetadas en el mapa de oráculos están "
+        "puntuadas más arriba; el resto se muestran como evidencia (qué acción se "
+        "envió, si se confirmó la identidad, qué dijo el agente) y <b>no llevan "
+        "veredicto</b>: nadie definió qué se esperaba de ellas.</div>"
+        '<div class="tablewrap"><table><tr><th>llamada</th><th>motor</th>'
+        "<th>identidad</th><th>acción enviada</th><th>veredicto</th>"
+        f"<th>escenario</th><th>evidencia</th></tr>{''.join(trs)}</table></div>"
+    )
 
 
 def render_report(run_dir: str | Path) -> Path:
@@ -313,6 +403,24 @@ def render_report(run_dir: str | Path) -> Path:
             if all(c.get("cost") is None for c in group)
             else f"{sum(c.get('cost') or 0 for c in group):.2f}"
         )
+        # New aggregates (PLAN.md §Métricas): errors, turns, audio volume and
+        # barge-ins. Every one of them reads `n/d` when the runner collected
+        # no data - a run that never measured audio is not a silent call.
+        errores = f'{sum(1 for c in group if c.get("errors"))}/{len(group)}' if group else "n/d"
+        turns = [len(c.get("turn_latencies_ms") or []) for c in group]
+        turns = [t for t in turns if t]
+        turnos = f"{_median(turns):.0f}" if turns else "n/d"
+        audio_caller = [c.get("caller_audio_s") for c in group]
+        audio_agent = [c.get("agent_audio_s") for c in group]
+        if any(v is not None for v in audio_caller):
+            audio_text = (
+                f"{sum(v for v in audio_caller if v is not None):.0f}s / "
+                f"{sum(v for v in audio_agent if v is not None):.0f}s"
+            )
+        else:
+            audio_text = "n/d"
+        barge = sum(len(c.get("interrupts") or []) for c in group)
+        barge_ins = f"{barge} en {sum(1 for c in group if c.get('interrupts'))} llamada(s)" if barge else "0"
         summary_rows.append(
             "<tr>"
             f"<td><b>{_esc(cand)}</b></td>"
@@ -320,6 +428,10 @@ def render_report(run_dir: str | Path) -> Path:
             f"<td>{points} / {covered_max}</td>"
             f"<td>{invalid}</td>"
             f"<td>{lat}</td>"
+            f"<td>{errores}</td>"
+            f"<td>{turnos}</td>"
+            f"<td>{audio_text}</td>"
+            f"<td>{barge_ins}</td>"
             f"<td>{cost}</td>"
             "</tr>"
         )
@@ -440,23 +552,108 @@ def render_report(run_dir: str | Path) -> Path:
     )
 
     _, stability_table = _stability(cases, candidates)
+    real_calls_section = _real_calls_section(run_dir)
 
     page = f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>Pronto · evaluador local — {_esc(manifest['experiment'])}</title>
 <style>
-body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #222; }}
-table {{ border-collapse: collapse; margin: 1rem 0; }}
-th, td {{ border: 1px solid #ccc; padding: .35rem .7rem; text-align: left; }}
-th {{ background: #f3f3f3; }}
-.pass {{ background: #e2f6e3; }} .warn {{ background: #fff4d6; }}
-.fail {{ background: #fbe0e0; }}
-.meta {{ color: #666; font-size: .9rem; }}
-.banner {{ border: 2px solid #c47f00; background: #fff8e6; padding: .8rem 1rem;
-           margin: 1rem 0; border-radius: 6px; }}
-.banner table {{ margin: .6rem 0 .2rem; }}
-</style></head><body>
-<h1>Pronto · resultado local — {_esc(manifest['experiment'])}</h1>
+/* ClinicReflow: warm paper, graphite ink, brass metadata, ember for
+   exceptions. Self-contained on purpose - this file is opened with
+   file://, mailed around and served from the evaluator, so no CDN and no
+   external stylesheet. Fonts: Inter / Inter Tight when the machine has
+   them, otherwise the system stack keeps the same tight hierarchy. */
+:root {{
+  --graphite: #1d211f; --canvas: #fffefb; --page: #f6f6f2;
+  --ash: #ebece7; --fog: #f4f4f0; --ivory: #eee9df; --mist: #dcdfd9;
+  --steel: #4c534e; --quiet: #777e78; --brass: #806b36;
+  --ember: #e76432; --destructive: #d65327; --success: #1f6b4a;
+  --selection: #e7d7be;
+  --heading: "Inter Tight", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --shadow-sm: 0 1px 2px rgb(29 33 31 / 0.04), 0 8px 24px rgb(29 33 31 / 0.035);
+  --gutter: clamp(1.1rem, 4vw, 3rem);
+}}
+* {{ box-sizing: border-box; }}
+html, body {{ min-width: 320px; }}
+body {{
+  margin: 0; padding: 0 0 clamp(3rem, 8vw, 5rem);
+  background: var(--page); color: var(--graphite);
+  font-family: var(--body); font-size: 15px; line-height: 1.6;
+}}
+.page {{ max-width: 1280px; margin: 0 auto; padding: 0 var(--gutter); }}
+::selection {{ background: var(--selection); color: var(--graphite); }}
+code, pre {{ font-family: var(--mono); font-size: .92em; }}
+.kicker {{
+  display: flex; align-items: center; gap: 10px; margin-top: clamp(2rem, 5vw, 3rem);
+  font-family: var(--heading); font-size: 11px; font-weight: 500;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--brass);
+}}
+.kicker::after {{ content: ""; width: 20px; height: 1px; background: var(--brass); }}
+h1 {{
+  font-family: var(--heading); font-weight: 500;
+  font-size: clamp(2rem, 4.2vw, 3.25rem); line-height: 1;
+  letter-spacing: -.045em; text-wrap: balance; margin: .4rem 0 0;
+}}
+h2 {{
+  font-family: var(--heading); font-weight: 500; font-size: clamp(1.3rem, 2.6vw, 1.55rem);
+  letter-spacing: -.02em; margin: clamp(2.5rem, 6vw, 4rem) 0 .6rem;
+}}
+h3 {{ font-family: var(--heading); font-weight: 500; font-size: 16px; margin: 1.2rem 0 .4rem; }}
+p {{ max-width: 46rem; }}
+ul {{ max-width: 46rem; padding-left: 1.1rem; }}
+li {{ margin: .35rem 0; }}
+.meta {{ color: var(--quiet); font-size: 12.5px; max-width: 60rem; }}
+
+/* Tables: paper surface, mist hairlines, internal scroll on small screens. */
+.tablewrap {{
+  overflow-x: auto; background: var(--canvas); border: 1px solid var(--mist);
+  border-radius: 18px; box-shadow: var(--shadow-sm); margin-top: 1rem;
+}}
+table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
+th, td {{ text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--mist); vertical-align: top; }}
+th:first-child, td:first-child {{ padding-left: 1.1rem; }}
+th:last-child, td:last-child {{ padding-right: 1.1rem; }}
+thead th {{
+  font-family: var(--heading); font-size: 12.5px; font-weight: 500; color: var(--quiet);
+  background: rgb(246 246 242 / .7); white-space: nowrap; height: 48px;
+}}
+tbody tr:last-child td {{ border-bottom: 0; }}
+/* Verdicts: ivory means "look here", never a coloured wash. */
+td.pass, td.fail, td.warn {{ font-weight: 500; }}
+td.pass {{ background: rgb(238 233 223 / .55); color: var(--brass); }}
+td.fail {{ background: rgb(238 233 223 / .85); color: var(--destructive); }}
+td.warn {{ background: var(--ash); color: var(--steel); }}
+.pass {{ color: var(--success); }} .good {{ color: var(--success); }}
+.warn {{ color: var(--brass); }} .bad {{ color: var(--destructive); }}
+
+/* Banners: the loudest thing on the page is always the fixture warning. */
+.banner {{
+  margin: 1.2rem 0; padding: 1rem 1.3rem; max-width: 62rem;
+  background: var(--ivory); border: 1px solid #cfbf9b; border-radius: 14px;
+  color: #4a3c1c; font-size: 13.5px;
+}}
+.banner strong, .banner b {{ color: #3a2f14; }}
+.banner table {{ margin: .7rem 0 .2rem; background: rgb(255 254 251 / .6); }}
+.banner code, .meta code, td code {{ background: rgb(255 254 251 / .75); padding: .05rem .35rem; border-radius: 6px; }}
+.verdict-pill {{
+  display: inline-flex; align-items: center; height: 24px; padding: 0 10px;
+  border-radius: 9999px; font-family: var(--heading); font-size: 11px;
+  font-weight: 500; letter-spacing: .02em; text-transform: uppercase;
+  background: var(--ivory); color: var(--brass);
+}}
+.verdict-pill.fail {{ background: var(--ivory); color: var(--ember); }}
+.verdict-pill.warn {{ background: var(--ash); color: var(--steel); }}
+details {{ margin-top: .3rem; }}
+details summary {{ cursor: pointer; color: var(--quiet); font-size: 12.5px; }}
+details p {{ margin: .4rem 0 0; font-size: 12.5px; color: var(--steel); }}
+@media print {{ body {{ background: #fff; }} .tablewrap {{ break-inside: avoid; }} }}
+</style></head><body><div class="page">
+<p class="kicker">Pronto · resultado local</p>
+<h1>{_esc(manifest['experiment'])}</h1>
 {_fixture_banner(manifest)}
 <p class="meta">
 run_id <code>{_esc(manifest['run_id'])}</code> ·
@@ -469,7 +666,7 @@ Cobertura: {len(covered)} familias de problema · peso cubierto {covered_weight}
 Los puntos locales estiman el veredicto oficial; no lo certifican.
 </p>
 <h2>Cómo se lee esto</h2>
-<ul>
+<ul style="max-width:46rem">
 <li><b>CORRECTA</b>: el agente envió exactamente la acción esperada, campo por
 campo. Un solo campo distinto y el caso es incorrecto: así puntúa la
 plataforma, no hay puntos parciales.</li>
@@ -486,23 +683,26 @@ código pueden dar veredictos distintos en el mismo escenario. Con
 ésa antes de concluir que algo ha mejorado.</li>
 </ul>
 <h2>Resumen por configuración</h2>
-<table><tr><th>candidato</th><th>correctas / evaluables</th>
+<div class="tablewrap"><table><tr><th>candidato</th><th>correctas / evaluables</th>
 <th>puntos locales / máximo cubierto</th>
-<th>no evaluables</th><th>tiempo de respuesta p50/p95</th><th>coste</th></tr>
+<th>no evaluables</th><th>tiempo de respuesta p50/p95</th>
+<th>casos con errores</th><th>turnos (mediana)</th>
+<th>audio caller/agente</th><th>barge-ins</th><th>coste</th></tr>
 {"".join(summary_rows)}
-</table>
+</table></div>
 {stability_table}
 <h2>Pass rate por problema</h2>
-<table><tr><th>problema</th>{"".join(f"<th>{_esc(c)}</th>" for c in candidates)}</tr>
+<div class="tablewrap"><table><tr><th>problema</th>{"".join(f"<th>{_esc(c)}</th>" for c in candidates)}</tr>
 {"".join(rows)}
-</table>
+</table></div>
 <h2>Detalle por caso</h2>
-<table><tr><th>candidato</th><th>caso</th><th>veredicto</th>
+<div class="tablewrap"><table><tr><th>candidato</th><th>caso</th><th>veredicto</th>
 <th>qué salió mal</th><th>qué campo se perdió</th><th>evidencia</th><th>duración</th></tr>
 {"".join(detail_rows)}
-</table>
+</table></div>
 {unevaluated_note}
-</body></html>"""
+{real_calls_section}
+</div></body></html>"""
     out = run_dir / "report.html"
     out.write_text(page, encoding="utf-8")
     return out
