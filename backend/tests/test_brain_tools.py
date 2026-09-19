@@ -1292,3 +1292,17 @@ async def test_an_abstaining_jev_never_invents(box, ctx):
 
     assert not ctx.queued_actions
     assert params.result["did_you_mean"] == ["Sanitas"]  # sound-alikes still get their turn
+
+
+def test_a_spanish_address_is_not_given_spain_twice():
+    """Fold both sides or neither: `_fold_plain` turns ñ into n.
+
+    A literal "españa" compared against folded text can never match, so the
+    guard was dead and "Calle X, Madrid, España" was being sent to the
+    geocoder as "Calle X, Madrid, España, Madrid, Spain".
+    """
+    from agent.brain.tools import _fold_plain
+
+    for said in ("Calle de Madrid 54, España", "Getafe, Espana", "somewhere in Spain"):
+        folded = _fold_plain(said)
+        assert "spain" in folded or _fold_plain("España") in folded

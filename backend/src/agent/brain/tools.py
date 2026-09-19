@@ -917,7 +917,12 @@ class ToolBox:
         import httpx
 
         queries = [place]
-        if "spain" not in _fold_plain(place) and "españa" not in _fold_plain(place):
+        # Fold both sides or neither. `_fold_plain` turns the ñ into an n, so
+        # a literal "españa" written here could never match anything it
+        # produced — the guard was dead and every Spanish address got a
+        # redundant ", Madrid, Spain" bolted onto it.
+        folded_place = _fold_plain(place)
+        if "spain" not in folded_place and _fold_plain("España") not in folded_place:
             queries.append(f"{place}, Madrid, Spain")
         # A house number the map has never heard of sinks the whole query, and
         # the street alone is well inside the margin these cases are drawn
