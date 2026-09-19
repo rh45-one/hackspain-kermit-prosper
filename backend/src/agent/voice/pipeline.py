@@ -155,6 +155,29 @@ def transport_params(ctx: CallContext, settings: Any) -> FastAPIWebsocketParams:
     )
 
 
+def system_prompt_for(ctx: CallContext) -> str:
+    """The receptionist prompt, or the one for ringing a colleague.
+
+    A call with a brief is the clinic ringing out because something broke, and
+    the brief travels into the prompt so the agent opens with the facts rather
+    than asking a doctor to identify themselves.
+    """
+    brief = getattr(ctx, "cover_brief", None)
+    if not brief:
+        return prompts.SYSTEM_PROMPT
+    lines = [prompts.COVER_PROMPT, "", "LO QUE HA PASADO, para esta llamada:"]
+    for label, key in (
+        ("A quién llama", "who"),
+        ("Qué ha pasado", "because"),
+        ("Urgencia", "urgency"),
+        ("Hueco a cubrir", "gap"),
+    ):
+        value = brief.get(key)
+        if value:
+            lines.append(f"- {label}: {value}")
+    return "\n".join(lines)
+
+
 def build_worker(
     transport: FastAPIWebsocketTransport,
     ctx: CallContext,
@@ -203,6 +226,7 @@ def build_worker(
             settings,
             toolbox,
             service_cls=gemini_service_factory,
+            system_instruction=system_prompt_for(ctx),
         )
         if service is None:  # pragma: no cover - resolve_voice_engine already gated this
             raise RuntimeError("Gemini Live service could not be created for an accepted engine")
@@ -257,7 +281,7 @@ def build_worker(
             base_url=settings.helmcode_base_url,
             settings=OpenAILLMService.Settings(
                 model=settings.agent_model,
-                system_instruction=prompts.SYSTEM_PROMPT,
+                system_instruction=system_prompt_for(ctx),
             ),
         )
 

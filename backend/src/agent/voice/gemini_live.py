@@ -257,6 +257,7 @@ def create_gemini_live_service(
     toolbox: Any,
     *,
     service_cls: Any = None,
+    system_instruction: str | None = None,
 ) -> Any | None:
     """Build one Gemini Live service for ONE socket. Never shared.
 
@@ -338,6 +339,9 @@ def create_gemini_live_service(
     # the problem, GeminiVADParams(silence_duration_ms=...) is the knob, and
     # it is still Gemini deciding.
     vad_params = None
+    # The receptionist prompt unless this socket carries a brief, in which
+    # case it is the clinic ringing a colleague and the job is a different one.
+    system_instruction = system_instruction or prompts.SYSTEM_PROMPT
     service = service_cls(
         api_key=api_key,
         settings=service_cls.Settings(
@@ -349,7 +353,7 @@ def create_gemini_live_service(
             language=_gemini_language(settings),
             vad=vad_params,
         ),
-        system_instruction=prompts.SYSTEM_PROMPT,
+        system_instruction=system_instruction,
         tools=toolbox.tools(),
     )
     logger.info(

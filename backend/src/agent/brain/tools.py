@@ -1508,6 +1508,42 @@ class ToolBox:
             await params.result_callback({"error": str(exc)})
 
     # ---- registration ----------------------------------------------------
+    async def record_cover_answer(
+        self,
+        params: FunctionCallParams,
+        can_cover: str,
+        when_to_call_back: str | None = None,
+        note: str | None = None,
+    ) -> None:
+        """Write down what the colleague answered about covering the gap.
+
+        Args:
+            can_cover: One of 'yes', 'no' or 'will_check'.
+            when_to_call_back: When they asked to be rung again, in their words, if they said so.
+            note: Anything they added that the clinic needs to know, in their words.
+        """
+        answer = str(can_cover).strip().lower()
+        if answer not in {"yes", "no", "will_check"}:
+            await params.result_callback(
+                {"error": "can_cover must be 'yes', 'no' or 'will_check'"}
+            )
+            return
+        brief = self.ctx.cover_brief or {}
+        self.ctx.audit(
+            "cover_answer",
+            {
+                "can_cover": answer,
+                "when_to_call_back": when_to_call_back,
+                "note": note,
+                "about": brief.get("because"),
+                "who": brief.get("who"),
+            },
+        )
+        # No booking, no submission. This call was never about the diary; it
+        # was about a person, and the record of what they said is the whole
+        # output. Saying it back to them is the model's job, not this tool's.
+        await params.result_callback({"written_down": True, "can_cover": answer})
+
     def tools(self) -> list[Any]:
         registered = [
             self.lookup_patient,
@@ -1525,6 +1561,11 @@ class ToolBox:
             self.get_reflow_context,
             self.commit_reflow_decision,
         ]
+        if getattr(self.ctx, "cover_brief", None):
+            # Only on a call that IS about covering a gap. The scored agent
+            # must never see a tool that has nothing to do with a patient:
+            # every extra tool is one more thing it can reach for by mistake.
+            registered = [self.record_cover_answer, self.describe_clinic]
         if self.engine == "gemini_live":
             registered.append(self.assess_current_turn)
         return registered

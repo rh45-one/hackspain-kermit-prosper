@@ -113,7 +113,12 @@ async def _warm_catalogue_for(org_id: str) -> None:
         logger.error("catalogue warm for {} failed: {}", org_id, exc)
 
 
-async def _run_voice_socket(websocket: WebSocket, *, submit_actions: bool) -> None:
+async def _run_voice_socket(
+    websocket: WebSocket,
+    *,
+    submit_actions: bool,
+    cover_brief: dict[str, str] | None = None,
+) -> None:
     await websocket.accept()
     # One organisation per socket, bound to this task before anything is
     # built: the ToolBox reads it from here to pick its catalogue cache.
@@ -124,6 +129,9 @@ async def _run_voice_socket(websocket: WebSocket, *, submit_actions: bool) -> No
         data_dir=app_settings.data_dir,
         submit_actions=submit_actions,
     )
+    if cover_brief:
+        ctx.cover_brief = cover_brief
+        ctx.audit("cover_call_opened", cover_brief)
     logger.info(
         "{} socket open for {} (provisional id {})",
         "scored" if submit_actions else "demo",

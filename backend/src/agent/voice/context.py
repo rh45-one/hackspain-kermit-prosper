@@ -38,6 +38,11 @@ class CallContext:
     # pipeline but its synthetic call ids must never be sent to Prosper.
     submit_actions: bool = True
 
+    # Why this call exists, when it is the clinic ringing out rather than a
+    # patient ringing in. Set from the escalation the panel was looking at, so
+    # the agent opens knowing what broke instead of asking.
+    cover_brief: dict[str, Any] | None = None
+
     # Identification state
     phone_hint_match: dict[str, Any] | None = None
     patient_candidates: list[dict[str, Any]] = field(default_factory=list)
