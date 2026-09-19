@@ -15,6 +15,54 @@ el servidor ni el túnel con el que otro compañero está ejecutando Prosper.
 > **Resultado local.** El evaluador no es el juez oficial. Hasta validar su
 > equivalencia con la plataforma, sus resultados son «resultado local».
 
+## Empieza aquí (no hace falta conocer el proyecto)
+
+Tres comandos. El primero comprueba que el banco funciona; los otros dos
+prueban el agente sin gastar ninguna llamada puntuada.
+
+```sh
+uv sync --project evaluator
+
+# 1) ¿Funciona el banco? (no toca el agente, no necesita credenciales)
+uv run --project evaluator python -m evaluator.cli run \
+    --config evaluator/experiments/smoke-text.yaml
+# Esperado: 21 correctas / 21 incorrectas / 21 incorrectas, 0 no evaluables.
+# Son tres agentes de mentira: uno acierta, uno se equivoca a propósito y
+# uno no envía nada. Si esto no sale así, el roto es el banco.
+
+# 2) El agente de verdad, por texto (rápido: segundos por caso)
+#    Necesita el backend arrancado con TURNS_ADAPTER en un puerto que NO
+#    sea el 7860, y apuntando a la clínica local. Ver «Evaluar el agente
+#    real». Descomenta `text_url` en experiments/agent-local.yaml.
+uv run --project evaluator python -m evaluator.cli run \
+    --config evaluator/experiments/agent-local.yaml
+
+# 3) Comparar dos ejecuciones
+uv run --project evaluator python -m evaluator.cli diff <run_A> <run_B>
+```
+
+Cada ejecución deja `results/<run_id>/report.html`. **Ábrelo**: la primera
+pantalla dice contra qué datos se ha corrido y cómo se lee.
+
+**Qué mide**: que el agente identifica al paciente, elige la cita correcta,
+respeta las reglas de cobertura y **envía la acción exacta que espera la
+plataforma, campo por campo**. Un campo mal y el caso es incorrecto, igual
+que en el reto: no hay puntos parciales.
+
+**Qué no mide**:
+- **No dice si vas a puntuar.** Los datos son un fixture inventado de 6
+  pacientes y 7 médicos; la clínica real tiene ~3.000 y 12. Verde aquí es
+  «la lógica aguanta», no «la respuesta es correcta».
+- **No prueba la voz de verdad.** La vía de texto se salta reconocimiento y
+  síntesis. La de voz usa `espeak-ng`, que suena a robot.
+- **No mira privacidad por la vía de voz**: sin transcripción no hay
+  comprobación de fuga, y el informe lo dice caso por caso.
+- No es el juez oficial y nadie ha validado que coincida con él.
+
+**Regla operativa que no se salta nadie:** el puerto **7860** atiende
+llamadas puntuadas de verdad a través del túnel de ngrok registrado en
+Prosper. No apuntes nunca el banco ahí ni arranques nada en ese puerto.
+
 ## Qué contiene
 
 | Pieza | Ruta | Qué hace |

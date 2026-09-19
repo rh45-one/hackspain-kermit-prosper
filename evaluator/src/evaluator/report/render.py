@@ -26,6 +26,119 @@ REAL_CLINIC = {
     "specialties": "n/d",
     "appointment_types": "11",
 }
+# --- Plain Spanish for everything the report prints -------------------------
+#
+# `record_mismatch`, `field_diffs` and `policy_id` are the challenge's
+# vocabulary, not Spanish. The bench is now the gate every backend change
+# goes through, and people who did not write it read this page: whoever
+# opens it has to see which field was lost and why, without translating.
+
+VERDICT_LABELS = {
+    "pass": ("CORRECTA", "el agente envió exactamente lo que se esperaba"),
+    "fail": ("INCORRECTA", "el agente envió algo distinto de lo esperado"),
+    "invalid_evaluation": (
+        "NO EVALUABLE",
+        "falló el banco de pruebas, no el agente: el caso no cuenta",
+    ),
+}
+
+SIGNAL_LABELS = {
+    "missing_record": "no envió ninguna acción",
+    "record_mismatch": "envió una acción distinta de la esperada",
+    "transcript_leak": "dijo en voz alta un dato protegido del paciente",
+}
+
+CATEGORY_LABELS = {
+    "stt_error": "no entendió lo que se le dijo",
+    "identity_error": "identificó mal al paciente o sus datos",
+    "reasoning_error": "eligió mal: acción, hueco, médico o sede",
+    "tool_error": "falló al usar una herramienta",
+    "state_error": "mezcló información entre llamadas",
+    "submission_error": "el envío fue rechazado por la API",
+    "privacy_error": "fuga de un dato protegido",
+    "transport_error": "se cayó la conexión",
+    "provider_error": "falló el proveedor (modelo, voz)",
+    "harness_error": "falló el banco de pruebas",
+    "unknown": "sin clasificar",
+}
+
+FIELD_LABELS = {
+    "patient_id": "paciente",
+    "provider_id": "médico",
+    "location_id": "sede",
+    "appointment_type_id": "tipo de cita",
+    "appointment_id": "cita",
+    "slot": "fecha y hora",
+    "policy_id": "plan / póliza",
+    "reason": "motivo",
+    "given_name": "nombre",
+    "first_surname": "primer apellido",
+    "second_surname": "segundo apellido",
+    "national_id": "DNI / NIE",
+    "date_of_birth": "fecha de nacimiento",
+    "phone": "teléfono",
+    "email": "correo",
+    "insurer": "aseguradora",
+    "action": "tipo de acción",
+}
+
+VERB_LABELS = {
+    "BOOK": "reservar",
+    "REGISTER": "dar de alta",
+    "RESCHEDULE": "cambiar",
+    "CANCEL": "anular",
+    "NO_ACTION": "no hacer nada",
+    "ESCALATE": "pasar a una persona",
+}
+
+PROBLEM_LABELS = {
+    "simple_booking": "cita simple",
+    "switchboard": "llamadas simultáneas",
+    "doctor_and_site": "médico y sede",
+    "new_patient": "paciente nuevo",
+    "when_exactly": "cuándo exactamente",
+    "rules": "las reglas",
+    "no_slot_free": "sin hueco libre",
+    "change_and_cancel": "cambiar y anular",
+    "third_party": "llama un tercero",
+    "triage": "triaje",
+    "languages": "idiomas",
+    "noise": "ruido de fondo",
+    "difficult_caller": "llamante difícil",
+    "adversarial": "intento de engaño",
+    "nearest_site": "sede más cercana",
+    "questions": "preguntas",
+    "second_policy": "segunda póliza",
+    "real_call": "llamada real",
+}
+
+CHECK_LABELS = {
+    "leak_check": "comprobación de privacidad (problema 14)",
+}
+
+
+def _field_name(field: str) -> str:
+    return FIELD_LABELS.get(field, field)
+
+
+def _submitted_field_count(submitted: list) -> int:
+    """How many fields the agent actually sent, across all its actions."""
+    total = 0
+    for action in submitted:
+        nested = action.get("new_patient")
+        total += len(nested) if isinstance(nested, dict) else len(action) - 1
+    return total
+
+
+def _describe_diff(diff: dict) -> str:
+    """One field difference, readable without knowing the schema."""
+    verb = VERB_LABELS.get(diff.get("verb", ""), diff.get("verb", ""))
+    got = diff.get("got")
+    expected = diff.get("expected")
+    got_text = "no lo envió" if got in (None, "") else f"envió «{got}»"
+    return f"al {verb}, {_field_name(diff['field'])}: se esperaba «{expected}», {got_text}"
+
+
 _COUNT_LABELS = {
     "patients": "pacientes",
     "providers": "médicos",
@@ -154,7 +267,11 @@ def render_report(run_dir: str | Path) -> Path:
     rows = []
     for prob in problems:
         weight = PROBLEM_WEIGHTS.get(prob, 0)
-        cells = [f"<td><b>{_esc(prob)}</b> <span class='meta'>({weight}p)</span></td>"]
+        header = (
+            f"<td><b>{_esc(PROBLEM_LABELS.get(prob, prob))}</b> "
+            f"<span class='meta'>{_esc(prob)} · peso {weight}</span></td>"
+        )
+        cells = [header]
         for cand in candidates:
             group = [c for c in by_candidate.get(cand, {}).get(prob, []) if c["verdict"] != "invalid_evaluation"]
             invalid = len(by_candidate.get(cand, {}).get(prob, [])) - len(group)
@@ -164,7 +281,7 @@ def render_report(run_dir: str | Path) -> Path:
             passed = sum(1 for c in group if c["verdict"] == "pass")
             rate = passed / len(group) if group else 0
             cls = "pass" if rate == 1 else ("warn" if rate > 0 else "fail")
-            suffix = f" +{invalid} inv" if invalid else ""
+            suffix = f" +{invalid} no eval." if invalid else ""
             cells.append(f'<td class="{cls}">{passed}/{len(group)}{suffix}</td>')
         rows.append("<tr>" + "".join(cells) + "</tr>")
 
@@ -172,11 +289,30 @@ def render_report(run_dir: str | Path) -> Path:
     detail_rows = []
     for c in cases:
         verdict = c.get("verdict", "fail")
-        diffs = "; ".join(
-            f"{d['verb']}.{d['field']}: esperaba {d['expected']!r}, recibió {d['got']!r}"
-            for d in c.get("field_diffs", [])
+        field_diffs = c.get("field_diffs", [])
+        diffs = "<br>".join(_esc(_describe_diff(d)) for d in field_diffs)
+        # "6 de 7 correctos y suspendido" is the shape of most real losses:
+        # say it out loud so the reader sees the scale of the miss at once.
+        total_fields = _submitted_field_count(c.get("submitted") or [])
+        if field_diffs and total_fields:
+            noun = "campo" if total_fields == 1 else "campos"
+            diffs = (
+                f"<b>{len(field_diffs)} de {total_fields} {noun} mal</b><br>{diffs}"
+            )
+        if not diffs and c.get("missing_actions"):
+            diffs = "<br>".join(
+                f"faltó: {_esc(VERB_LABELS.get(a.get('action', ''), a.get('action', '')))}"
+                for a in c["missing_actions"]
+            )
+        if c.get("extra_actions"):
+            extra = "<br>".join(
+                f"sobró: {_esc(VERB_LABELS.get(a.get('action', ''), a.get('action', '')))}"
+                for a in c["extra_actions"]
+            )
+            diffs = f"{diffs}<br>{extra}" if diffs else extra
+        cats = ", ".join(
+            CATEGORY_LABELS.get(cat, cat) for cat in c.get("categories", [])
         )
-        cats = ", ".join(c.get("categories", []))
         # Evidence links: caller/agent audio + barge-in markers (plan §20).
         evidence = []
         audio = c.get("audio") or {}
@@ -189,15 +325,26 @@ def render_report(run_dir: str | Path) -> Path:
             evidence.append(f"{n_interrupts} barge-in")
         for check in c.get("checks_not_run") or []:
             evidence.append(f'<span class="warn">{_esc(check)} sin evaluar</span>')
+        label, _ = VERDICT_LABELS.get(verdict, (verdict.upper(), ""))
+        signal = c.get("failure_signal")
+        signal_text = (
+            f"<br><span class='meta'>{_esc(SIGNAL_LABELS.get(signal, signal))}</span>"
+            if signal
+            else ""
+        )
+        # The first error explains an unusable case; the rest is in cases.jsonl.
+        if verdict == "invalid_evaluation" and c.get("errors"):
+            signal_text = f"<br><span class='meta'>{_esc(c['errors'][0])}</span>"
+        problem = c.get("problem_id", "")
         detail_rows.append(
             "<tr>"
             f"<td>{_esc(c['candidate'])}</td>"
-            f"<td>{_esc(c['scenario_id'])}</td>"
-            f"<td>{c['repetition']}</td>"
+            f"<td>{_esc(PROBLEM_LABELS.get(problem, problem))}"
+            f"<br><span class='meta'>{_esc(c['scenario_id'])} · rep {c['repetition']}</span></td>"
             f"<td class=\"{'pass' if verdict == 'pass' else ('warn' if verdict == 'invalid_evaluation' else 'fail')}\">"
-            f"{_esc(verdict.upper())}{' / ' + _esc(c.get('failure_signal')) if c.get('failure_signal') else ''}</td>"
+            f"{_esc(label)}{signal_text}</td>"
             f"<td>{_esc(cats)}</td>"
-            f"<td>{_esc(diffs)}</td>"
+            f"<td>{diffs}</td>"
             f"<td>{' · '.join(evidence) if evidence else '-'}</td>"
             f"<td>{c['duration_s']}s</td>"
             "</tr>"
@@ -210,10 +357,15 @@ def render_report(run_dir: str | Path) -> Path:
         for check in c.get("checks_not_run") or []:
             not_run[check] += 1
     unevaluated_note = (
-        '<p class="meta"><b>Comprobaciones no evaluadas:</b> '
-        + "; ".join(f"{_esc(k)} en {v} caso(s)" for k, v in sorted(not_run.items()))
-        + ". El check de fuga (problema 14) necesita transcripción y solo la vía "
-        "de texto la produce: por WebSocket queda inerte.</p>"
+        '<p class="banner"><b>Comprobaciones que no se han llegado a hacer:</b> '
+        + "; ".join(
+            f"{_esc(CHECK_LABELS.get(k, k))} en {v} caso(s)"
+            for k, v in sorted(not_run.items())
+        )
+        + ". Esos casos pueden aparecer como CORRECTA sin que se haya comprobado "
+        "que el agente no dijo el DNI o el teléfono del paciente en voz alta: "
+        "hace falta la transcripción y solo la vía de texto la produce. Por "
+        "WebSocket el evaluador no transcribe, así que no lo puede mirar.</p>"
         if not_run
         else ""
     )
@@ -245,9 +397,23 @@ dataset <code>{_esc(manifest['dataset'])}#{_esc(manifest['dataset_hash'])}</code
 Cobertura: {len(covered)} familias de problema · peso cubierto {covered_weight}/{MAX_LOCAL_POINTS} puntos.
 Los puntos locales estiman el veredicto oficial; no lo certifican.
 </p>
+<h2>Cómo se lee esto</h2>
+<ul>
+<li><b>CORRECTA</b>: el agente envió exactamente la acción esperada, campo por
+campo. Un solo campo distinto y el caso es incorrecto: así puntúa la
+plataforma, no hay puntos parciales.</li>
+<li><b>INCORRECTA</b>: el agente envió algo distinto, o no envió nada.</li>
+<li><b>NO EVALUABLE</b>: falló el banco de pruebas (no le llegó voz al agente,
+se cortó la conexión, no arrancó la llamada). <b>No es un fallo del agente</b> y
+no cuenta ni a favor ni en contra.</li>
+<li><b>Puntos locales</b>: cada familia de problema pesa distinto. Es una
+estimación calculada aquí, con estos datos de mentira; no es la puntuación
+oficial.</li>
+</ul>
 <h2>Resumen por configuración</h2>
-<table><tr><th>candidato</th><th>correctas/total</th><th>puntos locales / cobertura</th>
-<th>inválidas</th><th>latencia p50/p95</th><th>coste/llamada</th></tr>
+<table><tr><th>candidato</th><th>correctas / evaluables</th>
+<th>puntos locales / máximo cubierto</th>
+<th>no evaluables</th><th>tiempo de respuesta p50/p95</th><th>coste</th></tr>
 {"".join(summary_rows)}
 </table>
 <h2>Pass rate por problema</h2>
@@ -255,8 +421,8 @@ Los puntos locales estiman el veredicto oficial; no lo certifican.
 {"".join(rows)}
 </table>
 <h2>Detalle por caso</h2>
-<table><tr><th>candidato</th><th>escenario</th><th>rep</th><th>veredicto</th>
-<th>categorías</th><th>diferencias de campos</th><th>evidencia</th><th>duración</th></tr>
+<table><tr><th>candidato</th><th>caso</th><th>veredicto</th>
+<th>qué salió mal</th><th>qué campo se perdió</th><th>evidencia</th><th>duración</th></tr>
 {"".join(detail_rows)}
 </table>
 {unevaluated_note}
