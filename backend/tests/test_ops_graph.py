@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent.ops import console
+from agent.ops import graph as ops_graph
 from agent.ops.console import app
 
 OPS_TOKEN = "test-ops-token"
@@ -13,6 +14,15 @@ OPS_TOKEN = "test-ops-token"
 @pytest.fixture(autouse=True)
 def _door(monkeypatch):
     monkeypatch.setattr(console, "settings", lambda: type("S", (), {"ops_token": OPS_TOKEN})())
+
+    # `deps.try_catalogue_cache()` hands out one object for the whole process.
+    # Letting these tests warm it leaks into every other test that needs it
+    # cold — test_ops_live asserts that a cold catalogue degrades to ids, and
+    # warming it here made those pass alone and fail in the suite.
+    async def _no_warm() -> None:
+        return None
+
+    monkeypatch.setattr(ops_graph, "_cache", _no_warm)
 
 
 def _map() -> dict:
