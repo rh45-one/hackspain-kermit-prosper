@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CallQrDialog } from "@/components/graph/call-qr";
@@ -68,13 +69,26 @@ function SectionTitle({
 export function ClinicGraphBoard({
   graph,
   callUrl,
+  cover,
+  highlight,
 }: {
   graph: ClinicGraph;
   /** Public address of the agent's browser call page, resolved on the server. */
   callUrl: string;
+  /** The cover question, rendered on the server. Optional: the board predates it. */
+  cover?: ReactNode;
+  /**
+   * Node to open pinned, which is how the suggestion reaches the drawing: the
+   * page refreshes with an answer and the graph is already pointing at the
+   * person, instead of naming somebody the reader then has to go and find.
+   *
+   * Initial state only, on purpose. Once the page is up the pin belongs to
+   * whoever is clicking, and a prop that kept re-pinning would fight them.
+   */
+  highlight?: string | null;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const [pinned, setPinned] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<string | null>(highlight ?? null);
   const [visible, setVisible] = useState<Set<Urgency>>(() => new Set(URGENCIES));
   const [calling, setCalling] = useState<CallSubject | null>(null);
 
@@ -158,6 +172,8 @@ export function ClinicGraphBoard({
   return (
     <div className="pb-24">
       <GraphKeyframes />
+
+      {cover ?? null}
 
       <PageHeader kicker="Clínica Arenal" title="El grafo de la clínica">
         Quién existe, quién cubre qué, quién está dónde — y las {counts.reasons} formas en que

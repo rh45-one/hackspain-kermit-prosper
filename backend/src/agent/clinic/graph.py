@@ -150,6 +150,28 @@ def _roles(org_id: str) -> list[Node]:
     ]
 
 
+def _cover_edges(org_id: str) -> list[Edge]:
+    """Who steps in for whom, drawn as an edge because that is what it is.
+
+    Until now this lived in one column of one table and appeared nowhere on
+    screen, so the second line of the rota was invisible: you could see that
+    `provider_on_leave` reaches Germán, and nothing told you who reaches when
+    Germán is the one who is off.
+
+    An edge is only drawn when both ends exist. A chain pointing at somebody
+    who has left is a thing the panel should be able to report as broken, and
+    `directory.unreachable_routes` is where that belongs — not here, where a
+    dangling edge would draw a line to a node that is not on the canvas.
+    """
+    people = directory.people_for(org_id)
+    known = {person.slug for person in people}
+    return [
+        Edge(person.slug, person.covers_for, "covers_for")
+        for person in people
+        if getattr(person, "covers_for", "") and person.covers_for in known
+    ]
+
+
 def _edges(cache: Any) -> list[Edge]:
     """Who works where and who covers what, straight off the catalogue."""
     out: list[Edge] = []
@@ -190,7 +212,7 @@ def build(cache: Any, org_id: str = "") -> dict[str, Any]:
             directory.escalation_routes(org_id).items()
         )
     ]
-    edges = edges + [
+    edges = edges + _cover_edges(org_id) + [
         Edge(f"reason:{e.reason}", e.target, "escalates_to", e.detail) for e in escalations
     ]
     return {

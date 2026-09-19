@@ -44,3 +44,19 @@ def _accounts_database_is_never_the_real_one(tmp_path, monkeypatch):
     monkeypatch.setattr(accounts_directory, "store", scoped)
     if hasattr(accounts_directory, "_rows") and hasattr(accounts_directory._rows, "cache_clear"):
         accounts_directory._rows.cache_clear()
+    return str(empty)
+
+
+@pytest.fixture
+def accounts_db(_accounts_database_is_never_the_real_one) -> str:
+    """The empty, migrated platform database this test owns.
+
+    Depends on the autouse fixture above rather than building a second file:
+    a test that writes rows and a `store()` that reads somewhere else is the
+    confusing failure this exists to prevent.
+    """
+    from agent.accounts import db
+
+    path = _accounts_database_is_never_the_real_one
+    db.migrate(path)
+    return path

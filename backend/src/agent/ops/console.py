@@ -278,6 +278,7 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
 # `require_ops_access` lazily, so this import is one-way and order-independent.
 from agent.ops.agent_config import router as agent_config_router
 from agent.ops.auth import router as auth_router
+from agent.ops.cover import router as cover_router
 from agent.ops.directory import router as directory_router
 from agent.ops.frontdesk import router as frontdesk_router
 from agent.ops.graph import router as graph_router
@@ -297,6 +298,10 @@ app.include_router(graph_router)
 # paragraph telling you to edit a file, and it named an engine that cannot
 # start, so it was documentation that was also wrong.
 app.include_router(agent_config_router)
+# Who should cover this, asked of Jev when somebody refreshes the panel. It is
+# a suggestion beside the configured route, never instead of it, and it is
+# deliberately not on the call path: see the module docstring.
+app.include_router(cover_router)
 # Sign in, sign out, switch clinic, and write a clinic's Prosper key. The only
 # routes here that are NOT behind `require_ops_access`: /ops/login cannot be,
 # or nobody could ever reach it. Every route on it that does anything checks
