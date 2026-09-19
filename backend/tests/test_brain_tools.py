@@ -1101,3 +1101,48 @@ async def test_an_unknown_insurer_is_refused_while_the_caller_is_still_there(box
     assert not ctx.queued_actions
     assert "no such insurer" in params.result["error"]
     assert "Sanitas" in params.result["the_clinic_knows"]
+
+
+async def test_a_crowd_from_a_name_alone_cannot_be_confirmed(box, ctx):
+    """Ten rows and no identifier is a guess, whichever one the model picks.
+
+    Taken from a scored call: the caller dictated a date of birth, the model
+    searched on the name only, got ten people back and confirmed the one the
+    caller id had suggested — then booked against it.
+    """
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez")
+    ctx.patient_candidates = [
+        {"patient_id": f"P{i:05d}", "date_of_birth": "1988-03-14"} for i in range(10)
+    ]
+
+    params = FakeParams()
+    await box.confirm_patient(params, patient_id="P00003")
+
+    assert ctx.confirmed_patient is None
+    assert "guess" in params.result["error"]
+    assert "date of birth" in params.result["do_this_first"]
+
+
+async def test_a_lookup_that_carried_the_date_of_birth_can_be_confirmed(box, ctx):
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez", date_of_birth="1988-03-14")
+    chosen = ctx.patient_candidates[0]["patient_id"]
+
+    params = FakeParams()
+    await box.confirm_patient(params, patient_id=chosen)
+
+    assert params.result.get("confirmed") is True
+
+
+async def test_a_single_match_needs_no_second_identifier(box, ctx):
+    """One row is not a crowd; the guard must not block the common path."""
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez")
+    ctx.patient_candidates = ctx.patient_candidates[:1]
+    chosen = ctx.patient_candidates[0]["patient_id"]
+
+    params = FakeParams()
+    await box.confirm_patient(params, patient_id=chosen)
+
+    assert params.result.get("confirmed") is True

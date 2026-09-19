@@ -32,6 +32,10 @@ class CallContext:
     # Identification state
     phone_hint_match: dict[str, Any] | None = None
     patient_candidates: list[dict[str, Any]] = field(default_factory=list)
+    # Which identifiers the last lookup actually carried. A confirmation is
+    # only as good as the search that produced it, and this is the only place
+    # that knows whether the caller's date of birth was used or ignored.
+    last_lookup_identified: bool = False
     confirmed_patient: dict[str, Any] | None = None
 
     # Latest finalized caller utterance (server-owned; the only text Jev's

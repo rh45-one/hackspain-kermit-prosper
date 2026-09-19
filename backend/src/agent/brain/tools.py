@@ -400,6 +400,7 @@ class ToolBox:
             return
         matches = [self._safe_patient(m) for m in result.matches]
         self.ctx.patient_candidates = matches
+        self.ctx.last_lookup_identified = bool(national_id or date_of_birth)
         summary = [
             {
                 "patient_id": m.get("patient_id"),
@@ -448,6 +449,30 @@ class ToolBox:
         match = next((m for m in self.ctx.patient_candidates if m.get("patient_id") == patient_id), None)
         if match is None:
             await params.result_callback({"error": "patient_id not among lookup results"})
+            return
+        # A name alone that returned a crowd identifies nobody. One scored call
+        # searched "Nuria Ruiz Martín" without the date of birth the caller had
+        # just dictated, got ten rows back, and confirmed the one the caller id
+        # had suggested — then booked against it. Caller id is a hint, never
+        # identification, and neither is being one of ten.
+        if len(self.ctx.patient_candidates) > 1 and not self.ctx.last_lookup_identified:
+            self.ctx.audit(
+                "confirm_refused",
+                {"candidates": len(self.ctx.patient_candidates), "reason": "ambiguous_lookup"},
+            )
+            await params.result_callback(
+                {
+                    "error": (
+                        f"that lookup returned {len(self.ctx.patient_candidates)} people and was "
+                        "run on a name alone, so this patient_id is a guess"
+                    ),
+                    "do_this_first": (
+                        "call lookup_patient again with the same name plus the caller's date of "
+                        "birth or national id. If they have not given one yet, ask for the date "
+                        "of birth — it is one short question and it is the whole identification."
+                    ),
+                }
+            )
             return
         self.ctx.confirmed_patient = match
         self.ctx.audit("identity_confirmed", {"patient_id": patient_id})
@@ -620,6 +645,18 @@ class ToolBox:
             await params.result_callback(result)
             return
         slots = [self._dump(s) for s in result.slots]
+        # The query, not just "ok: True". A call that searched four times and
+        # then told the caller the diary was full was indistinguishable in the
+        # trace from one that never searched at all; ids and dates only, no
+        # patient data.
+        self.ctx.audit(
+            "availability_query",
+            {
+                "asked": when_phrase,
+                **{k: str(v) for k, v in kwargs.items() if k != "patient_id"},
+                "slots": len(slots),
+            },
+        )
 
         def slot_hour(slot: dict[str, Any]) -> int:
             try:
