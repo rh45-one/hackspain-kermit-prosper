@@ -101,13 +101,16 @@ def phone_hint_greeting(ctx: Any) -> str:
     opening = "Answer with one short sentence: name the clinic, good morning, and ask how you can help."
     if given_name:
         return (
-            f"The phone is ringing. {opening} Caller id suggests the caller may be "
-            f"{given_name}; you may use that given name, nothing else. Caller id is "
-            f"only a hint, never identification: do not read, confirm or reveal any "
-            f"record detail until lookup_patient has matched their spoken name with "
-            f"their date of birth or national id and confirm_patient has succeeded. "
-            f"The person on the line may not be the patient; if their details do not "
-            f"match the hint, drop it silently and continue normally."
+            f"The phone is ringing. {opening} Caller id says this line belongs to "
+            f"{given_name}; you may use that given name and nothing else. It is a "
+            f"hint, never identification, so confirm it with ONE detail — ask for "
+            f"their date of birth and nothing more. Do not ask them to say their "
+            f"name: you already have it, saying a full name over a phone is slow "
+            f"and easily misheard, and one matching detail is all the clinic needs "
+            f"before opening a chart. Reveal no record detail until lookup_patient "
+            f"and confirm_patient have both succeeded. The person on the line may "
+            f"not be {given_name}; if their date of birth does not match, drop the "
+            f"hint silently and ask for their full name as usual."
         )
     return (
         f"The phone is ringing. {opening} If a chart hint was provided, greet them "

@@ -56,8 +56,15 @@ def test_hint_greeting_uses_only_the_given_name():
     # The hint is framed as a hint: identity still needs the lookup flow.
     assert "lookup_patient" in message
     assert "confirm_patient" in message
-    # Third-party callers stay possible.
-    assert "may not be the patient" in message
+    # Third-party callers stay possible: the person on the line may not be
+    # whoever the line belongs to, and the hint is dropped when it does not fit.
+    assert "may not be" in message
+    assert "drop the hint" in message
+    # One confirming detail, not two. A full Spanish name over a telephone is
+    # slow and easily misheard, and the record is already open from the
+    # caller id — asking for it again spends a turn of a three-minute call.
+    assert "date of birth" in message
+    assert "Do not ask them to say their name" in message
 
 
 def test_without_hint_the_greeting_is_generic():
