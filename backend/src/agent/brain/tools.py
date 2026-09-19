@@ -130,6 +130,10 @@ def _plan_id(cache: Any, spoken: str | None) -> str | None:
     return plan.id if plan is not None else spoken
 
 
+# One round trip, on a path that would otherwise cost a whole turn of a
+# three-minute call. Measured: a Jev read is ~600 ms.
+JEV_PLAN_TIMEOUT_SECONDS = 1.5
+
 _COVERAGE_REASONS = frozenset({
     "specialty_not_covered",
     "location_not_covered",
@@ -1098,6 +1102,27 @@ class ToolBox:
             await params.result_callback({"error": "national id check letter does not match; ask again"})
             return
         plan_id = _plan_id(self.cache, insurer)
+        if (
+            self.cache is not None
+            and self.cache.plan_by_id(plan_id or "") is None
+            and self.jev is not None
+            and self.jev.configured
+        ):
+            # The catalogue could not place these words. Before making the
+            # caller repeat themselves, put the whole list of plans the clinic
+            # sells in front of a model built for constrained choice, and take
+            # its answer only when it is confident. The list is the live
+            # catalogue, so this never needs editing when the clinic signs an
+            # insurer. Costs one round trip, on a path that otherwise ends in
+            # a wasted turn.
+            chosen = await self.jev.classify_plan(
+                insurer,
+                {p.id: p.name for p in self.cache.plans_by_id.values()},
+                timeout_seconds=JEV_PLAN_TIMEOUT_SECONDS,
+            )
+            if chosen is not None:
+                self.ctx.audit("plan_classified", {"by": "jev", "plan_id": chosen})
+                plan_id = chosen
         if self.cache is not None and self.cache.plan_by_id(plan_id or "") is None:
             # Caught here, not at submit time: a rejected registration is only
             # discovered once the call is over and nothing can be asked again.

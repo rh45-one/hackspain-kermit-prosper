@@ -111,11 +111,25 @@ def _fold(text: str) -> str:
     return stripped.casefold().strip()
 
 
-# Words that appear in more than one plan name and so identify none of them.
-_GENERIC_PLAN_WORDS = frozenset({"salud", "seguros", "seguro", "sanitaria", "sanitario"})
+def _shared_words(names: list[str]) -> frozenset[str]:
+    """Tokens that more than one of these names carries, so identify none of them.
+
+    Derived, never listed. Today it finds `salud`, shared by Mapfre Salud and
+    Caser Salud. Hardcoding that answer meant inventing `seguros` and
+    `sanitario` for words the catalogue does not actually contain, and it would
+    have gone stale the moment the clinic signed a new insurer.
+    """
+    seen: dict[str, int] = {}
+    for name in names:
+        for token in set(_fold(name).split()):
+            if len(token) >= 3:
+                seen[token] = seen.get(token, 0) + 1
+    return frozenset(token for token, count in seen.items() if count > 1)
+
 
 # What a Spanish caller says when they have no insurance at all. The catalogue
-# calls it "Privado"; nobody on a telephone does.
+# calls it "Privado"; nobody on a telephone does. This one cannot be derived —
+# it is a fact about Spanish, not about the clinic.
 _PLAN_SYNONYMS = {
     "particular": "privado",
     "particulares": "privado",
@@ -187,6 +201,7 @@ class CatalogueCache:
         self.types_by_id: dict[str, ClinicAppointmentType] = {}
         self.types_by_name: dict[str, ClinicAppointmentType] = {}
         self.plans_by_id: dict[str, ClinicPlan] = {}
+        self.generic_plan_words: frozenset[str] = frozenset()
         self.plans_by_name: dict[str, ClinicPlan] = {}
         self.locations_by_id: dict[str, ClinicLocation] = {}
         self.locations_by_name: dict[str, ClinicLocation] = {}
@@ -222,9 +237,10 @@ class CatalogueCache:
         for plan in catalogue.plans:
             plans_by_id[plan.id] = plan
             _index_names(plans_by_name, plan.name, plan)
-        # "Salud" belongs to two plans and identifies neither; whichever came
-        # first in the catalogue would otherwise answer to it on its own.
-        for word in _GENERIC_PLAN_WORDS:
+        # A word two plans share identifies neither, and whichever came first
+        # in the catalogue would otherwise answer to it on its own.
+        generic_plan_words = _shared_words([p.name for p in catalogue.plans])
+        for word in generic_plan_words:
             plans_by_name.pop(word, None)
         locations_by_id: dict[str, ClinicLocation] = {}
         locations_by_name: dict[str, ClinicLocation] = {}
@@ -241,6 +257,7 @@ class CatalogueCache:
         self.types_by_name = types_by_name
         self.plans_by_id = plans_by_id
         self.plans_by_name = plans_by_name
+        self.generic_plan_words = generic_plan_words
         self.locations_by_id = locations_by_id
         self.locations_by_name = locations_by_name
         self._catalogue = catalogue
@@ -320,7 +337,7 @@ class CatalogueCache:
         for word, plan_id in _PLAN_SYNONYMS.items():
             if word in folded.split():
                 return self.plans_by_id.get(plan_id)
-        distinctive = " ".join(t for t in folded.split() if t not in _GENERIC_PLAN_WORDS)
+        distinctive = " ".join(t for t in folded.split() if t not in self.generic_plan_words)
         if distinctive and distinctive != folded:
             return self._lookup(self.plans_by_name, distinctive)
         return None

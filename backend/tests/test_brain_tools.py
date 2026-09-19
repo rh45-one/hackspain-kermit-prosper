@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -1236,3 +1236,59 @@ async def test_an_unheard_plan_comes_back_with_the_names_to_read_out(box, ctx):
     assert not ctx.queued_actions
     assert params.result["did_you_mean"] == ["Sanitas"]
     assert "let them pick" in params.result["ask_them"]
+
+
+async def test_jev_places_a_plan_the_catalogue_cannot(box, ctx):
+    """Second layer: the catalogue failed, so the whole list goes to Jev."""
+
+    class StubJev:
+        configured = True
+        asked: ClassVar[dict[str, object]] = {}
+
+        async def classify_plan(self, spoken, plans, **_kw):
+            StubJev.asked = {"spoken": spoken, "plans": dict(plans)}
+            return "asisa"
+
+    box.jev = StubJev()
+    await box.register_new_patient(
+        FakeParams(),
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="assissa premium",
+    )
+
+    assert ctx.queued_actions[-1]["insurer"] == "asisa"
+    # The options are the live catalogue, never a list written in this repo.
+    assert StubJev.asked["plans"] == {p.id: p.name for p in box.cache.plans_by_id.values()}
+
+
+async def test_an_abstaining_jev_never_invents(box, ctx):
+    """Jev said it could not tell. That is a question for the caller."""
+
+    class AbstainingJev:
+        configured = True
+
+        async def classify_plan(self, *_a, **_kw):
+            return None
+
+    box.jev = AbstainingJev()
+    params = FakeParams()
+    await box.register_new_patient(
+        params,
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="sanitos",
+    )
+
+    assert not ctx.queued_actions
+    assert params.result["did_you_mean"] == ["Sanitas"]  # sound-alikes still get their turn

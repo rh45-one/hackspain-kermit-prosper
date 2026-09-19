@@ -6,6 +6,8 @@ question ids are the keys the answers come back under.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from agent.decision.models import JsonValue, TurnIntent
 
 INTENT_KEY = "intent"
@@ -79,6 +81,40 @@ def build_questions() -> dict[str, JsonValue]:
     }
 
 
+PLAN_KEY = "plan"
+PLAN_UNCLEAR = "unclear"
+PLAN_INSTRUCTIONS = (
+    "The caller was asked which insurance plan they hold and this is what the "
+    "line delivered, often badly. Which of the clinic's plans did they say? "
+    "Answer 'unclear' unless the words really do point at one of them — a plan "
+    "nobody said is worse than asking again."
+)
+
+
+def build_plan_question(plans: Mapping[str, str]) -> dict[str, JsonValue]:
+    """A closed choice over the plans the clinic actually sells.
+
+    ``plans`` maps plan id to the name a caller would say, and comes from the
+    live catalogue, so a plan signed tomorrow is an option tomorrow without
+    anyone editing this file. The escape hatch is always offered: this exists
+    because a model invented a plan rather than admit it had not heard one.
+    """
+    criteria: dict[str, str] = {
+        plan_id: f"The caller said {name!r}." for plan_id, name in plans.items()
+    }
+    criteria[PLAN_UNCLEAR] = (
+        "The words do not point at any one of these plans, or point at more "
+        "than one. The agent must ask the caller again."
+    )
+    return {
+        PLAN_KEY: {
+            "type": "choice",
+            "instructions": PLAN_INSTRUCTIONS,
+            "criteria": criteria,
+        }
+    }
+
+
 def intent_choice_labels() -> frozenset[str]:
     """The labels a Jev choice answer is allowed to return."""
     return frozenset(INTENT_CRITERIA)
@@ -94,7 +130,11 @@ __all__ = [
     "NEEDS_CLARIFICATION_CRITERIA",
     "NEEDS_CLARIFICATION_INSTRUCTIONS",
     "NEEDS_CLARIFICATION_KEY",
+    "PLAN_INSTRUCTIONS",
+    "PLAN_KEY",
+    "PLAN_UNCLEAR",
     "QUESTION_KEYS",
+    "build_plan_question",
     "build_questions",
     "intent_choice_labels",
 ]
