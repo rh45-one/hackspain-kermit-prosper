@@ -166,6 +166,7 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
 # it must not grow inside this debugging console. `live` reaches back for
 # `require_ops_access` lazily, so this import is one-way and order-independent.
 from agent.ops.frontdesk import router as frontdesk_router
+from agent.ops.graph import router as graph_router
 from agent.ops.live import router as live_router
 
 app.include_router(live_router)
@@ -175,3 +176,6 @@ app.include_router(live_router)
 # access gate on it does not, and without one it would have served whole
 # transcripts to anyone with the URL.
 app.include_router(frontdesk_router)
+# The clinic as a drawing: who exists, who covers what, and who hears about
+# each of the eighteen ways a call can end. No patient data passes through it.
+app.include_router(graph_router)
