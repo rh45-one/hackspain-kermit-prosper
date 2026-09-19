@@ -8,13 +8,21 @@ clinic_dataset: ../data/clinic_dataset.json
 clinic_port: 18090
 submit_key: pk-local-eval
 repetitions: 3
-# tts_command: espeak-ng        # descomenta para sintetizar turnos `tts: true`
+# Voz sintética del llamante: todos los turnos de los escenarios llevan
+# `tts: true`. Sin esto el agente recibe silencio y todos los casos salen
+# `invalid_evaluation` (fallo del rig, no del agente). Requiere el binario
+# instalado: `brew install espeak-ng` / `apt install espeak-ng`.
+tts_command: espeak-ng
 # switchboard:
 #   concurrency: 5              # descomenta para la fase de llamadas simultáneas
 candidates:
   - name: baseline
     kind: external
     ws_url: ws://127.0.0.1:17860/ws
+    # Vía de texto (recomendada mientras exista): si el agente expone el
+    # adaptador, descomenta y tiene prioridad sobre ws_url. Contrato en el
+    # README, sección "Adaptador de texto `/turns`".
+    # text_url: http://127.0.0.1:17860
     version: "external-agent"
     # usage_url: http://127.0.0.1:17860/usage   # GET {usage_url}/calls/{call_id}
     # Opcional: el runner lo arranca y espera el puerto.

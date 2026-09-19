@@ -14,9 +14,16 @@ Two ways in, one wire implementation:
   done. The manual tester needs this; a chat has no turns to enumerate in
   advance.
 
-Latency is measured per caller turn: end of the caller's last outbound
-frame → the agent's first inbound media frame after it (plan §13,
-"fin del habla del paciente → primer audio audible de respuesta").
+Both share the turn rule: a carrier line is never empty, so the pause after an
+utterance is streamed silence, not an absence of frames. A scripted turn can
+hold for a fixed time, or adaptively while the agent is still talking, because
+a caller who talks over the agent's reply turns every later turn into a test of
+nothing.
+
+Latency is measured per caller turn: end of the caller's last speech frame →
+the agent's first inbound media frame after it (plan §13, "fin del habla del
+paciente → primer audio audible de respuesta"). The pause after the utterance
+does not count towards it.
 
 Turns flagged `interrupt_on_agent_audio` barge in: the caller stops its
 own utterance the moment the agent starts speaking, like a real
@@ -55,10 +62,24 @@ def silence(ms: int) -> list[bytes]:
 
 @dataclass
 class PlayTurn:
-    """One caller utterance to play on the wire."""
+    """One caller utterance to play on the wire, plus the pause after it.
+
+    `hold_ms` is the minimum silence played once the utterance ends - the
+    carrier never stops streaming, so the pause is silence on the wire, not
+    an absence of frames.
+
+    `max_hold_ms > 0` turns that pause adaptive: the caller keeps holding
+    while the agent is still talking, and speaks again once the agent has
+    been quiet for `quiet_ms` (or the cap is reached). Without it a scripted
+    caller talks over the agent's reply, and every turn after the first
+    tests nothing. Default 0 keeps the fixed pause.
+    """
 
     frames: list[bytes]
     interrupt_on_agent_audio: bool = False
+    hold_ms: int = 0
+    quiet_ms: int = 800
+    max_hold_ms: int = 0
 
 
 @dataclass
@@ -225,6 +246,38 @@ class CallSession:
         self._awaiting_reply_at = time.monotonic()
         return False
 
+    async def hold(self, hold_ms: int = 0, quiet_ms: int = 800, max_hold_ms: int = 0) -> None:
+        """Stream silence after an utterance; returns when it is time to speak.
+
+        At least `hold_ms` of pause, and with `max_hold_ms > 0` the caller keeps
+        holding while the agent is still talking, releasing once the agent has
+        been quiet for `quiet_ms` or the cap expires.
+        """
+        cap_ms = hold_ms if max_hold_ms <= 0 else max(hold_ms, max_hold_ms)
+        if cap_ms <= 0:
+            return
+        started = time.monotonic()
+        while True:
+            elapsed_ms = (time.monotonic() - started) * 1000
+            if elapsed_ms >= cap_ms:
+                return
+            quiet_for_ms = (time.monotonic() - self._last_inbound_at) * 1000
+            if elapsed_ms >= hold_ms and quiet_for_ms >= quiet_ms:
+                return
+            await self._send_media(SILENCE_FRAME)
+            await asyncio.sleep(self.frame_interval_s)
+
+    async def send_turn(self, turn: PlayTurn, turn_index: int = 0) -> bool:
+        """Play a scripted turn: the utterance, then its pause."""
+        barged = await self.send_frames(
+            turn.frames,
+            interrupt_on_agent_audio=turn.interrupt_on_agent_audio,
+            turn=turn_index,
+        )
+        if not barged:
+            await self.hold(turn.hold_ms, turn.quiet_ms, turn.max_hold_ms)
+        return barged
+
     async def _send_media(self, frame: bytes) -> None:
         self._seq += 1
         await self._ws.send(
@@ -355,11 +408,7 @@ async def dial(
                 if session.elapsed_s > max_call_s:
                     ev.error = "caller-side max_call_s reached"
                     break
-                await session.send_frames(
-                    turn.frames,
-                    interrupt_on_agent_audio=turn.interrupt_on_agent_audio,
-                    turn=turn_idx,
-                )
+                await session.send_turn(turn, turn_idx)
             # Let the agent finish speaking before hanging up.
             await asyncio.sleep(after_send_idle_s)
         finally:

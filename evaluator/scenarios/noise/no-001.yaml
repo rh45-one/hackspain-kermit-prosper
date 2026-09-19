@@ -17,6 +17,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     has_visited_before: true
     wants: "la primera cita disponible en medicina general"
@@ -26,11 +27,13 @@ caller:
 turns:
   - text: "Buenos días, soy Marta Ruiz Gómez, DNI 12345678-Z. Quiero la primera cita que tengan en medicina general."
     hold_ms: 4000
+    tts: true
     noise:
       synth: brown
       snr_db: 5.0
   - text: "Me da igual el doctor. Gracias."
     hold_ms: 2000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

@@ -28,6 +28,9 @@ class CallContext:
     from_number: str | None = None
     started_at: float = field(default_factory=time.monotonic)
     stopped: bool = False
+    # Route-owned safety boundary. The browser simulator uses the real agent
+    # pipeline but its synthetic call ids must never be sent to Prosper.
+    submit_actions: bool = True
 
     # Identification state
     phone_hint_match: dict[str, Any] | None = None

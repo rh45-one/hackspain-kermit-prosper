@@ -17,6 +17,7 @@ caller:
     name: "Luis Ortega Sanz"
     patient_id: P00044
     national_id: "23456789D"
+    date_of_birth: "1975-11-30"
     insurer: dkv
     policies: [dkv, privado]
     wants: "cita de traumatología por un dolor de rodilla"
@@ -27,6 +28,7 @@ caller:
 turns:
   - text: "Buenos días, soy Luis Ortega Sanz. Quiero cita de traumatología, me duele la rodilla."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

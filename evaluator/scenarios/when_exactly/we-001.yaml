@@ -17,6 +17,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     wants: "cita de medicina general el jueves por la tarde"
     prefer: "el jueves por la tarde"
@@ -26,6 +27,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez. Necesito una cita de medicina general el jueves por la tarde."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

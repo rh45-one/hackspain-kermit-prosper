@@ -8,6 +8,8 @@ so both run in **one process, on one machine, on one port**
 | URL | Purpose |
 |---|---|
 | `wss://<host>/ws` | voice WebSocket announced to the Prosper harness |
+| `https://<host>/call` | browser microphone simulator (never submits actions) |
+| `wss://<host>/ws/demo` | browser simulator WebSocket |
 | `https://<host>/ops` | jury console |
 | `https://<host>/healthz` | liveness |
 
@@ -50,6 +52,7 @@ the committed one. Verify before announcing the URL to the desk:
 ```sh
 curl https://prosper-clinicreflow.fly.dev/healthz
 wscat -c wss://prosper-clinicreflow.fly.dev/ws -x '{"event":"connected"}'
+open https://prosper-clinicreflow.fly.dev/call
 open https://prosper-clinicreflow.fly.dev/ops
 fly logs
 ```
@@ -75,10 +78,13 @@ Call JSONL under `/data/calls` contains caller PII. The volume is wiped with
 
 ## Fallback: ngrok from a laptop (zero cost, zero deploy)
 
-Already wired as `make -C backend tunnel` + `make -C backend run`. Keep it as
-the contingency if the venue network blocks outbound to Fly or a deploy breaks
-during judging. Its weakness is the venue wifi: the tunnel dies with the
-laptop's connection, mid-call.
+Already wired as `make -C backend tunnel` + `make -C backend run`. On ngrok
+Free, the tunnel receives a random HTTPS URL at each start; copy its
+`wss://.../ws` form to `PUBLIC_WS_URL` and the Prosper dashboard. An optional
+`backend/ops/ngrok-domain.txt` supplies a claimed static domain for accounts
+that support one. Keep ngrok as the contingency if the venue network blocks
+outbound to Fly or a deploy breaks during judging. Its weakness is the venue
+wifi: the tunnel dies with the laptop's connection, mid-call.
 
 ## Rejected alternatives
 

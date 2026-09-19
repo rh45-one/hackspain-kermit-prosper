@@ -9,6 +9,9 @@ clinic_dataset: ../data/clinic_dataset.json
 clinic_port: 18090
 submit_key: pk-local-eval
 repetitions: 1
+# El doble envía en cuanto cae el socket: no hace falta esperar a un
+# flush tardío como con un agente real.
+submit_drain_s: 0.5
 switchboard:
   concurrency: 5
 candidates:

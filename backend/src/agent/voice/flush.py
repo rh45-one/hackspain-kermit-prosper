@@ -28,6 +28,11 @@ async def flush_call(ctx: CallContext, settings: Any) -> None:
     if ctx.submitted:
         return
     ctx.submitted = True
+    if not ctx.submit_actions:
+        logger.info("call {}: demo call; actions retained locally and not submitted", ctx.call_id)
+        ctx.audit("flush_skipped", {"reason": "demo_call", "actions": len(ctx.queued_actions)})
+        return
+
     deadline = time.monotonic() + settings.submit_window_seconds
     if not ctx.queued_actions:
         # Silence is always wrong: force a record if the brain queued nothing.

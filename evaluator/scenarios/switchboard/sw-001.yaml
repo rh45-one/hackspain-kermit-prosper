@@ -18,6 +18,7 @@ caller:
     name: "Carmen Díaz Ferrer"
     patient_id: P00045
     national_id: "34567890V"
+    date_of_birth: "1969-05-20"
     insurer: asisa
     has_visited_before: true
     wants: "la primera cita disponible en medicina general"
@@ -27,8 +28,10 @@ caller:
 turns:
   - text: "Hola, soy Carmen Díaz Ferrer, DNI 34567890-V. Querría la primera cita en medicina general, por favor."
     hold_ms: 4000
+    tts: true
   - text: "Lo que tengan antes. Gracias."
     hold_ms: 2000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

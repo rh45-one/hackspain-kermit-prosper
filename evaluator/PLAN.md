@@ -30,7 +30,7 @@ lado del agente. Repararlo requiere tocar `backend/`, fuera de este paquete.
 
 | Pieza | Estado |
 |---|---|
-| **Espera de readiness**: un candidato lanzado con `start_command` se sondea hasta responder; si no levanta, sus casos salen `invalid_evaluation` con la causa en vez de competir con su propio arranque | **Hecho** (`runner/readiness.py`) |
+| **Espera de readiness**: un candidato lanzado con `start_command` se sondea con `wait_until_listening` (socket TCP, en `runner/experiment.py`, también usado por el adaptador de texto) hasta que acepta la conexión; si no levanta, sus casos salen `invalid_evaluation` con la causa y el resto de las alternativas conserva su evidencia | **Hecho** |
 | **Intercalado**: el candidato varía más rápido, para que un backend que deriva no favorezca al que va último | **Hecho** (`runner/experiment.case_plan`) |
 | **Side-by-side por caso entre candidatos de un mismo run** con marca de desacuerdos y totales | **Hecho** (`report/side_by_side.py`, `cli.py compare`) |
 | **Pareo entre runs**: el caso A de un run contra el caso B de otro (hoy `diff` compara el mismo candidato entre dos runs) | Pendiente |

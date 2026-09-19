@@ -41,8 +41,13 @@ from evaluator.models import (
     ExperimentConfig,
     Scenario,
 )
-from evaluator.runner.readiness import Readiness, wait_for_candidate
 from evaluator.simulator.llm_patient import make_patient
+
+# Voice path: how long the caller will wait, after its own `hold_ms`, for the
+# agent to stop talking before speaking the next scripted line. A fixed pause
+# makes every turn after the first overlap the agent's reply.
+VOICE_MAX_HOLD_MS = 15000
+VOICE_QUIET_MS = 800
 
 VERB_TO_ROUTE = {
     "REGISTER": "register",
@@ -105,25 +110,42 @@ def _scenario_turns(
     scenario: Scenario,
     scenario_path: Path,
     tts_command: str | None = None,
-) -> list[PlayTurn]:
-    """Voice path: one PlayTurn per scripted turn (audio, TTS, or silence).
+) -> tuple[list[PlayTurn], list[str]]:
+    """Voice path: one PlayTurn per scripted turn, plus any rig defects.
+
+    Returns `(turns, rig_errors)`. A turn asking for `tts: true` with no
+    working provider is a *rig* defect, not an agent failure: it is reported
+    so the case can be invalidated instead of scoring an agent that was
+    played two seconds of silence and had nothing to answer.
 
     Noise (`turn.noise`) is mixed in here so what goes on the wire is what
     the agent hears - and what lands in the caller-side evidence file.
     """
     groups: list[PlayTurn] = []
-    for turn in scenario.turns:
+    rig_errors: list[str] = []
+    for i, turn in enumerate(scenario.turns):
         if turn.audio:
             frames = load_audio(scenario_path.parent / turn.audio)
-        elif turn.tts and turn.text and tts_command:
-            try:
-                frames = tts_mod.synthesize(
-                    turn.text, tts_command, lang=scenario.language,
-                    cache_dir=scenario_path.parent / ".tts-cache",
+        elif turn.tts and turn.text:
+            if not tts_command:
+                rig_errors.append(
+                    f"turn {i}: tts: true but the experiment sets no tts_command"
                 )
-            except Exception:  # noqa: BLE001 - missing TTS is a rig limit
                 frames = silence(2000)
+            else:
+                try:
+                    frames = tts_mod.synthesize(
+                        turn.text, tts_command, lang=scenario.language,
+                        cache_dir=scenario_path.parent / ".tts-cache",
+                    )
+                except Exception as exc:  # noqa: BLE001 - missing TTS is a rig limit
+                    rig_errors.append(f"turn {i}: TTS failed: {type(exc).__name__}: {exc}")
+                    frames = silence(2000)
         else:
+            if turn.text:
+                rig_errors.append(
+                    f"turn {i}: no audio and no tts: true - the agent hears silence"
+                )
             frames = silence(2000)
 
         if turn.noise:
@@ -137,59 +159,145 @@ def _scenario_turns(
                 ]
             frames = mix_with_noise(frames, noise_frames, snr_db=turn.noise.snr_db)
 
-        frames.extend(silence(turn.hold_ms))
         groups.append(
-            PlayTurn(frames, interrupt_on_agent_audio=turn.interrupt_on_agent_audio)
+            PlayTurn(
+                frames,
+                interrupt_on_agent_audio=turn.interrupt_on_agent_audio,
+                hold_ms=turn.hold_ms,
+                quiet_ms=VOICE_QUIET_MS,
+                max_hold_ms=VOICE_MAX_HOLD_MS,
+            )
         )
-    return groups or [PlayTurn(silence(8000))]
+    return (groups or [PlayTurn(silence(8000))]), rig_errors
 
 
 async def _run_text_call(
     scenario: Scenario,
     text_url: str,
     call_id: str,
-    http: httpx.AsyncClient,
-) -> tuple[list[str], list[str]]:
-    """Drive a call over the text adapter; returns (agent_turns, errors).
+    timeout_s: float = 120.0,
+) -> tuple[list[str], list[str], list[float]]:
+    """Drive a call over the text adapter; returns (agent_turns, errors, latencies).
+
+    The contract is documented in README, "Adaptador de texto `/turns`":
+    the first POST for a call_id opens the call, each POST carries one
+    caller utterance and returns one agent utterance, and a final
+    `event: "hangup"` closes it so the agent flushes its submissions while
+    the receiver window is still open. The hangup is best effort - an agent
+    that does not implement it is not penalised for it.
+
+    The adapter gets its own client: one `/turns` POST is a whole agent turn
+    (several LLM round-trips and their tool calls), which has nothing to do
+    with the millisecond timeout the local clinic deserves. Sharing one
+    client invalidated cases for a rig limit - the agent was answering.
+
+    `scenario.limits.max_call_seconds` bounds the whole conversation, like
+    the 3-minute cap on the real platform, and is recorded the way the voice
+    path records it: a truncated call is still scored on what it submitted.
 
     When the scenario defines a caller, the rules-based patient answers;
     otherwise the scripted turn texts are replayed verbatim.
     """
     transcript: list[str] = []
     errors: list[str] = []
+    latencies: list[float] = []
+    ended = False
+    call_started = time.monotonic()
+    http = httpx.AsyncClient(timeout=timeout_s)
+
+    def out_of_time() -> bool:
+        if time.monotonic() - call_started < scenario.limits.max_call_seconds:
+            return False
+        if not any("max_call_s" in e for e in errors):
+            errors.append(
+                f"caller-side max_call_s reached ({scenario.limits.max_call_seconds:.0f}s)"
+            )
+        return True
 
     async def send(text: str) -> str | None:
+        """Returns the agent's utterance, "" if it said nothing, None on error."""
+        nonlocal ended
+        started = time.monotonic()
         try:
-            resp = await http.post(f"{text_url}/turns", json={"call_id": call_id, "text": text})
+            resp = await http.post(
+                f"{text_url}/turns", json={"call_id": call_id, "text": text}
+            )
         except httpx.HTTPError as exc:
             errors.append(f"text adapter: {type(exc).__name__}: {exc}")
             return None
+        latencies.append(round((time.monotonic() - started) * 1000, 1))
         if resp.status_code != 200:
             errors.append(f"text adapter HTTP {resp.status_code}")
             return None
-        reply = resp.json().get("reply")
+        try:
+            body = resp.json()
+        except ValueError:
+            errors.append("text adapter: reply is not JSON")
+            return None
+        if not isinstance(body, dict):
+            errors.append("text adapter: reply is not a JSON object")
+            return None
+        reply = body.get("reply")
+        if body.get("ended"):
+            ended = True  # the agent hung up; stop talking to a closed call
         if reply:
-            transcript.append(reply)
-        return reply
+            transcript.append(str(reply))
+        # An empty reply is "I said nothing", not a broken call: the patient
+        # asks again and gives up on its own after `behavior.max_repeats`.
+        return str(reply) if reply else ""
+
+    async def hangup() -> None:
+        """Best-effort end-of-call signal; never scored against the agent."""
+        try:
+            await http.post(
+                f"{text_url}/turns", json={"call_id": call_id, "text": None, "event": "hangup"}
+            )
+        except httpx.HTTPError:
+            pass
 
     patient = (
         make_patient(scenario.caller, scenario.limits, language=scenario.language)
         if scenario.caller.opening
         else None
     )
-    if patient is not None:
-        reply = await send(patient.opening() or "")
-        while reply is not None:
-            nxt = patient.respond(reply)
-            if nxt is None:
-                break
-            reply = await send(nxt)
-        return transcript, errors
+    try:
+        if patient is not None:
+            reply = await send(patient.opening() or "")
+            while reply is not None and not ended and not out_of_time():
+                nxt = patient.respond(reply)
+                if nxt is None:
+                    break
+                reply = await send(nxt)
+        else:
+            for turn in scenario.turns[: scenario.limits.max_turns]:
+                if ended or out_of_time():
+                    break
+                if turn.text:
+                    await send(turn.text)
+        await hangup()
+    finally:
+        await http.aclose()
+    return transcript, errors, latencies
 
-    for turn in scenario.turns:
-        if turn.text:
-            await send(turn.text)
-    return transcript, errors
+
+async def _drain_record(
+    http: httpx.AsyncClient, call_id: str, drain_s: float
+) -> httpx.Response:
+    """Read the call record, giving a late flush time to land.
+
+    The receiver keeps the window open 30 s after the call closes, so an
+    agent that submits on hangup can still be in flight when the case ends.
+    Polling stops at the first recorded action - a silent candidate only
+    ever pays the full `drain_s`.
+    """
+    resp = await http.get(f"/eval/calls/{call_id}/record")
+    deadline = time.monotonic() + max(0.0, drain_s)
+    while time.monotonic() < deadline:
+        if resp.status_code == 200 and resp.json().get("actions"):
+            break
+        await asyncio.sleep(0.1)
+        resp = await http.get(f"/eval/calls/{call_id}/record")
+    return resp
 
 
 async def _gather_cases(calls: list[Any]) -> list[CaseResult]:
@@ -243,6 +351,7 @@ async def _run_case(
     case_id: str,
     evidence_dir: Path | None = None,
     tts_command: str | None = None,
+    submit_drain_s: float = 2.0,
 ) -> CaseResult:
     call_id = uuid.uuid4().hex
     http = httpx.AsyncClient(base_url=clinic_url, timeout=10)
@@ -254,57 +363,68 @@ async def _run_case(
     interrupts: list[dict[str, Any]] = []
     audio: dict[str, str] = {}
     ev = None  # set on the WS paths (double + external)
+    rig_errors: list[str] = []
     started = time.monotonic()
     harness_failed = open_resp.status_code != 200
 
     try:
         if harness_failed:
             errors.append(f"clinic refused call open: HTTP {open_resp.status_code}")
-        elif candidate.kind == "double":
-            # Tell the double what this call should submit - keyed by
-            # call_id so concurrent sockets never cross-contaminate.
-            mode = candidate.mode
-            if mode == "silent":
-                actions = None
-            else:
-                outcome = scenario.accepted_outcomes[0]
-                actions = _to_submit_bodies(outcome, mutate=mode == "mutate")
-            async with httpx.AsyncClient(
-                base_url=f"http://127.0.0.1:{double_port}", timeout=10
-            ) as double_http:
-                await double_http.post(
-                    "/control", json={"call_id": call_id, "actions": actions}
-                )
-            ev = await dial(
-                f"ws://127.0.0.1:{double_port}/ws",
-                call_id,
-                [PlayTurn(silence(400))],  # the double ignores audio content
-                from_number=scenario.from_number,
-                after_send_idle_s=0.5,
-                max_call_s=30.0,
-            )
-            if ev.error:
-                errors.append(ev.error)
-        elif candidate.text_url:
-            transcript, errors = await _run_text_call(scenario, candidate.text_url, call_id, http)
         else:
-            turns = _scenario_turns(scenario, scenario_path, tts_command=tts_command)
-            ev = await dial(
-                candidate.ws_url or "",
-                call_id,
-                turns,
-                from_number=scenario.from_number,
-                after_send_idle_s=8.0,
-                max_call_s=scenario.limits.max_call_seconds,
-            )
-            if ev.error:
-                errors.append(ev.error)
-            latencies = [x for x in ev.turn_latencies_ms if x is not None]
-            first_audio_ms = ev.first_audio_ms
-            interrupts = ev.interrupts
+            if candidate.kind == "double":
+                # Tell the double what this call should submit - keyed by
+                # call_id so concurrent sockets never cross-contaminate.
+                mode = candidate.mode
+                if mode == "silent":
+                    actions = None
+                else:
+                    outcome = scenario.accepted_outcomes[0]
+                    actions = _to_submit_bodies(outcome, mutate=mode == "mutate")
+                async with httpx.AsyncClient(
+                    base_url=f"http://127.0.0.1:{double_port}", timeout=10
+                ) as double_http:
+                    await double_http.post(
+                        "/control", json={"call_id": call_id, "actions": actions}
+                    )
+            if candidate.text_url:
+                transcript, errors, latencies = await _run_text_call(
+                    scenario,
+                    candidate.text_url,
+                    call_id,
+                    timeout_s=candidate.text_timeout_seconds,
+                )
+            elif candidate.kind == "double":
+                ev = await dial(
+                    f"ws://127.0.0.1:{double_port}/ws",
+                    call_id,
+                    [PlayTurn(silence(400))],  # the double ignores audio content
+                    from_number=scenario.from_number,
+                    after_send_idle_s=0.5,
+                    max_call_s=30.0,
+                )
+                if ev.error:
+                    errors.append(ev.error)
+            else:
+                turns, rig_errors = _scenario_turns(
+                    scenario, scenario_path, tts_command=tts_command
+                )
+                errors.extend(rig_errors)
+                ev = await dial(
+                    candidate.ws_url or "",
+                    call_id,
+                    turns,
+                    from_number=scenario.from_number,
+                    after_send_idle_s=8.0,
+                    max_call_s=scenario.limits.max_call_seconds,
+                )
+                if ev.error:
+                    errors.append(ev.error)
+                latencies = [x for x in ev.turn_latencies_ms if x is not None]
+                first_audio_ms = ev.first_audio_ms
+                interrupts = ev.interrupts
     finally:
         await http.post(f"/eval/calls/{call_id}/close")
-        record_resp = await http.get(f"/eval/calls/{call_id}/record")
+        record_resp = await _drain_record(http, call_id, submit_drain_s)
         cost, usage = await _fetch_usage(candidate.usage_url, call_id, http)
         await http.aclose()
 
@@ -335,18 +455,26 @@ async def _run_case(
     )
 
     leaks: list[str] = []
-    if oracle.leak_check and transcript:
-        leaks = transcript_leaks(
-            transcript, oracle.leak_check.national_id, oracle.leak_check.phone
-        )
+    checks_not_run: list[str] = []
+    if oracle.leak_check:
+        if transcript:
+            leaks = transcript_leaks(
+                transcript, oracle.leak_check.national_id, oracle.leak_check.phone
+            )
+        else:
+            # No transcript, no privacy check. The voice path has no STT, so
+            # this is never silently reported as a clean privacy result.
+            checks_not_run.append("leak_check")
 
     signal = cmp.failure_signal
     if leaks:
         signal = "transcript_leak"
 
     # Harness defects invalidate the case - they are not agent failures.
-    transport_error = next((e for e in errors if "max_call_s" not in e), None)
-    if harness_failed or (transport_error and not submitted):
+    transport_error = next(
+        (e for e in errors if "max_call_s" not in e and e not in rig_errors), None
+    )
+    if harness_failed or rig_errors or (transport_error and not submitted):
         verdict = "invalid_evaluation"
     else:
         verdict = "pass" if (cmp.passed and not leaks) else "fail"
@@ -378,9 +506,66 @@ async def _run_case(
         usage=usage,
         audio=audio,
         interrupts=interrupts,
+        checks_not_run=checks_not_run,
         duration_s=round(time.monotonic() - started, 2),
         errors=errors,
     )
+
+
+def _endpoint(url: str) -> tuple[str, int] | None:
+    """host/port of a ws:// or http:// candidate URL, for a readiness probe."""
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    if not parts.hostname:
+        return None
+    default = 443 if parts.scheme in ("https", "wss") else 80
+    return parts.hostname, parts.port or default
+
+
+def wait_until_listening(candidate: CandidateConfig, timeout_s: float = 60.0) -> str | None:
+    """Block until a started candidate accepts TCP, or say why it did not.
+
+    `start_command` launches a process; without this the first case dials a
+    socket nobody is listening on yet and is thrown away. A TCP connect is
+    protocol-agnostic: it works for the WS port and the text adapter alike,
+    and does not assume the agent exposes any particular health route.
+    """
+    target = _endpoint(candidate.text_url or candidate.ws_url or "")
+    if target is None:
+        return None
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(target, timeout=1):
+                return None
+        except OSError:
+            time.sleep(0.25)
+    return f"candidate {candidate.name!r} never listened on {target[0]}:{target[1]}"
+
+
+def _dataset_profile(path: Path) -> dict[str, Any]:
+    """Size of the fixture actually used, for the report's fixture warning.
+
+    A green run on a six-patient miniature is not a point on the official
+    board; the report says so with these numbers next to it (task §4).
+    """
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    counts = {
+        key: len(raw.get(key) or [])
+        for key in (
+            "patients",
+            "providers",
+            "locations",
+            "plans",
+            "specialties",
+            "appointment_types",
+            "appointments",
+        )
+    }
+    return {"name": raw.get("meta", {}).get("name"),
+            "note": raw.get("meta", {}).get("note", ""),
+            "counts": counts}
 
 
 def _load_scenarios(config: ExperimentConfig, config_dir: Path) -> list[tuple[Scenario, Path]]:
@@ -469,7 +654,7 @@ def _not_ready_case(
     scenario: Scenario,
     repetition: int,
     case_id: str,
-    readiness: Readiness,
+    detail: str,
 ) -> CaseResult:
     """A candidate that never listened is a rig failure, not a model result."""
     return CaseResult(
@@ -481,7 +666,7 @@ def _not_ready_case(
         repetition=repetition,
         verdict="invalid_evaluation",
         categories=["candidate_not_ready"],
-        errors=[f"candidate never answered: {readiness.describe()}"],
+        errors=[detail],
     )
 
 
@@ -515,6 +700,10 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
 
     doubles: list[_ServerHandle] = []
     procs: list[subprocess.Popen] = []
+    # A started candidate that never listens is a rig failure, not a model
+    # result: its cases are marked invalid instead of being scored, and the
+    # other alternatives in the same run keep their evidence.
+    startup: dict[str, str | None] = {}
     try:
         for cand in config.candidates:
             if cand.kind == "double":
@@ -530,19 +719,19 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
                 procs.append(
                     subprocess.Popen(cand.start_command, shell=True, env=env, cwd=config_dir)
                 )
+                # The process is not the service: wait for the socket, or the
+                # cases are scored against an agent that was still booting.
+                startup[cand.name] = wait_until_listening(cand)
 
-        startup: dict[str, Readiness] = {
-            cand.name: wait_for_candidate(cand)
-            for cand in config.candidates
-            if cand.start_command
-        }
-        not_ready = {name for name, readiness in startup.items() if not readiness.ready}
+        not_ready = {name for name, problem in startup.items() if problem}
 
         results: list[CaseResult] = []
         for rep, scenario, path, cand in case_plan(config, scenarios):
             case_id = f"{cand.name}/{scenario.id}/r{rep}"
             if cand.name in not_ready:
-                results.append(_not_ready_case(cand, scenario, rep, case_id, startup[cand.name]))
+                results.append(
+                    _not_ready_case(cand, scenario, rep, case_id, str(startup[cand.name]))
+                )
                 continue
             result = asyncio.run(
                 _run_case(
@@ -556,6 +745,7 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
                     case_id,
                     evidence_dir=evidence_dir,
                     tts_command=config.tts_command,
+                    submit_drain_s=config.submit_drain_s,
                 )
             )
             results.append(result)
@@ -580,6 +770,7 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
                         f"{cand.name}/switchboard-{i}-{scenario.id}",
                         evidence_dir=evidence_dir,
                         tts_command=config.tts_command,
+                        submit_drain_s=config.submit_drain_s,
                     )
                     for i, (scenario, path) in enumerate(pool)
                 ]
@@ -591,12 +782,16 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
             "rules_version": config.rules_version,
             "dataset_hash": dataset_hash,
             "dataset": config.clinic_dataset,
+            "dataset_profile": _dataset_profile(config_dir / config.clinic_dataset),
             "reference_now": config.reference_now,
             "repetitions": config.repetitions,
             "budget": config.budget,
             "started_at": datetime.now(UTC).isoformat(),
             "candidates": [c.model_dump(exclude={"start_command"}) for c in config.candidates],
-            "startup": {name: readiness.as_manifest() for name, readiness in startup.items()},
+            "startup": {
+                name: {"listening": problem is None, "detail": problem or "listening"}
+                for name, problem in startup.items()
+            },
             "scenarios": [
                 {"id": s.id, "problem_id": s.problem_id, "version": s.version, "split": s.split}
                 for s, _ in scenarios

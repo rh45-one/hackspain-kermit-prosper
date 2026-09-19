@@ -324,6 +324,10 @@ class CaseResult(BaseModel):
     usage: dict[str, Any] = Field(default_factory=dict)  # provider usage, if exposed
     audio: dict[str, str] = Field(default_factory=dict)  # {"agent": path, "caller": path}
     interrupts: list[dict[str, Any]] = Field(default_factory=list)  # barge-in events
+    # Oracle checks the rig could not evaluate on this path (e.g. leak_check
+    # needs a transcript, and the voice path has no STT). Never silently
+    # counted as passed.
+    checks_not_run: list[str] = Field(default_factory=list)
     duration_s: float = 0.0
     errors: list[str] = Field(default_factory=list)
 
@@ -337,16 +341,21 @@ class CandidateConfig(BaseModel):
 
     kind=external: an already-running agent reachable at `ws_url`.
     kind=double:   the built-in test double (evaluator self-check).
+
+    `text_url` takes precedence over `ws_url` for both kinds: it selects
+    the text adapter path (see README, "Adaptador de texto `/turns`").
     """
 
     name: str
     kind: Literal["external", "double"] = "external"
     ws_url: str | None = None  # e.g. ws://localhost:7860/ws
     text_url: str | None = None  # optional text adapter endpoint
+    # One `/turns` POST covers a whole agent turn: several LLM round-trips
+    # plus its tool calls against the clinic. Measured p95 ≈ 14 s, max 20 s
+    # on a real agent, so the cap is a runaway guard, not a latency budget.
+    text_timeout_seconds: float = 120.0
     usage_url: str | None = None  # optional; GET {usage_url}/calls/{call_id} → {cost, usage}
     start_command: str | None = None  # optional; the runner waits for ws_url
-    ready_url: str | None = None  # optional; default http://host:port/healthz from ws_url
-    ready_timeout_s: float = 30.0  # how long a started candidate may take to listen
     env: dict[str, str] = Field(default_factory=dict)
     mode: Literal["correct", "mutate", "silent"] = "correct"  # double only
     port: int | None = None  # double only
@@ -374,6 +383,10 @@ class ExperimentConfig(BaseModel):
     budget: dict[str, Any] = Field(default_factory=dict)  # plan §18 limits
     switchboard: SwitchboardConfig | None = None
     tts_command: str | None = None  # e.g. "espeak-ng"; absent = no voice synth
+    # After the call closes, how long to keep polling the receiver before
+    # reading the record. The submission window stays open 30 s after the
+    # socket closes, so an agent that flushes on hangup needs the grace.
+    submit_drain_s: float = 2.0
     candidates: list[CandidateConfig]
     scenarios: list[str]  # paths or globs, relative to the config file
 

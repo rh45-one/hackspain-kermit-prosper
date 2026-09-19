@@ -43,7 +43,27 @@ class TestFacts:
         p.facts.pop("email", None)
         reply = p.respond("¿Su correo electrónico?")
         assert "@" not in reply
-        assert "repetir" in reply or "llamo" in reply
+        # It says it does not have it, instead of "¿puede repetirlo?" - the
+        # latter is indistinguishable from an agent nobody understands.
+        assert "no lo tengo" in reply.lower()
+        assert p.log.unanswerable == ["email"]
+        assert p.log.missed == []  # a fixture gap is not a misunderstanding
+
+    def test_asks_to_repeat_only_when_it_understood_nothing(self):
+        p = make_patient()
+        reply = p.respond("Mmm.")
+        assert "repetir" in reply
+        assert p.log.unanswerable == []
+
+    def test_a_closing_is_not_a_question_about_a_fact(self):
+        """"quedado" contains "edad": word boundaries, not substrings."""
+        p = make_patient()
+        reply = p.respond("Perfecto, ha quedado reservada. ¿Algo más?")
+        assert "gracias" in reply.lower()
+
+    def test_accented_question_is_understood(self):
+        p = make_patient()
+        assert "1988" in p.respond("¿Cuántos años tiene?")
 
 
 class TestBehavior:
@@ -68,6 +88,17 @@ class TestBehavior:
         p = make_patient(corrections=["No, he dicho el diecisiete."])
         assert p.respond("¿Qué día?") == "No, he dicho el diecisiete."
         assert p.respond("¿Me dice su nombre?") != "No, he dicho el diecisiete."
+
+    def test_correction_does_not_preempt_an_answerable_question(self):
+        """Answer first: a correction jumping the queue derails identity."""
+        p = make_patient(corrections=["No, he dicho el martes."])
+        assert "Marta" in p.respond("¿Me dice su nombre?")
+        assert "12345678Z" in p.respond("¿Y su DNI?")
+        # Still pending, and said before accepting the wrong slot.
+        assert p.respond("Puedo ofrecerle el jueves a las 9, ¿le viene?") == (
+            "No, he dicho el martes."
+        )
+        assert "Sí" in p.respond("Entonces el martes a las 17:00, ¿le parece?")
 
 
 class TestFlow:

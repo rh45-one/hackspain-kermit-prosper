@@ -17,6 +17,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00043
     national_id: "87654321X"
+    date_of_birth: "1992-07-02"
     insurer: asisa
     wants: "cita de traumatología, soy de ASISA"
   behavior:
@@ -25,6 +26,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez. ¿Atendéis a pacientes de ASISA? Es que quería cita de traumatología."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

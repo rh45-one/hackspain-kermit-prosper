@@ -24,6 +24,7 @@ caller:
 turns:
   - text: "Hola, llamo por mi marido, Luis Ortega Sanz. Le duele muchísimo el pecho y le cuesta respirar, ¿me pasan con un médico ya?"
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

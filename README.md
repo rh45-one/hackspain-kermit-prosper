@@ -28,12 +28,16 @@ uv sync --project backend
 cp backend/.env.example backend/.env
 $EDITOR backend/.env
 
-# 3. Run the voice WebSocket server (ws://localhost:7860/ws).
+# 3. Run the voice WebSocket server (binds to 0.0.0.0:7860).
 uv run --project backend python -m agent.voice.server
 
 # 4. Run the jury-facing ops console (http://localhost:7861/ops).
 uv run --project backend uvicorn agent.ops.console:app --port 7861
 ```
+
+The server is reachable from this machine at `http://localhost:7860` and from
+other devices on the same network at `http://<server-lan-ip>:7860`. Set
+`VOICE_WS_HOST=0.0.0.0` in `backend/.env` to retain this all-interface bind.
 
 The same targets are wrapped by the backend Makefile:
 
@@ -41,6 +45,7 @@ The same targets are wrapped by the backend Makefile:
 make -C backend sync
 make -C backend run
 make -C backend ops
+make -C backend public        # local voice server + public ngrok URL
 ```
 
 ## Deploying

@@ -54,6 +54,9 @@ from agent.decision.questions import (
     INTENT_KEY,
     MEDICAL_EMERGENCY_KEY,
     NEEDS_CLARIFICATION_KEY,
+    PLAN_KEY,
+    PLAN_UNCLEAR,
+    build_plan_question,
     build_questions,
     intent_choice_labels,
 )
@@ -207,6 +210,65 @@ class JevClient:
         except httpx.HTTPError:
             return self._abstain(AbstentionReason.HTTP_ERROR, started)
         return self._interpret(response, started)
+
+    async def classify_plan(
+        self,
+        spoken: str,
+        plans: Mapping[str, str],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> str | None:
+        """Which of the clinic's plans the caller said, or None when unsure.
+
+        The catalogue answers this on its own whenever the words survive the
+        line. This is for when they do not: "Mapfre Salud" arrived on a scored
+        call as "ma phrase salue", and the model filled the gap with a plan
+        nobody had mentioned. Handing the whole list to a model built for
+        constrained choice, with calibrated confidence and an escape hatch, is
+        the honest version of that guess.
+
+        None means ask the caller again. It is returned for an abstention, for
+        confidence below the floor, for the explicit 'unclear' answer and for
+        any transport or schema failure — every road out of here that is not a
+        plan the clinic actually sells.
+        """
+        started = self._clock()
+        if not spoken.strip() or not plans:
+            return None
+        if not self._api_key:
+            return None
+        payload: dict[str, JsonValue] = {
+            # The caller's own words about their own insurer: no patient
+            # identifiers, nothing from any record.
+            "state": {"caller_said": spoken.strip()},
+            "model": self._model,
+            "questions": build_plan_question(plans),
+        }
+        try:
+            response = await self._post_with_controls(payload, None, timeout_seconds)
+        except (_CancelledError, TimeoutError, httpx.HTTPError, httpx.TransportError):
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            parsed = SystemOneResponse.model_validate(response.json())
+        except (ValidationError, ValueError):
+            return None
+        answer = parsed.answers.get(PLAN_KEY)
+        if not isinstance(answer, ChoiceAnswer):
+            return None
+        chosen = answer.choice
+        self._logger.info(
+            "jev plan choice=%s confidence=%.2f latency_ms=%.0f",
+            chosen,
+            answer.confidence,
+            self._latency_ms(started),
+        )
+        if chosen == PLAN_UNCLEAR or chosen not in plans:
+            return None
+        if answer.confidence < self._min_confidence:
+            return None
+        return chosen
 
     # ---- transport --------------------------------------------------------
     async def _post_with_controls(

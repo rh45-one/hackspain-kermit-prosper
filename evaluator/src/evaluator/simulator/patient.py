@@ -31,6 +31,20 @@ _KEY_SYNONYMS: dict[str, tuple[str, ...]] = {
     "patient_name": ("nombre del paciente", "para quién", "para quien", "de su hijo", "del paciente"),
 }
 
+# Synonyms are matched on word boundaries against the folded utterance.
+# Substring matching made "¿algo más?" answer a date of birth, because
+# "quedado" contains "edad"; and the accented spellings above could never
+# match folded text, so only their unaccented twins ever fired.
+_KEY_PATTERNS: dict[str, re.Pattern[str]] = {
+    key: re.compile("|".join(rf"\b{re.escape(fold(s))}\b" for s in synonyms))
+    for key, synonyms in _KEY_SYNONYMS.items()
+}
+
+
+def _asked_about(key: str, folded_text: str) -> bool:
+    return bool(_KEY_PATTERNS[key].search(folded_text))
+
+
 _OFFER_MARKERS = (
     "le viene",
     "le va",
@@ -77,6 +91,10 @@ class PatientLog:
 
     missed: list[str] = field(default_factory=list)
     revealed: list[str] = field(default_factory=list)
+    # Facts the agent asked for that the scenario never gave the caller. A
+    # fixture gap, not an agent failure - and the two are indistinguishable
+    # unless they are logged apart.
+    unanswerable: list[str] = field(default_factory=list)
     turns_used: int = 0
 
 
@@ -108,9 +126,16 @@ class RulesPatient:
             return None
         t = fold(agent_text)
 
-        # A queued correction is said once, at the first chance - the rules
-        # caller cannot detect *what* the agent got wrong, only that the
-        # scenario scheduled a correction.
+        # A direct question outranks everything: answering it is what a real
+        # caller does, and it is what keeps identification on the rails.
+        answer = self._answer_fact(t)
+        if answer is not None:
+            self._misses = 0
+            return answer
+
+        # Only then the queued correction, said once. Before the closing
+        # check, so "queda reservada" still gets corrected, and before the
+        # offer, so the caller does not accept the slot it came to fix.
         if self._corrections:
             return self._corrections.pop(0)
 
@@ -118,10 +143,17 @@ class RulesPatient:
             self._closing = True
             return "Nada más, muchas gracias."
 
-        answer = self._answer_fact(t)
-        if answer is not None:
-            self._misses = 0
-            return answer
+        unknown = self._unknown_fact(t)
+        if unknown is not None:
+            # The agent asked something sensible that this caller was never
+            # given. Say so plainly instead of "¿puede repetirlo?", which
+            # reads exactly like an agent that is not being understood.
+            self.log.unanswerable.append(unknown)
+            self._misses += 1
+            if self._misses >= self.behavior.max_repeats:
+                self._closing = True
+                return "Pues no lo tengo aquí, mejor lo dejamos. Gracias."
+            return "Uy, eso no lo tengo aquí ahora mismo."
 
         if any(m in t for m in _OFFER_MARKERS):
             self._misses = 0
@@ -144,8 +176,8 @@ class RulesPatient:
             id_keys = {"name", "national_id", "date_of_birth"}
         else:
             id_keys = set()
-        for key, synonyms in _KEY_SYNONYMS.items():
-            if key in id_keys or not any(s in t for s in synonyms):
+        for key in _KEY_SYNONYMS:
+            if key in id_keys or not _asked_about(key, t):
                 continue
             value = self.facts.get(key)
             if key == "insurer" and self._second_policy_asked(t):
@@ -163,6 +195,13 @@ class RulesPatient:
             self.log.revealed.append(key)
             template = _FACT_TEMPLATES.get(key, "{value}")
             return template.format(value=value)
+        return None
+
+    def _unknown_fact(self, t: str) -> str | None:
+        """Which fact the agent asked for that this caller simply has not."""
+        for key in _KEY_SYNONYMS:
+            if _asked_about(key, t) and self.facts.get(key) is None:
+                return key
         return None
 
     @staticmethod

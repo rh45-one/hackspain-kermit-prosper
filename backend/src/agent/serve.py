@@ -8,6 +8,7 @@ both have to live in one process on one machine.
 Run: python -m agent.serve   (listens on $PORT, default 8080)
 
     wss://<host>/ws     voice WebSocket announced to the harness
+    https://<host>/call browser microphone simulator
     https://<host>/ops  jury console
     https://<host>/healthz
 """

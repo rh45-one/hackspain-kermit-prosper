@@ -16,6 +16,7 @@ caller:
     name: "Marta Ruiz Gómez"
     patient_id: P00042
     national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
     insurer: sanitas
     wants: "cancelar la cita del día 24 con la doctora Sáez"
     appointment: "la cita del 24 de septiembre con la doctora Sáez"
@@ -25,6 +26,7 @@ caller:
 turns:
   - text: "Hola, soy Marta Ruiz Gómez. Necesito cancelar la cita que tengo el día 24 con la doctora Sáez."
     hold_ms: 4000
+    tts: true
 oracle:
   accepted_outcomes:
     - actions:

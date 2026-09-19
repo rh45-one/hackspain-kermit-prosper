@@ -154,6 +154,27 @@ audio bridge; the live practice/eval gate (one practice case, then a scored
 Run All) decides whether `gemini_live` becomes the default in place of
 `cascade`.
 
+### D15. Same-origin browser call simulator
+FastAPI serves a dependency-free browser client at `/call` and a dedicated
+`/ws/demo` WebSocket. The demo endpoint builds the same per-socket pipeline and
+uses the same Twilio Media Streams serializer as `/ws`, but its `CallContext`
+is marked non-submitting so synthetic browser call ids never POST to Prosper.
+The scored `/ws` path and its exactly-once submission behavior are unchanged.
+
+Microphone access starts only from the call-button user gesture. An
+`AudioWorklet` downsamples device PCM to 8kHz, encodes G.711 mu-law and emits
+canonical 20ms Twilio media messages. Agent media is decoded and played through
+Web Audio; `clear` immediately discards queued playback. The client bounds
+network and playback queues, derives `ws`/`wss` from the page origin, and tears
+down every media track, audio node and socket on hangup or failure.
+
+The page follows the ClinicReflow visual system: a light editorial operations
+surface with warm paper, graphite controls, brass metadata and ember reserved
+for active/error states. It uses a sticky clinic header, Spanish operational
+copy, a kicker/title/lead page header, and one unboxed call control with an
+accessible brass focus ring. The interface remains dependency-free and presents
+its single call decision immediately without decorative entrance motion.
+
 ## Risks / Trade-offs
 
 - [pipecat version churn] → pin exact version, smoke-test with wscat before
