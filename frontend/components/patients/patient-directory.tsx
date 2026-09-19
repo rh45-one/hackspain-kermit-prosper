@@ -213,26 +213,28 @@ export function PatientDirectory() {
                   {selected.patient_id} · {selected.national_id}
                 </DialogDescription>
               </DialogHeader>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="font-heading text-[13px] text-quiet">
-                  Triaje recepción
-                </span>
-                <Badge
-                  variant="outline"
-                  className={TRIAGE_STYLES[triage].className}
-                >
-                  {TRIAGE_STYLES[triage].label}
-                </Badge>
-                <span className="text-[13px] text-quiet">
-                  Derivado de la última acción del agente, no es un score clínico.
-                </span>
-              </div>
+              {demo ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-heading text-[13px] text-quiet">
+                    Triaje recepción
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={TRIAGE_STYLES[triage].className}
+                  >
+                    {TRIAGE_STYLES[triage].label}
+                  </Badge>
+                  <span className="text-[13px] text-quiet">
+                    Derivado de la última acción simulada del agente, no es un score clínico.
+                  </span>
+                </div>
+              ) : null}
               <p className="text-[16px] leading-[1.5] text-steel">
                 {selected.note}
               </p>
               <div>
                 <h3 className="mb-5 font-heading text-[18px] text-graphite">
-                  Historial de citas
+                  {demo ? "Historial de citas" : "Citas registradas en la clínica"}
                 </h3>
                 <div className="space-y-4">
                   {history.length === 0 ? (

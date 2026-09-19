@@ -44,7 +44,7 @@ function AppointmentChip({ item }: { item: Appointment }) {
   const outcome = outcomeFromAction(item.action);
   const start = minutesFromMidnightMadrid(item.start_time);
   const top = ((start - START_MINUTES) / 60) * HOUR_HEIGHT;
-  const height = Math.max((item.duration_minutes / 60) * HOUR_HEIGHT, 36);
+  const height = Math.max((item.duration_minutes / 60) * HOUR_HEIGHT, 52);
 
   return (
     <div
