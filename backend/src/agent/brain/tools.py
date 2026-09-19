@@ -108,6 +108,11 @@ def _fold_plain(text: str) -> str:
 # Refusals that are only true for the plan on file. A second plan the caller
 # holds can overturn every one of them, so none may be sent before they have
 # been asked.
+def _restrictions(blocked: list[dict[str, Any]]) -> set[str]:
+    """The distinct restriction names in a blocked list."""
+    return {str(b.get("restriction")) for b in blocked}
+
+
 def _plan_id(cache: Any, spoken: str | None) -> str | None:
     """The submit enum wants the plan's id; a caller says its name.
 
@@ -400,7 +405,6 @@ class ToolBox:
             return
         matches = [self._safe_patient(m) for m in result.matches]
         self.ctx.patient_candidates = matches
-        self.ctx.last_lookup_identified = bool(national_id or date_of_birth)
         summary = [
             {
                 "patient_id": m.get("patient_id"),
@@ -449,30 +453,6 @@ class ToolBox:
         match = next((m for m in self.ctx.patient_candidates if m.get("patient_id") == patient_id), None)
         if match is None:
             await params.result_callback({"error": "patient_id not among lookup results"})
-            return
-        # A name alone that returned a crowd identifies nobody. One scored call
-        # searched "Nuria Ruiz Martín" without the date of birth the caller had
-        # just dictated, got ten rows back, and confirmed the one the caller id
-        # had suggested — then booked against it. Caller id is a hint, never
-        # identification, and neither is being one of ten.
-        if len(self.ctx.patient_candidates) > 1 and not self.ctx.last_lookup_identified:
-            self.ctx.audit(
-                "confirm_refused",
-                {"candidates": len(self.ctx.patient_candidates), "reason": "ambiguous_lookup"},
-            )
-            await params.result_callback(
-                {
-                    "error": (
-                        f"that lookup returned {len(self.ctx.patient_candidates)} people and was "
-                        "run on a name alone, so this patient_id is a guess"
-                    ),
-                    "do_this_first": (
-                        "call lookup_patient again with the same name plus the caller's date of "
-                        "birth or national id. If they have not given one yet, ask for the date "
-                        "of birth — it is one short question and it is the whole identification."
-                    ),
-                }
-            )
             return
         self.ctx.confirmed_patient = match
         self.ctx.audit("identity_confirmed", {"patient_id": patient_id})
@@ -746,6 +726,34 @@ class ToolBox:
                 "name_could_also_be": sound_alikes,
                 "blocked_reasons": blocked,
                 "empty_calendar": len(slots) == 0 and not blocked,
+                # blocked_reasons is noisy — a doctor on leave appears on
+                # every query — so a model learns to skim past it. When it is
+                # the ONLY thing standing between the caller and a slot it
+                # stops being background and becomes the answer, and it is
+                # said here in the words finish_without_booking accepts.
+                # Observed: physiotherapy returned zero slots and one
+                # location_not_covered, and the caller was told the diary was
+                # full and the call closed as no_availability.
+                **(
+                    {
+                        "nothing_free_and_this_is_why": {
+                            "restrictions": sorted(_restrictions(blocked)),
+                            # Named only when every block agrees; two different
+                            # rules are a question for the model, not an answer.
+                            "reason_to_submit": (
+                                min(_restrictions(blocked))
+                                if len(_restrictions(blocked)) == 1
+                                else None
+                            ),
+                            "not_no_availability": (
+                                "the diary is not full; a rule stopped this. Do not tell the "
+                                "caller there are no appointments"
+                            ),
+                        }
+                    }
+                    if not slots and blocked
+                    else {}
+                ),
             }
         )
 

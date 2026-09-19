@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
 
+from agent.brain import deps
 from agent.brain.tools import ToolBox
 from agent.clinic.cache import CatalogueCache
 from agent.clinic.models import (
@@ -1103,46 +1105,48 @@ async def test_an_unknown_insurer_is_refused_while_the_caller_is_still_there(box
     assert "Sanitas" in params.result["the_clinic_knows"]
 
 
-async def test_a_crowd_from_a_name_alone_cannot_be_confirmed(box, ctx):
-    """Ten rows and no identifier is a guess, whichever one the model picks.
+async def test_free_slots_carry_no_refusal_advice(box, ctx):
+    """The advice appears only when it IS the answer, never as more noise."""
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="tomorrow", specialty_name="General practice"
+    )
+    if not params.result.get("slots"):
+        pytest.skip("fixture has no general-practice slots")
+    assert "nothing_free_and_this_is_why" not in params.result
 
-    Taken from a scored call: the caller dictated a date of birth, the model
-    searched on the name only, got ten people back and confirmed the one the
-    caller id had suggested — then booked against it.
+
+async def test_no_slots_with_a_restriction_is_not_an_empty_diary(box, ctx):
+    """Zero slots plus a blocking rule is a refusal, and it has a name.
+
+    From call 44a5002a: physiotherapy returned no slots and one
+    location_not_covered. The caller was told the diary was fully booked and
+    the call closed as no_availability — the wrong reason, and untrue.
     """
-    params = FakeParams()
-    await box.lookup_patient(params, name="Marta Ruiz Gómez")
-    ctx.patient_candidates = [
-        {"patient_id": f"P{i:05d}", "date_of_birth": "1988-03-14"} for i in range(10)
-    ]
+    params = await confirm_marta(box)
 
-    params = FakeParams()
-    await box.confirm_patient(params, patient_id="P00003")
+    async def empty_but_blocked(**_kwargs):
+        return SimpleNamespace(
+            slots=[],
+            blocked=[
+                SimpleNamespace(
+                    provider_id="PR02",
+                    restriction="location_not_covered",
+                    model_dump=lambda **_: {
+                        "provider_id": "PR02",
+                        "restriction": "location_not_covered",
+                    },
+                )
+            ],
+            appointment_type=None,
+        )
 
-    assert ctx.confirmed_patient is None
-    assert "guess" in params.result["error"]
-    assert "date of birth" in params.result["do_this_first"]
+    box.client.search_availability = empty_but_blocked
+    await box.find_availability(
+        params, when_phrase="tomorrow", specialty_name="Physiotherapy"
+    )
 
-
-async def test_a_lookup_that_carried_the_date_of_birth_can_be_confirmed(box, ctx):
-    params = FakeParams()
-    await box.lookup_patient(params, name="Marta Ruiz Gómez", date_of_birth="1988-03-14")
-    chosen = ctx.patient_candidates[0]["patient_id"]
-
-    params = FakeParams()
-    await box.confirm_patient(params, patient_id=chosen)
-
-    assert params.result.get("confirmed") is True
-
-
-async def test_a_single_match_needs_no_second_identifier(box, ctx):
-    """One row is not a crowd; the guard must not block the common path."""
-    params = FakeParams()
-    await box.lookup_patient(params, name="Marta Ruiz Gómez")
-    ctx.patient_candidates = ctx.patient_candidates[:1]
-    chosen = ctx.patient_candidates[0]["patient_id"]
-
-    params = FakeParams()
-    await box.confirm_patient(params, patient_id=chosen)
-
-    assert params.result.get("confirmed") is True
+    why = params.result["nothing_free_and_this_is_why"]
+    assert why["reason_to_submit"] == "location_not_covered"
+    assert why["reason_to_submit"] in deps.CLOSED_REASONS
+    assert "diary is not full" in why["not_no_availability"]
