@@ -120,16 +120,16 @@
           <p class="lead">Seleccioná perfiles y escenarios, comprobá la configuración y seguí la evidencia parcial de cada ejecución.</p>
         </header>
         <div id="experiment-contract" class="banner quiet">
-          La creación, progreso y cancelación necesitan el contrato de trabajos del evaluador. Esta interfaz no enviará una petición hasta que ese contrato esté integrado.
+          Cargando los perfiles y escenarios declarados por el servidor…
         </div>
         <form id="experiment-form" class="well experiment-form" aria-describedby="experiment-contract">
           <div class="grid">
             <label class="field">perfiles disponibles<select id="experiment-profiles" multiple size="4" disabled></select></label>
             <label class="field">escenarios disponibles<select id="experiment-scenarios" multiple size="4" disabled></select></label>
-            <label class="field">modalidad<select id="experiment-mode" disabled><option>texto</option><option>voz</option></select></label>
-            <label class="field">repeticiones<input id="experiment-repetitions" type="number" min="1" value="3" disabled /></label>
+            <label class="field">modalidad<select id="experiment-mode" disabled><option value="text">texto</option><option value="voice">voz</option></select></label>
+            <label class="field">repeticiones<input id="experiment-repetitions" type="number" min="1" max="10" value="3" disabled /></label>
           </div>
-          <div class="row"><button id="experiment-create" class="primary" type="submit" disabled>Crear experimento</button><span class="meta">Sin contrato no se crean ejecuciones locales ni remotas.</span></div>
+          <div class="row"><button id="experiment-create" class="primary" type="submit" disabled>Crear experimento</button><span class="meta">Los trabajos solo pueden usar perfiles y escenarios declarados localmente.</span></div>
         </form>
         <h2>Corridas disponibles</h2>
         <div id="experiment-runs"></div>

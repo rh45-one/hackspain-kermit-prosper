@@ -79,6 +79,11 @@ Dobles quedan excluidos por defecto.
 
 ## Trabajos de experimento v1
 
+### `GET /api/scenarios`
+
+Devuelve los escenarios declarados por el servidor como `{id, problem_id,
+split}`. El navegador usa el `id` en `POST /api/jobs`; no envía rutas YAML.
+
 ### `POST /api/jobs`
 
 ```json

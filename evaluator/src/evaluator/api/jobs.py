@@ -120,6 +120,23 @@ class JobStore:
         thread.start()
         return job
 
+    def scenarios(self) -> list[dict[str, str]]:
+        """Browser-safe scenarios, addressed by id rather than filesystem path."""
+        import glob
+
+        from evaluator.models import Scenario
+
+        rows: list[dict[str, str]] = []
+        for name in glob.glob(str(self.scenario_root / "**" / "*.yaml"), recursive=True):
+            try:
+                scenario = Scenario.load(name)
+            except (OSError, ValueError, yaml.YAMLError):
+                # One malformed fixture must not hide valid declared scenarios.
+                pass
+            else:
+                rows.append({"id": scenario.id, "problem_id": scenario.problem_id, "split": scenario.split})
+        return sorted(rows, key=lambda row: row["id"])
+
     def cancel(self, job_id: str) -> dict[str, Any]:
         with self._lock:
             jobs = self._load()

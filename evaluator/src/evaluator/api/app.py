@@ -261,6 +261,10 @@ def create_app(
     def list_jobs() -> list[dict[str, Any]]:
         return jobs.list()
 
+    @app.get("/api/scenarios")
+    def list_scenarios() -> list[dict[str, str]]:
+        return jobs.scenarios()
+
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, Any]:
         job = jobs.get(job_id)

@@ -7,6 +7,7 @@ const PAGE_SIZE = 15;
 
 let runs = [];
 let profiles = [];
+let scenarios = [];
 let current = null;
 let calls = [];
 let manualCalls = [];
@@ -74,7 +75,7 @@ $("tabs").addEventListener("click", (event) => {
   $("tabs").querySelectorAll("button").forEach((item) => item.classList.toggle("on", item === button));
   TABS.forEach((name) => ($(`tab-${name}`).hidden = name !== tab));
   if (tab === "calls") loadCalls().catch(showError);
-  if (tab === "experiments") renderExperimentRuns();
+  if (tab === "experiments") renderExperimentRuns().catch(showError);
   window.scrollTo({ top: 0, behavior: "auto" });
 });
 
@@ -105,7 +106,7 @@ async function loadRuns() {
   if (runs.length > 1) $("diff-b").selectedIndex = 1;
   syncCandidateSelect("a");
   syncCandidateSelect("b");
-  renderExperimentRuns();
+  await renderExperimentRuns();
   if (runs.length) await selectRun(runs[0].run_id);
   else renderEmptyOverview();
 }
@@ -178,7 +179,7 @@ $("diff-b").addEventListener("change", () => syncCandidateSelect("b"));
 function toCallRecord(caseResult) {
   return {
     ...caseResult,
-    id: `${caseResult.run_id || "run"}:${caseResult.case_id || caseResult.call_id}`,
+    id: caseResult.id || `${caseResult.run_id || "run"}:${caseResult.case_id || caseResult.call_id}`,
     origin: caseResult.origin || "simulated",
     profile: caseResult.candidate || caseResult.profile_id || "n/d",
     scenario: caseResult.scenario_id || "—",
@@ -188,10 +189,16 @@ function toCallRecord(caseResult) {
 
 async function loadCalls() {
   if (callsLoaded) return renderCalls();
-  $("calls-status").textContent = "Cargando llamadas de las corridas locales…";
-  const results = await Promise.allSettled(runs.map(async (run) => (await api.getCases(run.run_id)).map(toCallRecord)));
-  calls = [...manualCalls, ...results.flatMap((result) => result.status === "fulfilled" ? result.value : [])];
-  calls.sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
+  $("calls-status").textContent = "Reconstruyendo el historial local…";
+  await api.importHistory();
+  const rows = [];
+  let page = 1;
+  do {
+    const result = await api.getHistoryCalls(new URLSearchParams({ page, page_size: 100 }));
+    rows.push(...result.items);
+    page = result.next_page;
+  } while (page);
+  calls = rows.map(toCallRecord);
   callsLoaded = true;
   renderCalls();
 }
@@ -241,7 +248,7 @@ function actionHtml(action) {
 }
 
 function renderCallDetail(call) {
-  const events = call.transcript_events || [];
+  const events = call.transcript_events || call.transcript_fragments || [];
   const audio = Object.entries(call.audio || {}).map(([stream]) => {
     if (!call.run_id || !call.case_id) return "";
     const url = `/api/runs/${encodeURIComponent(call.run_id)}/evidence/${encodeURIComponent(stream)}?case_id=${encodeURIComponent(call.case_id)}`;
@@ -270,19 +277,28 @@ $("calls-prev").addEventListener("click", () => { callsPage -= 1; renderCalls();
 $("calls-next").addEventListener("click", () => { callsPage += 1; renderCalls(); });
 $("calls-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-call-detail]");
-  if (button) renderCallDetail(calls.find((call) => call.id === button.dataset.callDetail));
+  if (!button) return;
+  api.getHistoryCall(button.dataset.callDetail)
+    .then((call) => renderCallDetail(toCallRecord(call)))
+    .catch(showError);
 });
 
 // ---- experiments -----------------------------------------------------------
 
-function renderExperimentRuns() {
-  $("experiment-runs").innerHTML = runs.length
+async function renderExperimentRuns() {
+  const jobs = await api.getJobs();
+  const historical = runs.length
     ? `<div class="tablewrap">${table(["corrida", "inicio", "casos", "resultado", "estado"], runs.map((run) => [
       `<code>${esc(run.run_id)}</code>`, esc(formatDate(run.started_at)), esc(run.cases),
       `${esc(run.passed)} correctas · ${esc(run.failed)} incorrectas · ${esc(run.invalid)} no evaluables`,
       '<span class="badge neutral">histórica</span>',
     ]))}</div>`
-    : '<div class="empty"><h3>No hay ejecuciones registradas</h3><p>Cuando el contrato de trabajos llegue, esta vista mostrará preparación, progreso, cancelación y evidencia parcial.</p></div>';
+    : '<div class="empty"><h3>No hay ejecuciones registradas</h3><p>Creá una ejecución con perfiles y escenarios declarados en el servidor.</p></div>';
+  const active = jobs.length ? `<h2>Trabajos</h2><div class="tablewrap">${table(["id", "estado", "progreso", "acción"], jobs.map((job) => [
+    `<code>${esc(job.id)}</code>`, verdictBadge(job.status), `${esc(job.progress?.completed || 0)} / ${esc(job.progress?.total || "n/d")}`,
+    ["pending", "preparing", "running", "cancelling"].includes(job.status) ? `<button class="small" data-job-cancel="${esc(job.id)}">Cancelar</button>` : "—",
+  ]))}</div>` : "";
+  $("experiment-runs").innerHTML = active + '<h2>Corridas disponibles</h2>' + historical;
 }
 
 // ---- comparison ------------------------------------------------------------
@@ -338,10 +354,38 @@ function profileHint() {
 
 async function loadProfiles() {
   profiles = await api.getProfiles();
+  scenarios = await api.getScenarios();
   $("profile").innerHTML = profiles.map((profile) => `<option value="${esc(profile.id)}">${esc(profile.id)} · ${esc(profile.engine)}</option>`).join("");
-  $("experiment-profiles").innerHTML = profiles.map((profile) => `<option>${esc(profile.id)}</option>`).join("");
+  $("experiment-profiles").innerHTML = profiles.map((profile) => `<option value="${esc(profile.id)}">${esc(profile.id)}</option>`).join("");
+  $("experiment-scenarios").innerHTML = scenarios.map((scenario) => `<option value="${esc(scenario.id)}">${esc(scenario.id)} · ${esc(scenario.problem_id)}</option>`).join("");
+  ["experiment-profiles", "experiment-scenarios", "experiment-mode", "experiment-repetitions", "experiment-create"].forEach((id) => ($(id).disabled = false));
+  $("experiment-contract").textContent = "El servidor valida perfiles y escenarios declarados; no se envían rutas, comandos ni destinos desde el navegador.";
   profileHint();
 }
+
+$("experiment-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const profileIds = [...$("experiment-profiles").selectedOptions].map((option) => option.value);
+  const scenarioIds = [...$("experiment-scenarios").selectedOptions].map((option) => option.value);
+  try {
+    await api.createJob({
+      profile_ids: profileIds,
+      scenario_ids: scenarioIds,
+      mode: $("experiment-mode").value === "voz" ? "voice" : "text",
+      repetitions: Number($("experiment-repetitions").value),
+    });
+    await renderExperimentRuns();
+  } catch (error) { showError(error); }
+});
+
+$("experiment-runs").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-job-cancel]");
+  if (!button) return;
+  try {
+    await api.cancelJob(button.dataset.jobCancel);
+    await renderExperimentRuns();
+  } catch (error) { showError(error); }
+});
 
 function chatLine(entry) {
   const line = document.createElement("div");

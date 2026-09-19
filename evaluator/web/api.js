@@ -1,8 +1,7 @@
 // Single boundary between the browser and the evaluator API.
 //
-// These routes are the read/chat contract present in the evaluator today. The
-// upcoming API_CONTRACT.md should extend this module with jobs and global-call
-// routes; views must not call fetch directly or infer a failed API from mocks.
+// Views use this boundary only: the browser never invents destinations, routes
+// or mock evidence when a local API response is unavailable.
 window.LabApi = (() => {
   async function request(path, options = {}) {
     const response = await fetch(path, options);
@@ -25,6 +24,15 @@ window.LabApi = (() => {
     getComparison: (id) => request(`/api/runs/${encodeURIComponent(id)}/compare`),
     getDiff: (query) => request(`/api/diff?${query}`),
     getProfiles: () => request("/api/profiles"),
+    importHistory: () => request("/api/history/import", json("POST", { source: "runs" })),
+    getHistoryCalls: (query) => request(`/api/history/calls?${query}`),
+    getHistoryCall: (id) => request(`/api/history/calls/${encodeURIComponent(id)}`),
+    getHistorySummary: (query) => request(`/api/history/summary?${query}`),
+    getScenarios: () => request("/api/scenarios"),
+    getJobs: () => request("/api/jobs"),
+    createJob: (body) => request("/api/jobs", json("POST", body)),
+    cancelJob: (id) => request(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+    getComparisons: (query) => request(`/api/comparisons?${query}`),
     openChat: (body) => request("/api/chat", json("POST", body)),
     say: (id, body) => request(`/api/chat/${encodeURIComponent(id)}/say`, json("POST", body)),
     sayAudio: (id, body) => request(`/api/chat/${encodeURIComponent(id)}/say-audio`, json("POST", body)),
