@@ -147,3 +147,19 @@ def test_particular_is_what_a_caller_calls_self_pay(cache):
 
 def test_an_invented_plan_still_resolves_to_nothing(cache):
     assert cache.plan_by_name("Sanitos Premium") is None
+
+
+def test_a_mangled_plan_name_still_finds_its_candidates(cache):
+    """"Mapfre Salud" reached a scored call as "ma phrase salue"."""
+    heard = [p.name for p in cache.plans_sounding_like("ma phrase salue")]
+    assert "Sanitas" not in heard  # the plan that was invented instead
+
+
+def test_a_one_letter_slip_is_caught(cache):
+    assert [p.id for p in cache.plans_sounding_like("sanitos")] == ["sanitas"]
+    assert [p.id for p in cache.plans_sounding_like("asissa")] == ["asisa"]
+
+
+def test_pure_noise_offers_nothing_rather_than_a_guess(cache):
+    assert cache.plans_sounding_like("xxxxx") == []
+    assert cache.plans_sounding_like("") == []

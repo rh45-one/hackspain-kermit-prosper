@@ -1,0 +1,47 @@
+id: rules-002
+problem_id: rules
+version: 1
+split: development
+language: es
+description: >
+  Control que SÍ reserva: la misma paciente con referral y seguro que
+  cubre dermatología consigue cita. Complementa rules-001 (que rechaza):
+  un agente que rechaza siempre dermatología falla aquí.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Hola, soy Marta Ruiz Gómez. Tengo volante de la doctora de cabecera para dermatología; ¿me dais cita lo antes posible?"
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
+    insurer: sanitas
+    wants: "cita de dermatología con volante, lo antes posible"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Tengo volante de la doctora de cabecera para dermatología; ¿me dais cita lo antes posible?"
+    hold_ms: 4000
+    tts: true
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR02
+          location_id: centro
+          appointment_type_id: dermatology_review
+          slot: "2026-10-05T10:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [NO_ACTION, ESCALATE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  P00042 TIENE referral de dermatología y Sanitas la cubre. PR02 está de
+  baja hasta el 30/09 y solo trabaja lunes y miércoles 10:00-13:00 en
+  Centro: el primer hueco válido es lunes 5 de octubre a las 10:00.

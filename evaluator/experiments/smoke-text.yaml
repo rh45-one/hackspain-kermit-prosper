@@ -1,0 +1,31 @@
+# Smoke test de la VÍA DE TEXTO contra el doble de prueba.
+# Verifica de punta a punta el contrato `POST {text_url}/turns`: apertura
+# implícita por call_id, turno a turno con el paciente simulado, `hangup`
+# final y envío dentro de la ventana. Mismos tres dobles que smoke.yaml
+# (acierta / muta / calla), pero hablando por texto en vez de por socket.
+name: evaluator-smoke-text
+rules_version: "scoring-2.0-draft"
+reference_now: "2026-09-18T10:00:00+02:00"
+clinic_dataset: ../data/clinic_dataset.json
+clinic_port: 18090
+submit_key: pk-local-eval
+repetitions: 1
+submit_drain_s: 1.0
+candidates:
+  - name: text-correct
+    kind: double
+    port: 18770
+    mode: correct
+    text_url: http://127.0.0.1:18770
+  - name: text-wrong
+    kind: double
+    port: 18771
+    mode: mutate
+    text_url: http://127.0.0.1:18771
+  - name: text-silent
+    kind: double
+    port: 18772
+    mode: silent
+    text_url: http://127.0.0.1:18772
+scenarios:
+  - ../scenarios/**/*.yaml

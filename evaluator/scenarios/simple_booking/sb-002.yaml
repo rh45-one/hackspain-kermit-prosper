@@ -1,0 +1,48 @@
+id: sb-002
+problem_id: doctor_and_site
+version: 2
+split: development
+language: es
+description: >
+  Doctora y sitio concretos: pide a la Dra. Sáez en Centro. Como pide
+  explícitamente proveedor+sede, no vale un fallback a otra sede.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Hola, soy Marta Ruiz Gómez. Quiero pedir cita con la doctora Sáez en Centro, lo antes posible."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
+    insurer: sanitas
+    has_visited_before: true
+    wants: "cita con la doctora Sáez en Centro lo antes posible"
+    prefer: "la doctora Sáez en Centro"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Quiero pedir cita con la doctora Sáez en Centro, lo antes posible."
+    hold_ms: 4000
+    tts: true
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: centro
+          appointment_type_id: review
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL, RESCHEDULE, ESCALATE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  PR01 (Dra. Ana Sáez, general) está en Centro lunes/miércoles/viernes
+  09:00-14:00. El caller pidió proveedor y sede: un dermatólogo en Centro o
+  la Dra. Sáez en Norte no son respuestas aceptadas.

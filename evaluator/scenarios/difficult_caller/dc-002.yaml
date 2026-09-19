@@ -1,0 +1,52 @@
+id: dc-002
+problem_id: difficult_caller
+version: 1
+split: development
+language: es
+description: >
+  Interrupción (barge-in): el turno largo del paciente corta en cuanto el
+  agente empieza a hablar. El agente debe dejar de hablar rápido y, sobre
+  todo, no confundir la petición - sigue siendo una reserva simple.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_impaciente
+  from_number: "+34612345678"
+  opening: "Buenos días, soy Marta Ruiz Gómez, DNI 12345678-Z. Quiero la primera cita que tengan en medicina general."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
+    insurer: sanitas
+    has_visited_before: true
+    wants: "la primera cita disponible en medicina general"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Buenos días, soy Marta Ruiz Gómez, DNI 12345678-Z. Quiero la primera cita que tengan en medicina general."
+    hold_ms: 4000
+    tts: true
+  - text: "Me da igual el doctor, con tal de que sea pronto. Mire, le cuento que la semana pasada estuve..."
+    hold_ms: 2000
+    tts: true
+    interrupt_on_agent_audio: true
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: centro
+          appointment_type_id: review
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL, RESCHEDULE, ESCALATE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  El segundo turno marca `interrupt_on_agent_audio`: el caller deja de
+  hablar en cuanto detecta audio del agente y el caso registra
+  `interrupts[]` con la cola de audio que el agente siguió emitiendo.

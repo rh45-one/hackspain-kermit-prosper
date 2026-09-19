@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -1172,3 +1172,137 @@ async def test_spanish_hides_nobody(box, ctx):
         with_es, when_phrase="tomorrow", specialty_name="General practice", language="español"
     )
     assert with_es.result.get("total_free") == plain.result.get("total_free")
+
+
+async def test_registration_names_the_plan_it_recorded(box, ctx):
+    """The caller has to hear which plan went down, because one word is all it is.
+
+    From a scored call: "Mapfre Salud" reached the model as "ma phrase salue"
+    and the registration went out under sanitas, a plan nobody had mentioned.
+    Six of seven fields matched and the case still failed.
+    """
+    params = FakeParams()
+    await box.register_new_patient(
+        params,
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="ASISA",
+    )
+
+    assert params.result["insurer_recorded"] == "ASISA"
+    assert params.result["read_this_back_to_them"] is True
+
+
+async def test_the_registration_carries_every_field(box, ctx):
+    """Auditing one field is how four 422s stayed invisible for a whole run."""
+    await box.register_new_patient(
+        FakeParams(),
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="ASISA",
+    )
+
+    queued = ctx.queued_actions[-1]
+    assert queued["insurer"] == "asisa"
+    assert queued["email"] == "sergio_martinez77@gmail.com"
+    assert queued["national_id"] == "31426012P"
+
+
+async def test_an_unheard_plan_comes_back_with_the_names_to_read_out(box, ctx):
+    """Noise on the line is answered with real names, never with a nearest pick."""
+    params = FakeParams()
+    await box.register_new_patient(
+        params,
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="sanitos",
+    )
+
+    assert not ctx.queued_actions
+    assert params.result["did_you_mean"] == ["Sanitas"]
+    assert "let them pick" in params.result["ask_them"]
+
+
+async def test_jev_places_a_plan_the_catalogue_cannot(box, ctx):
+    """Second layer: the catalogue failed, so the whole list goes to Jev."""
+
+    class StubJev:
+        configured = True
+        asked: ClassVar[dict[str, object]] = {}
+
+        async def classify_plan(self, spoken, plans, **_kw):
+            StubJev.asked = {"spoken": spoken, "plans": dict(plans)}
+            return "asisa"
+
+    box.jev = StubJev()
+    await box.register_new_patient(
+        FakeParams(),
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="assissa premium",
+    )
+
+    assert ctx.queued_actions[-1]["insurer"] == "asisa"
+    # The options are the live catalogue, never a list written in this repo.
+    assert StubJev.asked["plans"] == {p.id: p.name for p in box.cache.plans_by_id.values()}
+
+
+async def test_an_abstaining_jev_never_invents(box, ctx):
+    """Jev said it could not tell. That is a question for the caller."""
+
+    class AbstainingJev:
+        configured = True
+
+        async def classify_plan(self, *_a, **_kw):
+            return None
+
+    box.jev = AbstainingJev()
+    params = FakeParams()
+    await box.register_new_patient(
+        params,
+        given_name="Sergio",
+        first_surname="Martínez",
+        second_surname="Ramírez",
+        national_id="31426012P",
+        date_of_birth="2005-08-10",
+        phone="792919982",
+        email="sergio_martinez77@gmail.com",
+        insurer="sanitos",
+    )
+
+    assert not ctx.queued_actions
+    assert params.result["did_you_mean"] == ["Sanitas"]  # sound-alikes still get their turn
+
+
+def test_a_spanish_address_is_not_given_spain_twice():
+    """Fold both sides or neither: `_fold_plain` turns ñ into n.
+
+    A literal "españa" compared against folded text can never match, so the
+    guard was dead and "Calle X, Madrid, España" was being sent to the
+    geocoder as "Calle X, Madrid, España, Madrid, Spain".
+    """
+    from agent.brain.tools import _fold_plain
+
+    for said in ("Calle de Madrid 54, España", "Getafe, Espana", "somewhere in Spain"):
+        folded = _fold_plain(said)
+        assert "spain" in folded or _fold_plain("España") in folded

@@ -1,0 +1,53 @@
+id: dc-001
+problem_id: difficult_caller
+version: 1
+split: development
+language: es
+description: >
+  Corrección a mitad de llamada: la paciente pide el jueves, se corrige
+  sola y dice el martes. La petición final es el martes - quedarse con la
+  fecha anterior a la corrección es el fallo típico (state_error).
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_despistada
+  from_number: "+34612345678"
+  opening: "Hola, soy Marta Ruiz Gómez. Quiero una cita de medicina general el jueves por la tarde."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
+    insurer: sanitas
+    wants: "cita de medicina general el martes por la tarde"
+    prefer: "el martes por la tarde"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+    corrections:
+      - "Perdone, me he equivocado: he dicho el jueves pero quería el martes, por la tarde."
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Quiero una cita de medicina general el jueves por la tarde."
+    hold_ms: 4000
+    tts: true
+  - text: "Perdone, me he equivocado: he dicho el jueves pero quería el martes, por la tarde."
+    hold_ms: 4000
+    tts: true
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: norte
+          appointment_type_id: review
+          slot: "2026-09-22T16:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  Tras la corrección la fecha válida es el martes 22: PR01 en Norte
+  16:00-19:00, primer hueco 16:00. Reservar el jueves 24 (la fecha
+  anterior a la corrección) debe fallar.

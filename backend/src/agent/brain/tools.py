@@ -130,6 +130,10 @@ def _plan_id(cache: Any, spoken: str | None) -> str | None:
     return plan.id if plan is not None else spoken
 
 
+# One round trip, on a path that would otherwise cost a whole turn of a
+# three-minute call. Measured: a Jev read is ~600 ms.
+JEV_PLAN_TIMEOUT_SECONDS = 1.5
+
 _COVERAGE_REASONS = frozenset({
     "specialty_not_covered",
     "location_not_covered",
@@ -913,7 +917,12 @@ class ToolBox:
         import httpx
 
         queries = [place]
-        if "spain" not in _fold_plain(place) and "españa" not in _fold_plain(place):
+        # Fold both sides or neither. `_fold_plain` turns the ñ into an n, so
+        # a literal "españa" written here could never match anything it
+        # produced — the guard was dead and every Spanish address got a
+        # redundant ", Madrid, Spain" bolted onto it.
+        folded_place = _fold_plain(place)
+        if "spain" not in folded_place and _fold_plain("España") not in folded_place:
             queries.append(f"{place}, Madrid, Spain")
         # A house number the map has never heard of sinks the whole query, and
         # the street alone is well inside the margin these cases are drawn
@@ -1098,12 +1107,46 @@ class ToolBox:
             await params.result_callback({"error": "national id check letter does not match; ask again"})
             return
         plan_id = _plan_id(self.cache, insurer)
+        if (
+            self.cache is not None
+            and self.cache.plan_by_id(plan_id or "") is None
+            and self.jev is not None
+            and self.jev.configured
+        ):
+            # The catalogue could not place these words. Before making the
+            # caller repeat themselves, put the whole list of plans the clinic
+            # sells in front of a model built for constrained choice, and take
+            # its answer only when it is confident. The list is the live
+            # catalogue, so this never needs editing when the clinic signs an
+            # insurer. Costs one round trip, on a path that otherwise ends in
+            # a wasted turn.
+            chosen = await self.jev.classify_plan(
+                insurer,
+                {p.id: p.name for p in self.cache.plans_by_id.values()},
+                timeout_seconds=JEV_PLAN_TIMEOUT_SECONDS,
+            )
+            if chosen is not None:
+                self.ctx.audit("plan_classified", {"by": "jev", "plan_id": chosen})
+                plan_id = chosen
         if self.cache is not None and self.cache.plan_by_id(plan_id or "") is None:
             # Caught here, not at submit time: a rejected registration is only
             # discovered once the call is over and nothing can be asked again.
-            known = ", ".join(p.name for p in self.cache.plans_by_id.values())
+            # Name the ones it could have been. A bad line does not produce a
+            # plausible wrong plan, it produces noise, and the answer to noise
+            # is to read the real names back — not to pick the nearest, which
+            # is guessing with extra steps.
+            near = [p.name for p in self.cache.plans_sounding_like(insurer)]
             await params.result_callback(
-                {"error": f"no such insurer: {insurer!r}", "the_clinic_knows": known}
+                {
+                    "error": f"no such insurer: {insurer!r}",
+                    "did_you_mean": near,
+                    "ask_them": (
+                        "say these names to them and let them pick one"
+                        if near
+                        else "ask them to say their insurer again"
+                    ),
+                    "the_clinic_knows": ", ".join(p.name for p in self.cache.plans_by_id.values()),
+                }
             )
             return
         self.ctx.queued_actions.append(
@@ -1119,8 +1162,25 @@ class ToolBox:
                 "insurer": plan_id,
             }
         )
-        self.ctx.audit("action_queued", {"route": "register", "national_id": normalized_id})
-        await params.result_callback({"registered_would_be": True})
+        # The whole body, not just the id. Four registrations were lost to a
+        # 422 nobody could see because this audit named one field; and one was
+        # lost to an insurer the caller never said, which this would have shown.
+        self.ctx.audit(
+            "action_queued",
+            {"route": "register", **{k: v for k, v in self.ctx.queued_actions[-1].items() if k != "route"}},
+        )
+        plan = self.cache.plan_by_id(plan_id or "") if self.cache is not None else None
+        await params.result_callback(
+            {
+                "registered_would_be": True,
+                # Say this back to them. A plan is one word over a telephone and
+                # the wrong one fails the registration as surely as a wrong id:
+                # "Mapfre Salud" came through as "ma phrase salue" on a scored
+                # call and the plan submitted was one nobody had mentioned.
+                "insurer_recorded": plan.name if plan is not None else plan_id,
+                "read_this_back_to_them": True,
+            }
+        )
 
     async def finish_without_booking(self, params: FunctionCallParams, reason: str) -> None:
         """End the call with no booking, for a named, allowed reason.

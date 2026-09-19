@@ -1,0 +1,45 @@
+id: rules-001
+problem_id: rules
+version: 2
+split: development
+language: es
+description: >
+  Rechazo por reglas: paciente ASISA pide dermatología sin referral. Dos
+  normas muerden (referral_required y specialty_not_covered); ambas son
+  respuesta aceptada.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34633444555"
+  opening: "Buenos días, soy Carmen Díaz Pardo. Querría cita con dermatología, me ha salido un sarpullido."
+  facts:
+    name: "Carmen Díaz Pardo"
+    patient_id: P00045
+    national_id: "34567890V"
+    date_of_birth: "1969-05-20"
+    insurer: asisa
+    has_visited_before: true
+    wants: "cita con dermatología por un sarpullido"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_rescheduling: false
+turns:
+  - text: "Buenos días, soy Carmen Díaz Pardo. Querría cita con dermatología, me ha salido un sarpullido."
+    hold_ms: 4000
+    tts: true
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: NO_ACTION
+          reason: referral_required
+    - actions:
+        - action: NO_ACTION
+          reason: specialty_not_covered
+  forbidden_actions: [BOOK, RESCHEDULE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  Dermatología exige referral y ASISA no la cubre; la paciente no tiene
+  referral en su registro. Cualquiera de los dos motivos es correcto.

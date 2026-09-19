@@ -8,10 +8,55 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from agent.config import settings
+
+_LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
+
+# Any of these means somebody else forwarded the request, so the address on it
+# was written by that somebody and is not evidence of anything.
+_FORWARDED_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip")
+
+
+def require_ops_access(request: Request) -> None:
+    """Gate every ops view. Fails closed off-host.
+
+    These views serve whole call transcripts, and a caller dictates their
+    national id and telephone number out loud during a registration — those
+    words are in the JSONL verbatim. There was no check here at all, and the
+    deployment publishes this app: `Dockerfile` runs `agent.serve`, which
+    mounts these routes, and `fly.toml` puts port 8080 on the public internet.
+    Anyone holding the URL could have read every patient's id.
+
+    With `OPS_TOKEN` set, a request must present it. Without it, only loopback
+    is served — so a laptop keeps working untouched while a deployed host
+    answers nothing until somebody sets the secret deliberately. Unset plus
+    public is the one combination that must never quietly work.
+    """
+    token = settings().ops_token
+    if token:
+        offered = request.headers.get("x-ops-token") or request.query_params.get("token")
+        if offered == token:
+            return
+        raise HTTPException(401, "ops token required")
+    # `request.client.host` is not the peer when a proxy is in front: uvicorn
+    # rewrites it from X-Forwarded-For for peers it trusts, and everyone sets
+    # FORWARDED_ALLOW_IPS=* in a container the first time they want to see a
+    # real client address. The day somebody does, `X-Forwarded-For: 127.0.0.1`
+    # from the open internet would read as loopback and open this with no
+    # token at all. So a forwarded request is never loopback, whatever the
+    # address says — if something is proxying for you, you are not local.
+    if any(h in request.headers for h in _FORWARDED_HEADERS):
+        raise HTTPException(403, "ops console is loopback-only until OPS_TOKEN is set")
+    host = (request.client.host if request.client else "") or ""
+    if host in _LOOPBACK:
+        return
+    raise HTTPException(
+        403,
+        "ops console is loopback-only until OPS_TOKEN is set",
+    )
 
 app = FastAPI(title="ClinicReflow ops", docs_url=None, redoc_url=None)
 
@@ -62,12 +107,12 @@ refresh(); setInterval(refresh,3000);
 
 
 @app.get("/ops", response_class=HTMLResponse)
-async def index() -> str:
+async def index(_: None = Depends(require_ops_access)) -> str:
     return _INDEX
 
 
 @app.get("/ops/api/calls")
-async def calls() -> list[dict[str, object]]:
+async def calls(_: None = Depends(require_ops_access)) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     for path in sorted(Path(settings().calls_dir).glob("*.jsonl"), reverse=True)[:30]:
         actions = 0
@@ -82,7 +127,7 @@ async def calls() -> list[dict[str, object]]:
 
 
 @app.get("/ops/api/calls/{call_id}")
-async def call_detail(call_id: str) -> list[dict[str, object]]:
+async def call_detail(call_id: str, _: None = Depends(require_ops_access)) -> list[dict[str, object]]:
     path = Path(settings().calls_dir) / f"{call_id}.jsonl"
     if not path.exists():
         raise HTTPException(404, "call not found")
@@ -96,7 +141,7 @@ async def call_detail(call_id: str) -> list[dict[str, object]]:
 
 
 @app.get("/ops/api/reflow")
-async def reflow() -> list[dict[str, object]]:
+async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     rdir = Path(settings().data_dir) / "reflow"
     if not rdir.exists():

@@ -1,0 +1,34 @@
+# Plantilla para evaluar el agente real en local.
+# El agente es un sistema externo: arráncalo aparte (o pon start_command)
+# apuntando PROSPER_API_BASE_URL a la clínica local que este runner levanta.
+name: agent-local
+rules_version: "scoring-2.0-draft"
+reference_now: "2026-09-18T10:00:00+02:00"
+clinic_dataset: ../data/clinic_dataset.json
+clinic_port: 18090
+submit_key: pk-local-eval
+repetitions: 3
+# Voz sintética del llamante: todos los turnos de los escenarios llevan
+# `tts: true`. Sin esto el agente recibe silencio y todos los casos salen
+# `invalid_evaluation` (fallo del rig, no del agente). Requiere el binario
+# instalado: `brew install espeak-ng` / `apt install espeak-ng`.
+tts_command: espeak-ng
+# switchboard:
+#   concurrency: 5              # descomenta para la fase de llamadas simultáneas
+candidates:
+  - name: baseline
+    kind: external
+    ws_url: ws://127.0.0.1:17860/ws
+    # Vía de texto (recomendada mientras exista): si el agente expone el
+    # adaptador, descomenta y tiene prioridad sobre ws_url. Contrato en el
+    # README, sección "Adaptador de texto `/turns`".
+    # text_url: http://127.0.0.1:17860
+    version: "external-agent"
+    # usage_url: http://127.0.0.1:17860/usage   # GET {usage_url}/calls/{call_id}
+    # Opcional: el runner lo arranca y espera el puerto.
+    # start_command: "<comando de una instancia dedicada del agente externo>"
+    env:
+      PROSPER_API_BASE_URL: http://127.0.0.1:18090
+      PROSPER_API_KEY: pk-local-eval
+scenarios:
+  - ../scenarios/**/*.yaml

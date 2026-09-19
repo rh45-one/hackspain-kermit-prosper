@@ -1,0 +1,48 @@
+id: we-001
+problem_id: when_exactly
+version: 1
+split: development
+language: es
+description: >
+  Fecha relativa: "el jueves por la tarde" desde el viernes 18 → jueves
+  24 de septiembre. Solo PR01 atiende general los jueves por la tarde,
+  en Norte desde las 16:00.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Hola, soy Marta Ruiz Gómez. Necesito una cita de medicina general el jueves por la tarde."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    date_of_birth: "1988-03-14"
+    insurer: sanitas
+    wants: "cita de medicina general el jueves por la tarde"
+    prefer: "el jueves por la tarde"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Necesito una cita de medicina general el jueves por la tarde."
+    hold_ms: 4000
+    tts: true
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: norte
+          appointment_type_id: review
+          slot: "2026-09-24T16:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL, RESCHEDULE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  Desde el viernes 18, "el jueves" es el 24. PR01 está en Norte los
+  martes y jueves 16:00-19:00; en Centro no trabaja los jueves. PR05
+  atiende en Sur, que Sanitas no cubre. 16:00 es el primer hueco.
