@@ -81,12 +81,26 @@ function SectionTitle({
  * un motivo: esa frase es cierta para todas las ausencias, y esta llamada va
  * de una.
  */
-function callWithContext(base: string, subject: CallSubject, situation: string): string {
+function callWithContext(
+  base: string,
+  subject: CallSubject,
+  situation: string,
+  suggested: string | null,
+): string {
   const params = new URLSearchParams({
     reason: subject.escalation.reason,
     person: subject.escalation.target,
   });
-  if (situation.trim()) params.set("situation", situation.trim());
+  // La situación SÓLO viaja a la persona que la pregunta señaló.
+  //
+  // Está escrita arriba para preguntarle a Jev quién cubre algo, y se queda
+  // en la URL. Pegársela a cualquier llamada que se abra después junta una
+  // frase con un motivo que no tiene nada que ver: "me ha dado un infarto"
+  // colgado de "clínica cerrada" no es contexto, es ruido — y el agente se
+  // lo cree, porque es lo único concreto que le hemos dado.
+  if (situation.trim() && suggested && subject.escalation.target === suggested) {
+    params.set("situation", situation.trim());
+  }
   return `${base}${base.includes("?") ? "&" : "?"}${params}`;
 }
 
@@ -420,7 +434,7 @@ export function ClinicGraphBoard({
       {calling ? (
         <CallQrDialog
           subject={calling}
-          url={callWithContext(callUrl, calling, situation)}
+          url={callWithContext(callUrl, calling, situation, highlight ?? null)}
           urgencyNote={graph.legend.urgency[calling.escalation.urgency]}
           onClose={() => setCalling(null)}
         />
