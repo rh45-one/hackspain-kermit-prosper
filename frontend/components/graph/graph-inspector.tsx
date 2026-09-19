@@ -1,10 +1,12 @@
 "use client";
 
+import { CallButton } from "@/components/graph/call-qr";
 import {
   languageName,
   plural,
   specialtyLabelById,
   URGENCY,
+  type CallSubject,
   type ClinicGraph,
   type GraphNode,
 } from "@/lib/graph";
@@ -39,10 +41,15 @@ export function GraphInspector({
   graph,
   node,
   onPick,
+  subject,
+  onCall,
 }: {
   graph: ClinicGraph;
   node: GraphNode | null;
   onPick: (id: string) => void;
+  /** Who this node means calling, when it means calling anyone. */
+  subject?: CallSubject | null;
+  onCall?: () => void;
 }) {
   if (!node) {
     return (
@@ -92,6 +99,8 @@ export function GraphInspector({
           </span>
         ) : null}
       </div>
+
+      {subject && onCall ? <CallButton subject={subject} onClick={onCall} /> : null}
 
       <dl className="mt-3 divide-y divide-mist/70">
         {node.kind === "provider" ? (

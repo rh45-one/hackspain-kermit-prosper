@@ -476,3 +476,62 @@ export function tally(graph: ClinicGraph): GraphTally {
 export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
+
+/* -------------------------------------------------------------- the call */
+
+/**
+ * Who a pinned node means calling, and why.
+ *
+ * The routing map has two sides and the "Llamar" button has to work from
+ * either. Pin a reason and the person is the one that reason escalates to.
+ * Pin a person and the reason is the loudest route that reaches them — the one
+ * that would make the phone ring first — with the rest counted, not hidden.
+ *
+ * Returns `null` for anything that is not a call: a doctor, a site, or a
+ * declared person nobody escalates to. A button that opens a call about
+ * nothing would be the panel inventing a story the graph does not tell.
+ */
+export type CallSubject = {
+  /** The declared person who picks up. */
+  role: GraphNode;
+  /** The ending that puts the call through to them. */
+  escalation: Escalation;
+  /** What that ending is called on screen, in Spanish. */
+  reasonLabel: string;
+  /** How many other endings also reach this person. */
+  otherRoutes: number;
+};
+
+export function callSubject(graph: ClinicGraph, node: GraphNode): CallSubject | null {
+  const label = (reason: string) =>
+    graph.nodes.find((n) => n.meta.reason === reason)?.label ?? reason;
+
+  if (node.kind === "reason" || node.meta.reason) {
+    const reason = node.meta.reason ?? node.id.replace(/^reason:/, "");
+    const escalation = graph.escalations.find((e) => e.reason === reason);
+    if (!escalation) return null;
+    const role = graph.nodes.find((n) => n.id === escalation.target);
+    if (!role) return null;
+    return { role, escalation, reasonLabel: label(escalation.reason), otherRoutes: 0 };
+  }
+
+  if (node.kind === "role") {
+    const incoming = graph.escalations
+      .filter((e) => e.target === node.id)
+      .slice()
+      .sort(
+        (a, b) =>
+          URGENCY[a.urgency].order - URGENCY[b.urgency].order || a.reason.localeCompare(b.reason),
+      );
+    const escalation = incoming[0];
+    if (!escalation) return null;
+    return {
+      role: node,
+      escalation,
+      reasonLabel: label(escalation.reason),
+      otherRoutes: incoming.length - 1,
+    };
+  }
+
+  return null;
+}

@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { CallQrDialog } from "@/components/graph/call-qr";
 import { CatalogueMap } from "@/components/graph/catalogue-map";
 import { GraphInspector } from "@/components/graph/graph-inspector";
 import { GraphKeyframes } from "@/components/graph/graph-canvas";
 import { RoutingMap } from "@/components/graph/routing-map";
 import { PageHeader } from "@/components/layout/page-header";
 import {
+  callSubject,
   EDGE_INK,
   EDGE_WORD,
   layoutCatalogue,
@@ -17,6 +19,7 @@ import {
   tally,
   TONE,
   URGENCY,
+  type CallSubject,
   type ClinicGraph,
   type GraphTone,
   type Urgency,
@@ -62,10 +65,18 @@ function SectionTitle({
   );
 }
 
-export function ClinicGraphBoard({ graph }: { graph: ClinicGraph }) {
+export function ClinicGraphBoard({
+  graph,
+  callUrl,
+}: {
+  graph: ClinicGraph;
+  /** Public address of the agent's browser call page, resolved on the server. */
+  callUrl: string;
+}) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
   const [visible, setVisible] = useState<Set<Urgency>>(() => new Set(URGENCIES));
+  const [calling, setCalling] = useState<CallSubject | null>(null);
 
   const active = hovered ?? pinned;
   const counts = useMemo(() => tally(graph), [graph]);
@@ -127,13 +138,21 @@ export function ClinicGraphBoard({ graph }: { graph: ClinicGraph }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPinned(null);
+      if (event.key !== "Escape") return;
+      // The dialog closes before the pin does, so Escape never wipes the
+      // context out from under the person demoing it.
+      if (calling) setCalling(null);
+      else setPinned(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [calling]);
 
   const pinnedNode = pinned ? (byId.get(pinned) ?? null) : null;
+  const pinnedCall = useMemo(
+    () => (pinnedNode ? callSubject(graph, pinnedNode) : null),
+    [graph, pinnedNode],
+  );
   const filtered = visible.size < URGENCIES.length;
 
   return (
@@ -342,11 +361,26 @@ export function ClinicGraphBoard({ graph }: { graph: ClinicGraph }) {
                 Cerrar
               </button>
               <div className="max-h-[56vh] overflow-y-auto rounded-[16px] shadow-[var(--shadow-md)]">
-                <GraphInspector graph={graph} node={pinnedNode} onPick={pick} />
+                <GraphInspector
+                  graph={graph}
+                  node={pinnedNode}
+                  onPick={pick}
+                  subject={pinnedCall}
+                  onCall={pinnedCall ? () => setCalling(pinnedCall) : undefined}
+                />
               </div>
             </div>
           </div>
         </div>
+      ) : null}
+
+      {calling ? (
+        <CallQrDialog
+          subject={calling}
+          url={callUrl}
+          urgencyNote={graph.legend.urgency[calling.escalation.urgency]}
+          onClose={() => setCalling(null)}
+        />
       ) : null}
     </div>
   );

@@ -24,6 +24,26 @@ export const metadata = {
     "Quién existe, quién cubre qué, quién está dónde y las dieciocho formas en que una llamada puede acabar sin cita.",
 };
 
+/**
+ * Public address of the agent's own browser call page (`/call`, which talks to
+ * `/ws/demo`: the production pipeline with the submit switched off).
+ *
+ * Read here, on the server, and handed down as a prop — it is not a secret,
+ * but it is the deployment's address and the client has no business guessing
+ * it. `AGENT_HTTP_BASE_URL` already points at the deployed agent in Vercel, so
+ * the common case needs no new configuration; `VOICE_PUBLIC_BASE_URL` exists
+ * for the day the panel reads the ops process over a private address while the
+ * phone in the room needs a public one.
+ */
+function callPageUrl(): string {
+  const base = (
+    process.env.VOICE_PUBLIC_BASE_URL ??
+    process.env.AGENT_HTTP_BASE_URL ??
+    "http://127.0.0.1:7860"
+  ).replace(/\/$/, "");
+  return `${base}/call/`;
+}
+
 type Loaded =
   | { ok: true; graph: ClinicGraph }
   | { ok: false; detail: string; hint: string };
@@ -93,5 +113,5 @@ export default async function GrafoPage() {
   if (!loaded.ok) {
     return <GraphUnavailable detail={loaded.detail} hint={loaded.hint} />;
   }
-  return <ClinicGraphBoard graph={loaded.graph} />;
+  return <ClinicGraphBoard graph={loaded.graph} callUrl={callPageUrl()} />;
 }
