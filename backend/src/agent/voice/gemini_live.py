@@ -57,12 +57,9 @@ from agent.voice.twilio import ProsperTwilioSerializer
 # which must not be a hard dependency of this module (the factory is
 # dependency-guarded and testable with fakes without it).
 try:
-    from google.genai.types import EndSensitivity
-    from pipecat.services.google.gemini_live.llm import GeminiModalities, GeminiVADParams
+    from pipecat.services.google.gemini_live.llm import GeminiModalities
 except ImportError:  # pragma: no cover - exercised when google-genai is absent
-    EndSensitivity = None
     GeminiModalities = None
-    GeminiVADParams = None
 
 # Pinned audio host (OpenSpec D2/D3). Never a thinking variant: this id
 # contains no "thinking" marker and the factory sets no thinking config.
@@ -255,18 +252,6 @@ def _gemini_language(settings: Any) -> str | None:
     return str(getattr(settings, "gemini_language", "") or "") or None
 
 
-def _gemini_silence_ms(settings: Any) -> int:
-    """How much silence Gemini waits for before calling a caller turn over.
-
-    Unconfigured it waits about 4.8 s, measured. That is fine on an unhurried
-    line and ruinous on this one: these calls run ~24 exchanges against a
-    three-minute cap, so the default alone would spend two thirds of the call
-    waiting. 800 ms is comfortably longer than a breath mid-sentence and far
-    shorter than the default.
-    """
-    return int(getattr(settings, "gemini_silence_ms", 0) or 800)
-
-
 def create_gemini_live_service(
     settings: Any,
     toolbox: Any,
@@ -337,24 +322,22 @@ def create_gemini_live_service(
     # -22 dB, for a long sentence and for a bare "Hello.". See
     # agent.voice.pipeline for the telephony VAD parameters that go with it.
     #
-    # Gemini decides its own turns. It is trained for it and it is the thing
-    # listening to the audio; a second detector in our process is one more
-    # thing to be wrong, and it was — driving turns locally is what let a
-    # watchdog end them while callers were mid-sentence.
+    # Gemini decides its own turns, with its own defaults. It is trained for
+    # phone calls, it is the one listening to the audio, and every attempt to
+    # help it here has cost more than it bought: a local detector left the
+    # agent deaf when it missed an onset, a faster one cut callers off
+    # mid-sentence, and a watchdog on top of that had the agent reading
+    # "[Waiting for user response]" out loud.
     #
-    # What we do say is how long to wait. Left alone it takes ~4.8 s of
-    # silence to decide a caller has finished, and at ~24 exchanges that is
-    # two of the three minutes a call gets. Naming the silence window keeps
-    # the decision Gemini's and the clock ours.
-    vad_params = (
-        GeminiVADParams(
-            disabled=False,
-            silence_duration_ms=_gemini_silence_ms(settings),
-            end_sensitivity=EndSensitivity.END_SENSITIVITY_HIGH,
-        )
-        if GeminiVADParams is not None
-        else None
-    )
+    # The number that justified all of it was misread. ~4.8 s was measured to
+    # `turn_complete`, which marks the end of the MODEL's turn — endpointing
+    # plus generating the whole reply — not how long Gemini waits to decide a
+    # caller has finished. There was never a measurement saying it is slow.
+    #
+    # So: nothing is set here. If a real measurement ever shows the wait is
+    # the problem, GeminiVADParams(silence_duration_ms=...) is the knob, and
+    # it is still Gemini deciding.
+    vad_params = None
     service = service_cls(
         api_key=api_key,
         settings=service_cls.Settings(
@@ -370,10 +353,10 @@ def create_gemini_live_service(
         tools=toolbox.tools(),
     )
     logger.info(
-        "Gemini Live service created: model={} language={} server_vad={} "
+        "Gemini Live service created: model={} language={} turn_detection={} "
         "(per-socket instance)",
         GEMINI_LIVE_MODEL,
         _gemini_language(settings) or "elegido por el modelo",
-        "off (local VAD drives turns)" if vad_params is not None and vad_params.disabled else "on",
+        "gemini",
     )
     return service

@@ -309,23 +309,21 @@ def test_factory_pins_model_modality_prompt_and_tools(monkeypatch):
     assert kwargs["tools"] == toolbox.tools()  # registry-validated ToolBox
 
 
-def test_gemini_keeps_its_own_turn_detection_on_a_named_window(monkeypatch):
-    """Gemini decides when a caller has finished; we only say how long to wait.
+def test_nothing_configures_gemini_turn_detection(monkeypatch):
+    """Gemini decides when a caller has finished, on its own defaults.
 
-    It is trained for this and it is the one listening to the audio. Running
-    a second detector in our process was tried and is what let a watchdog end
-    turns while callers were still mid-sentence, with the agent reading
+    Three attempts to help it here each cost more than they bought: a local
+    detector left the agent deaf when it missed an onset, a faster one cut
+    callers off mid-sentence, and a watchdog on top had the agent reading
     "[Waiting for user response]" out loud.
 
-    The one thing left to us is the clock. Unconfigured, Gemini waits about
-    4.8 s of silence before closing a turn — measured — and at the ~24
-    exchanges these calls run that spends two of the three minutes a call
-    gets. Naming the window keeps the decision Gemini's and the budget ours.
+    The measurement that justified all of it was misread. ~4.8s was timed to
+    `turn_complete`, which marks the end of the MODEL's turn — endpointing
+    plus generating the whole reply — not how long Gemini waits to decide a
+    caller has stopped. No measurement has ever shown that wait to be slow,
+    so nothing here overrides it.
     """
     import agent.voice.gemini_live as gl
-
-    if gl.GeminiVADParams is None:  # pragma: no cover - needs google-genai
-        pytest.skip("google-genai absent; GeminiVADParams unavailable")
 
     monkeypatch.setattr(gl, "gemini_live_available", lambda: True)
     FakeGeminiService.instances = []
@@ -333,13 +331,7 @@ def test_gemini_keeps_its_own_turn_detection_on_a_named_window(monkeypatch):
     service = create_gemini_live_service(
         _SettingsStub(), _ToolboxStub(), service_cls=FakeGeminiService
     )
-
-    vad = service.kwargs["settings"].vad
-    assert vad is not None, "left at the provider default rather than stated"
-    assert vad.disabled is False, "turn detection belongs to Gemini"
-    assert 300 <= vad.silence_duration_ms <= 1500, (
-        "shorter cuts callers off mid-sentence; longer spends the call waiting"
-    )
+    assert service.kwargs["settings"].vad is None
 
 
 def test_factory_lets_the_model_pick_the_language(monkeypatch):
