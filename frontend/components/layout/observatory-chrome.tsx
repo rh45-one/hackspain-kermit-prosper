@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Share2,
   Trophy,
+  Users,
 } from "lucide-react";
 
 import { ProntoMark } from "@/components/brand/pronto-mark";
@@ -42,6 +43,9 @@ const NAV = [
   // call can have reaches which person. It was reachable only by typing the
   // URL, which for the screen most worth showing is the same as not existing.
   { href: "/grafo", label: "Mapa", icon: Share2, match: (path: string) => path === "/grafo" || path.startsWith("/grafo/") },
+  // Who answers and how the agent speaks to them. The graph draws the same
+  // routes; this is where they are edited.
+  { href: "/equipo", label: "Equipo", icon: Users, match: (path: string) => path === "/equipo" || path.startsWith("/equipo/") },
   { href: "/settings", label: "Agente", icon: SlidersHorizontal, match: (path: string) => path === "/settings" || path.startsWith("/settings/") },
 ] as const;
 
