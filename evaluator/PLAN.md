@@ -16,7 +16,12 @@ implementa **dentro de `evaluator/`**: no importa código de `backend/`, no lee
 | Tester de chat manual (`cli.py chat`) | Listo | Verificado contra el WS real del backend de `main` |
 | Diagnóstico "el agente no escuchó al caller" | Listo | `harness/agent_audit.py` (lectura opcional del audit del agente) |
 | Benchmark con dobles y escenarios | Listo | `cli.py run`, `experiments/smoke.yaml` |
-| Comparación de alternativas (A/B) | **Pendiente** | ver F-C |
+| Comparación de alternativas (A/B) | Listo | espera de readiness, intercalado y `cli.py compare` |
+| Métricas agregadas de una corrida | Listo | `report/metrics.py` (con `n/d` cuando el dato no existe) |
+| API read-only + chat en vivo | Listo | `api/app.py`, `api/chat.py`, `cli.py dev` |
+| Consola de developer (estático, sin build) | Listo | `web/`, servida por `cli.py dev` |
+| Chat con micrófono en la consola | Pendiente | el chat es tipeado; el audio del navegador necesita subir µ-law al servidor |
+| Lanzar corridas desde la consola | Pendiente y deliberadamente fuera de v1 | la API es read-only: una consola que reescribe su benchmark no es confiable |
 
 Suite: `uv run --project evaluator --locked pytest -c evaluator/pyproject.toml evaluator/tests -q`
 → 288 passed, 1 skipped. Lint: `ruff check evaluator/src evaluator/tests`.
@@ -28,17 +33,30 @@ lado del agente. Repararlo requiere tocar `backend/`, fuera de este paquete.
 
 ## F-C — comparación de alternativas
 
-| Pieza | Estado |
-|---|---|
-| **Espera de readiness**: un candidato lanzado con `start_command` se sondea con `wait_until_listening` (socket TCP, en `runner/experiment.py`, también usado por el adaptador de texto) hasta que acepta la conexión; si no levanta, sus casos salen `invalid_evaluation` con la causa y el resto de las alternativas conserva su evidencia | **Hecho** |
-| **Intercalado**: el candidato varía más rápido, para que un backend que deriva no favorezca al que va último | **Hecho** (`runner/experiment.case_plan`) |
-| **Side-by-side por caso entre candidatos de un mismo run** con marca de desacuerdos y totales | **Hecho** (`report/side_by_side.py`, `cli.py compare`) |
-| **Pareo entre runs**: el caso A de un run contra el caso B de otro (hoy `diff` compara el mismo candidato entre dos runs) | Pendiente |
-| **Matriz declarativa**: azúcar para declarar variantes de entorno sin escribir cada candidato a mano | Pendiente |
+Implementado: espera de readiness, intercalado de candidatos, y side-by-side por
+caso entre alternativas (`cli.py compare`, `/api/runs/{id}/compare`).
 
-Criterio de aceptación (cumplido en lo hecho): dos alternativas vivas corren en
-un solo experimento, los primeros casos no se pierden por carrera, y el reporte
-muestra cada caso con sus resultados en columnas contiguas.
+Pendiente:
+
+- **Pareo entre corridas**: comparar el candidato A de una corrida contra el
+  candidato B de otra (hoy `diff` compara el mismo candidato entre dos corridas).
+- **Matriz declarativa** de variantes de entorno, para no escribir a mano un
+  candidato por configuración.
+
+## Consola de developer
+
+Implementado: API read-only sobre las corridas, chat en vivo contra el agente, y
+una consola estática servida por el propio evaluador (`cli.py dev`). El detalle y
+el contrato de endpoints están en `README.md`.
+
+Pendiente:
+
+- **Micrófono**: el chat es tipeado; el navegador tendría que subir µ-law al
+  servidor y hoy no hay ruta para eso.
+- **Lanzar corridas**: descartado en v1 a propósito. Si se agrega, tiene que ser
+  sobre una lista blanca de configuraciones, nunca un comando arbitrario.
+- **Métricas de audio y coste**: se muestran `n/d` porque el runner no las
+  registra en todos los caminos; completarlas es trabajo del runner, no de la UI.
 
 ## Métricas de ejecución
 

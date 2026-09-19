@@ -480,6 +480,52 @@ Lo que el evaluador necesita del agente (ver plan, §6):
 - `call_id` = `start.callSid` exacto; ventana de submission 30 s tras el
   cierre del socket.
 
+## Consola de developer
+
+El front-desk y el developer son usuarios distintos: la consola de developer es
+para quien prueba el agente, mira métricas y compara alternativas, y vive dentro
+de este paquete. No tiene build, ni npm, ni CDN: el propio evaluador sirve el
+HTML, el JS y el CSS.
+
+```sh
+uv run --project evaluator python -m evaluator.cli dev --port 8099
+# → http://127.0.0.1:8099/          consola
+# → http://127.0.0.1:8099/api/docs  API documentada
+```
+
+Opciones: `--results` (dónde lee las corridas, por defecto
+`evaluator/experiments/results`) y `--web` (la carpeta de la consola).
+
+La API es **read-only sobre las corridas**: lee lo que una corrida ya escribió y
+no lanza corridas, no edita escenarios y no escribe en un directorio de
+resultados. Un identificador de corrida es un nombre de carpeta, nunca una ruta,
+y un archivo de evidencia tiene que resolver dentro de su corrida.
+
+| Endpoint | Devuelve |
+|---|---|
+| `GET /api/runs` | lista de corridas con conteos y si tienen informe |
+| `GET /api/runs/{id}` | manifest + métricas agregadas + resumen side-by-side |
+| `GET /api/runs/{id}/cases` | los casos completos |
+| `GET /api/runs/{id}/compare` | side-by-side por caso, con desacuerdos marcados |
+| `GET /api/diff?a=&b=` | resumen del diff entre dos corridas |
+| `GET /api/runs/{id}/report` | el `report.html` de esa corrida |
+| `GET /api/runs/{id}/evidence/{stream}?case_id=` | el WAV de audio de un caso |
+| `POST /api/chat` | abre una llamada real contra el agente |
+| `POST /api/chat/{sid}/say` | dice un turno y devuelve el audio del agente |
+| `POST /api/chat/{sid}/close` | cierra, lee submissions y diagnostica |
+
+La pestaña de chat usa el mismo `CallSession`, la misma clínica local y el mismo
+receptor que las corridas automáticas: lo que se ve ahí es lo que un experimento
+mediría. Al cerrar muestra frames por dirección, segundos de voz del caller,
+caracteres de transcript que el agente registró, submissions aceptadas y
+rechazadas, y —con `--agent-audit-dir`— el diagnóstico de si el agente escuchó
+al caller. Sin ruta de auditoría el diagnóstico dice `unavailable`, nunca culpa
+al modelo.
+
+Límites: la API no lanza corridas ni acepta comandos; el micrófono queda para
+una segunda iteración (el chat es tipeado, con TTS local en el servidor), y
+`OPS_TOKEN` no aplica acá porque la consola se ata a `127.0.0.1`.
+
 ## Estado y límites conocidos
 
 - 21 escenarios versionados cubriendo las 18 familias del reto (incluidas
