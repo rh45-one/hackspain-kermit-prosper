@@ -1,0 +1,20 @@
+# Switchboard (problema 2): N llamadas simultáneas con escenarios
+# distintos por sesión. Diagnóstico de contaminación de estado - un
+# candidato que mezcle call_ids producirá record_mismatch en varias a la vez.
+# Primero corre el set normal en serie, luego la fase concurrente.
+name: switchboard-smoke
+rules_version: "scoring-2.0-draft"
+reference_now: "2026-09-18T10:00:00+02:00"
+clinic_dataset: ../data/clinic_dataset.json
+clinic_port: 18090
+submit_key: pk-local-eval
+repetitions: 1
+switchboard:
+  concurrency: 5
+candidates:
+  - name: double-correct
+    kind: double
+    port: 18770
+    mode: correct
+scenarios:
+  - ../scenarios/**/*.yaml

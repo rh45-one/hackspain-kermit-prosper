@@ -1,0 +1,56 @@
+id: sb-003
+problem_id: simple_booking
+version: 1
+split: development
+language: es
+description: >
+  Identidad ambigua: hay dos "Marta Ruiz Gómez" en el directorio. La
+  llamada viene del 600 111 222 y el DNI es 87654321-X → la paciente es
+  P00043 (ASISA, nunca ha venido → first_visit). Reservar para P00042 es
+  el fallo típico (identity_error).
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_nuevo
+  from_number: "+34600111222"
+  opening: "Hola, soy Marta Ruiz Gómez, DNI 87654321-X. Quiero pedir cita de medicina general, lo antes posible."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00043
+    national_id: "87654321X"
+    date_of_birth: "1992-07-02"
+    insurer: asisa
+    wants: "cita de medicina general lo antes posible"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez, DNI 87654321-X. Quiero pedir cita de medicina general, lo antes posible."
+    hold_ms: 4000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00043
+          provider_id: PR05
+          location_id: sur
+          appointment_type_id: first_visit
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: asisa
+    - actions:
+        - action: BOOK
+          patient_id: P00043
+          provider_id: PR01
+          location_id: centro
+          appointment_type_id: first_visit
+          slot: "2026-09-21T09:45:00+02:00"
+          policy_id: asisa
+  forbidden_actions: [CANCEL, RESCHEDULE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  P00043 nunca ha venido → first_visit (30 min). El hueco más temprano es
+  PR05 en Sur a las 09:00; PR01 en Centro no puede hasta las 09:45 porque
+  los booked_slots tapan 09:00-09:45. Ambas reservas son alternativas
+  válidas; lo que no perdona el caso es el patient_id.

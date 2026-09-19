@@ -1,0 +1,46 @@
+id: lang-001
+problem_id: languages
+version: 1
+split: development
+language: ca
+description: >
+  Catalán: la paciente habla en catalán toda la llamada. La Dra. Sáez
+  (PR01) tiene catalán declarado - la reserva debe salir igual que en
+  español, sin pedir que cambie de idioma.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Bon dia, sóc la Marta Ruiz Gómez, DNI 12345678-Z. Voldria la primera visita que tinguin de medicina general."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    insurer: sanitas
+    wants: "la primera visita disponible de medicina general"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Bon dia, sóc la Marta Ruiz Gómez, DNI 12345678-Z. Voldria la primera visita que tinguin de medicina general."
+    hold_ms: 4000
+  - text: "Em és igual el metge. Gràcies."
+    hold_ms: 2000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: centro
+          appointment_type_id: review
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL, RESCHEDULE, ESCALATE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  Mismo resultado esperado que sb-001: el idioma de la conversación no
+  cambia la acción correcta. PR01 declara catalán en su ficha.

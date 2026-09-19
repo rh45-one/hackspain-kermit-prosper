@@ -1,0 +1,51 @@
+id: tp-001
+problem_id: third_party
+version: 2
+split: development
+language: es
+description: >
+  Tercero: una madre llama por su hijo. Mover la cita de Pablo (P00047),
+  no la suya propia - reservar para el caller es el modo de fallo típico.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: familiar
+  from_number: "+34612345678"   # teléfono de la madre, figura en la ficha del hijo
+  opening: >
+    Hola, soy Marta Ruiz, llamo por mi hijo Pablo Ruiz Gómez. Tiene cita
+    con la pediatra el viernes que viene pero no podemos ir; ¿podéis
+    pasarla al lunes a primera hora?
+  facts:
+    name: "Marta Ruiz"
+    patient_name: "Pablo Ruiz Gómez"
+    patient_id: P00047
+    wants: "pasar la cita del viernes de mi hijo al lunes a primera hora"
+    appointment: "la cita de pediatría de mi hijo Pablo del viernes 25"
+    prefer: "el lunes a primera hora"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: >
+      Hola, soy Marta Ruiz, llamo por mi hijo Pablo Ruiz Gómez. Tiene cita
+      con la pediatra el viernes que viene pero no podemos ir; ¿podéis
+      pasarla al lunes a primera hora?
+    hold_ms: 4000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: RESCHEDULE
+          appointment_id: A00102
+          provider_id: PR04
+          location_id: norte
+          slot: "2026-09-21T09:30:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  A00102: paediatric_review de P00047 con PR04 en Norte el 25/09. Pedir
+  "lunes a primera hora" desde el viernes 18 → lunes 21, primer hueco de
+  PR04 (Norte, desde 09:30). La llamada viene del 612345678: ese número
+  pertenece a la madre Y está en la ficha del hijo.

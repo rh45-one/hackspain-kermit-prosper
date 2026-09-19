@@ -1,0 +1,39 @@
+id: cc-001
+problem_id: change_and_cancel
+version: 2
+split: development
+language: es
+description: >
+  Cancelación simple: la paciente cancela su cita del 24 de septiembre.
+  El appointment_id solo sale de GET /patients/{id}/appointments.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Hola, soy Marta Ruiz Gómez. Necesito cancelar la cita que tengo el día 24 con la doctora Sáez."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    insurer: sanitas
+    wants: "cancelar la cita del día 24 con la doctora Sáez"
+    appointment: "la cita del 24 de septiembre con la doctora Sáez"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_rescheduling: false
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Necesito cancelar la cita que tengo el día 24 con la doctora Sáez."
+    hold_ms: 4000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: CANCEL
+          appointment_id: A00101
+  forbidden_actions: [BOOK, RESCHEDULE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  A00101 es la única cita upcoming de P00042 (review con PR01 en Centro el
+  24/09 a las 16:30). Cancelar A00009 falla: es pasada.

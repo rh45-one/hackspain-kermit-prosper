@@ -1,0 +1,45 @@
+id: q-001
+problem_id: questions
+version: 1
+split: development
+language: es
+description: >
+  Pregunta factual que habilita la reserva: la paciente pregunta si se
+  atiende a ASISA y pide traumatología. La respuesta correcta permite
+  reservar - responder mal o reservar a otra aseguradora falla.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_nuevo
+  from_number: "+34600111222"
+  opening: "Hola, soy Marta Ruiz Gómez. ¿Atendéis a pacientes de ASISA? Es que quería cita de traumatología."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00043
+    national_id: "87654321X"
+    insurer: asisa
+    wants: "cita de traumatología, soy de ASISA"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. ¿Atendéis a pacientes de ASISA? Es que quería cita de traumatología."
+    hold_ms: 4000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00043
+          provider_id: PR07
+          location_id: norte
+          appointment_type_id: ortho_review
+          slot: "2026-09-21T10:15:00+02:00"
+          policy_id: asisa
+  forbidden_actions: [NO_ACTION]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  ASISA cubre traumatología y la sede Norte; PR07 es el único traumatólogo
+  (10:00-14:00). El 21 a las 10:00 está ocupado → 10:15. Responder que no
+  se atiende ASISA (y NO_ACTION) o facturar a otra póliza son fallos.

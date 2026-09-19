@@ -1,0 +1,58 @@
+id: sw-001
+problem_id: switchboard
+version: 1
+split: development
+language: es
+description: >
+  Switchboard (problema 2, diagnóstico, 0 puntos): reserva simple que se
+  lanza junto a otras N llamadas simultáneas. El fallo típico es
+  contaminación de estado - que esta llamada reserve para el paciente de
+  otra sesión.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34699887766"
+  opening: "Hola, soy Carmen Díaz Ferrer, DNI 34567890-V. Querría la primera cita en medicina general, por favor."
+  facts:
+    name: "Carmen Díaz Ferrer"
+    patient_id: P00045
+    national_id: "34567890V"
+    insurer: asisa
+    has_visited_before: true
+    wants: "la primera cita disponible en medicina general"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Hola, soy Carmen Díaz Ferrer, DNI 34567890-V. Querría la primera cita en medicina general, por favor."
+    hold_ms: 4000
+  - text: "Lo que tengan antes. Gracias."
+    hold_ms: 2000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00045
+          provider_id: PR01
+          location_id: centro
+          appointment_type_id: review
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: asisa
+    - actions:
+        - action: BOOK
+          patient_id: P00045
+          provider_id: PR05
+          location_id: sur
+          appointment_type_id: review
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: asisa
+  forbidden_actions: [CANCEL, RESCHEDULE, ESCALATE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  P00045 (Carmen Díaz, Asisa, ya ha venido → review). PR01 y PR05 aceptan
+  Asisa en general; ambas reservas del primer hueco del lunes 21 son
+  válidas. Cada llamada del pool switchboard usa un call_id distinto - si
+  el agente mezcla sesiones, el oráculo lo detecta como record_mismatch.
