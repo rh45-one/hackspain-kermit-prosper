@@ -15,7 +15,11 @@ from typing import ClassVar
 
 import pytest
 from pipecat.clocks.system_clock import SystemClock
-from pipecat.frames.frames import InputAudioRawFrame, InterruptionFrame, TTSAudioRawFrame
+from pipecat.frames.frames import (
+    InputAudioRawFrame,
+    InterruptionFrame,
+    TTSAudioRawFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
 from pipecat.utils.asyncio.task_manager import TaskManager
 
@@ -303,6 +307,67 @@ def test_factory_pins_model_modality_prompt_and_tools(monkeypatch):
     assert not hasattr(settings, "thinking") or settings.thinking is None
     assert kwargs["system_instruction"] == prompts.SYSTEM_PROMPT
     assert kwargs["tools"] == toolbox.tools()  # registry-validated ToolBox
+
+
+def test_factory_hands_the_turns_to_local_vad(monkeypatch):
+    """Server VAD off, because its endpointing is too slow for this clock.
+
+    Gemini takes ~5 s of silence to close a caller turn. Local VAD closes one
+    in under a second, and over the ~24 exchanges these calls run that is the
+    difference between finishing inside the three-minute cap and being cut off
+    — 15 of 20 calls died on that cap.
+
+    This was tried and reverted once, when a call lost the caller's "Hello.":
+    with server VAD off, pipecat forwards audio only while _user_is_speaking
+    (llm.py:1746), so a missed onset buries the turn. The risk is now measured
+    instead of feared — Silero detects this telephony path at full volume, at
+    -12 dB and at -22 dB, for a long sentence and for a bare "Hello." — and
+    the matching analyzer lives in agent.voice.pipeline. The two halves are
+    one decision; neither is safe alone.
+    """
+    import agent.voice.gemini_live as gl
+
+    if gl.GeminiVADParams is None:  # pragma: no cover - needs google-genai
+        pytest.skip("google-genai absent; GeminiVADParams unavailable")
+
+    monkeypatch.setattr(gl, "gemini_live_available", lambda: True)
+    FakeGeminiService.instances = []
+
+    service = create_gemini_live_service(
+        _SettingsStub(), _ToolboxStub(), service_cls=FakeGeminiService
+    )
+
+    vad = service.kwargs["settings"].vad
+    assert vad is not None, "VAD must be configured explicitly, not left at the default"
+    assert vad.disabled is True
+
+
+def test_factory_pins_the_spoken_language_to_spanish(monkeypatch):
+    """Regression: a Spanish caller answered in English after one turn.
+
+    pipecat leaves ``speech_config.language_code`` at ``en-US``. On a live
+    call the agent greeted in Spanish and then switched to English for the
+    rest of the conversation, mishearing the caller's constraints with it.
+    The clinic is in Madrid, so the wire default is Spanish; the system
+    prompt still governs following a caller into another language.
+    """
+    import agent.voice.gemini_live as gl
+
+    monkeypatch.setattr(gl, "gemini_live_available", lambda: True)
+    FakeGeminiService.instances = []
+
+    service = create_gemini_live_service(
+        _SettingsStub(), _ToolboxStub(), service_cls=FakeGeminiService
+    )
+    assert service.kwargs["settings"].language == "es-ES"
+
+    # Overridable per deployment, for the multilingual problems.
+    configured = _SettingsStub()
+    configured.gemini_language = "ca-ES"
+    service = create_gemini_live_service(
+        configured, _ToolboxStub(), service_cls=FakeGeminiService
+    )
+    assert service.kwargs["settings"].language == "ca-ES"
 
 
 def test_factory_creates_one_instance_per_socket(monkeypatch):

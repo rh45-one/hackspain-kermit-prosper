@@ -42,6 +42,68 @@ _LANGUAGE_CODES = {
 }
 
 
+# Spoken Spanish for each specialty, keyed by the catalogue's own id. The
+# Prosper catalogue names specialties in English ("General Practice",
+# "Dermatology") while every caller says "el médico de cabecera" or "el
+# dermatólogo", so a perfectly ordinary Spanish ask reached find_availability
+# as an unknown specialty and the agent stalled asking the caller to name it
+# again. Only distinctive terms are listed: _lookup resolves a whole phrase
+# through any single one of them, so indexing an ambiguous word ("médico",
+# "doctor") would poison every phrase that contains it.
+_SPECIALTY_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "general_practice": (
+        "medicina general",
+        "medico de cabecera",
+        "medica de cabecera",
+        "medico de familia",
+        "medicina de familia",
+        "atencion primaria",
+        "cabecera",
+        "generalista",
+        "familia",
+        "primaria",
+    ),
+    "paediatrics": ("pediatria", "pediatra", "pediatrico", "pediatrica"),
+    "dermatology": ("dermatologia", "dermatologo", "dermatologa"),
+    "orthopaedics": (
+        "traumatologia",
+        "traumatologo",
+        "traumatologa",
+        "ortopedia",
+        "ortopeda",
+    ),
+    "gynaecology": ("ginecologia", "ginecologo", "ginecologa", "matrona"),
+    "physiotherapy": ("fisioterapia", "fisioterapeuta", "fisio", "rehabilitacion"),
+}
+
+# The catalogue's own specialty id, mapped onto the key above. Spellings vary
+# between the live catalogue and the offline fixtures ("general_practice" vs
+# "general"), and British and American forms both appear in the wild, so the
+# synonyms attach by meaning rather than by exact id.
+_SPECIALTY_ID_CANONICAL = {
+    "general_practice": "general_practice",
+    "general": "general_practice",
+    "family_medicine": "general_practice",
+    "primary_care": "general_practice",
+    "paediatrics": "paediatrics",
+    "pediatrics": "paediatrics",
+    "dermatology": "dermatology",
+    "orthopaedics": "orthopaedics",
+    "orthopedics": "orthopaedics",
+    "traumatology": "orthopaedics",
+    "gynaecology": "gynaecology",
+    "gynecology": "gynaecology",
+    "physiotherapy": "physiotherapy",
+    "physical_therapy": "physiotherapy",
+}
+
+
+def _specialty_synonyms(specialty_id: str) -> tuple[str, ...]:
+    """Spoken Spanish for a catalogue specialty id, empty when unrecognised."""
+    canonical = _SPECIALTY_ID_CANONICAL.get(_fold(specialty_id))
+    return _SPECIALTY_SYNONYMS.get(canonical or "", ())
+
+
 def _fold(text: str) -> str:
     """Accent- and case-insensitive key ('Sáez' -> 'saez'), the scorer's own rule."""
     decomposed = unicodedata.normalize("NFKD", text)
@@ -60,6 +122,33 @@ def _index_names(target: dict[str, Any], name: str, item: Any) -> None:
     for token in _fold(name).replace(".", " ").split():
         if len(token) >= 3:
             target.setdefault(token, item)
+
+
+def _one_edit_apart(a: str, b: str) -> bool:
+    """True when two folded tokens differ by a single insert, delete or swap.
+
+    This is how a spoken surname goes wrong: Sáez heard as Sáenz, Iglesia as
+    Iglesias. Cheap because it never builds a matrix — the tokens differ by at
+    most one character or the answer is no.
+    """
+    if a == b:
+        return False
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    short, long = (a, b) if len(a) < len(b) else (b, a)
+    i = j = 0
+    skipped = False
+    while i < len(short) and j < len(long):
+        if short[i] == long[j]:
+            i += 1
+        elif skipped:
+            return False
+        else:
+            skipped = True
+        j += 1
+    return True
 
 
 def _language_keys(name: str) -> set[str]:
@@ -105,6 +194,11 @@ class CatalogueCache:
         for specialty in catalogue.specialties:
             specialties_by_id[specialty.id] = specialty
             _index_names(specialties_by_name, specialty.name, specialty)
+            # The id itself, so a model that passes "general_practice" through
+            # instead of a spoken name resolves too.
+            specialties_by_name.setdefault(_fold(specialty.id), specialty)
+            for synonym in _specialty_synonyms(specialty.id):
+                _index_names(specialties_by_name, synonym, specialty)
         types_by_id: dict[str, ClinicAppointmentType] = {}
         types_by_name: dict[str, ClinicAppointmentType] = {}
         for appt_type in catalogue.appointment_types:
@@ -197,6 +291,26 @@ class CatalogueCache:
 
     def plan_by_id(self, plan_id: str) -> ClinicPlan | None:
         return self.plans_by_id.get(plan_id)
+
+    def providers_sounding_like(self, name: str) -> list[ClinicProvider]:
+        """Providers whose surname is one edit from a token of ``name``.
+
+        A spoken surname is the least reliable thing on a phone call, and this
+        clinic has two pairs that differ by one letter and sit in different
+        specialties — Sáez/Sáenz, Iglesia/Iglesias. Resolving one of those
+        confidently is how an agent books the wrong doctor in the wrong field
+        without ever noticing. Derived from the catalogue, so a pair added
+        tomorrow is caught too; nothing here names anybody.
+        """
+        tokens = [t for t in _fold(name).replace(".", " ").split() if len(t) >= 4]
+        if not tokens:
+            return []
+        found: dict[str, ClinicProvider] = {}
+        for provider in self.providers_by_id.values():
+            surnames = [t for t in _fold(provider.name).replace(".", " ").split() if len(t) >= 4]
+            if any(_one_edit_apart(t, s) for t in tokens for s in surnames):
+                found[provider.id] = provider
+        return sorted(found.values(), key=lambda p: p.id)
 
     # ---- derived views ----------------------------------------------------
     def providers_for_specialty(self, specialty_id: str) -> list[ClinicProvider]:

@@ -83,3 +83,23 @@ def test_greeting_never_contains_the_caller_number():
 
     assert "612345678" not in message
     assert "+34612345678" not in message
+
+
+def test_noise_suppression_is_off_unless_asked_for():
+    """Ten concurrent calls cannot afford it, so it never turns itself on.
+
+    RNNoise measures 2.48 ms per 20 ms frame on this path. One call absorbs
+    that; ten on one event loop would ask for 1240 ms of CPU per second of
+    audio, and a loop that falls behind is the failure this whole path
+    exists to avoid. It is a deployment decision, never a default.
+    """
+    from agent.voice.pipeline import _noise_filter
+
+    class _Off:
+        pass
+
+    class _On:
+        noise_suppression = True
+
+    assert _noise_filter(_Off()) is None
+    assert _noise_filter(_On()) is not None  # available when explicitly asked for

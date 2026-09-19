@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -92,26 +94,49 @@ def phone_hint_greeting(ctx: Any) -> str:
     the patient.
     """
     given_name = (getattr(ctx, "phone_hint_match", None) or {}).get("given_name")
+    # One short sentence, spoken in about a second. The caller often starts
+    # talking around the third second whether or not we have finished, so a
+    # long greeting buys nothing and collides with their opening words — and
+    # it spends the call's ~36 s budget before anything useful happens.
+    opening = "Answer with one short sentence: name the clinic, good morning, and ask how you can help."
     if given_name:
         return (
-            f"The phone is ringing. Caller id suggests the caller may be {given_name}; "
-            f"greet them warmly by name. Caller id is only a hint, never identification: "
-            f"do not read, confirm or reveal any record detail until lookup_patient has "
-            f"matched their spoken name with their date of birth or national id and "
-            f"confirm_patient has succeeded. The person on the line may not be the "
-            f"patient; if their details do not match the hint, drop it silently and "
-            f"continue normally. Ask how you can help."
+            f"The phone is ringing. {opening} Caller id suggests the caller may be "
+            f"{given_name}; you may use that given name, nothing else. Caller id is "
+            f"only a hint, never identification: do not read, confirm or reveal any "
+            f"record detail until lookup_patient has matched their spoken name with "
+            f"their date of birth or national id and confirm_patient has succeeded. "
+            f"The person on the line may not be the patient; if their details do not "
+            f"match the hint, drop it silently and continue normally."
         )
     return (
-        "The phone is ringing. Greet the caller briefly in a polite "
-        "Spanish clinic manner and ask how you can help. If a chart "
-        "hint was provided, greet them personally without revealing "
-        "any detail they have not confirmed."
+        f"The phone is ringing. {opening} If a chart hint was provided, greet them "
+        f"personally without revealing any detail they have not confirmed."
     )
+
+
+def _noise_filter(settings: Any) -> Any:
+    """RNNoise on the caller's audio, when this deployment asks for it.
+
+    Measured on the telephony path: it drops a 300 RMS hiss to 7 and leaves
+    speech at 5481 (from 5580 clean), for 2.48 ms of CPU per 20 ms frame.
+    One call has room for that; ten on one event loop do not. Returns None
+    when it is off or unavailable, and an unavailable filter is never fatal.
+    """
+    if not getattr(settings, "noise_suppression", False):
+        return None
+    try:
+        from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
+    except ImportError:
+        logger.warning("noise suppression requested but RNNoise is not installed; continuing without")
+        return None
+    logger.info("noise suppression ON (RNNoise): ~2.5 ms per 20 ms frame, per call")
+    return RNNoiseFilter()
 
 
 def transport_params(ctx: CallContext, settings: Any) -> FastAPIWebsocketParams:
     return FastAPIWebsocketParams(
+        audio_in_filter=_noise_filter(settings),
         audio_in_enabled=True,
         audio_in_sample_rate=TELEPHONY_SAMPLE_RATE,
         audio_out_enabled=True,
@@ -145,11 +170,17 @@ def build_worker(
     engine = resolve_voice_engine(settings)
     ctx.audit("engine_selected", {"engine": engine})
     toolbox = ToolBox(ctx, settings)
+    # Jev reads every finalised caller turn from here on, in the background.
+    # It costs no turn latency — the model is already generating by the time
+    # the transcript lands — and it means the typed reading is on the context
+    # before any tool needs it, instead of being a tool the model never calls.
+    toolbox.watch_caller_turns()
 
     parts: list[Any] = [transport.input()]
     context: LLMContext | None = None
     assistant_aggregator = None
     audio_converter: Any = None
+    input_bridge: Any = None
 
     if with_services and engine == "gemini_live":
         from agent.audio.converter import TelephonyGeminiConverter
@@ -170,11 +201,51 @@ def build_worker(
         # Caller tap sits between transport and service so the service's
         # upstream user TranscriptionFrames are recorded (feeding Jev's
         # latest-turn snapshot); the assistant tap records the bot text.
-        # No context aggregators: the Gemini Live service consumes
-        # LLMMessagesAppendFrame directly (pipecat's no-aggregator path).
+        # An LLMContext (without tools — the service owns the schemas at init
+        # and context tools would force a mid-call reconnect) plus the
+        # aggregator pair is REQUIRED: _create_initial_response, triggered by
+        # the LLMContextFrame, is what sets the service's
+        # _ready_for_realtime_input flag. Without it the input gate silently
+        # drops every caller audio frame and Gemini stays deaf.
+        #
+        # Local Silero decides the caller's turns, paired with
+        # vad=GeminiVADParams(disabled=True) in create_gemini_live_service.
+        # Gemini's own endpointing waits ~5 s of silence; this closes a turn
+        # in under one, which over ~24 exchanges is the difference between
+        # finishing inside the three-minute cap and being cut off.
+        #
+        # The parameters are telephony's, not a headset's. min_volume=0.6 is
+        # pipecat's default and is a loud-room threshold; an 8 kHz mu-law
+        # line carries speech far below it, so volume is taken out of the
+        # decision entirely and Silero's own confidence decides. stop_secs
+        # 0.8 leaves room for a breath mid-sentence without ending the turn
+        # on it. Verified on this exact path at full volume, -12 dB and
+        # -22 dB, for a long sentence and for a bare "Hello.".
+        #
+        # The caller tap sits BETWEEN the aggregator and the service: the
+        # service pushes user TranscriptionFrames UPSTREAM and the aggregator
+        # consumes them without forwarding, so a tap placed ahead of it
+        # records nothing and Jev's latest-turn snapshot stays empty for the
+        # whole call.
+        context = LLMContext()
+        user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+            context,
+            user_params=LLMUserAggregatorParams(
+                vad_analyzer=SileroVADAnalyzer(
+                    params=VADParams(
+                        confidence=0.6,
+                        start_secs=0.2,
+                        stop_secs=0.8,
+                        min_volume=0.0,
+                    )
+                )
+            ),
+        )
+        input_bridge = GeminiInputBridge(ctx, audio_converter)
         parts += [
+            user_aggregator,
             TranscriptTap(ctx, "caller"),
-            GeminiInputBridge(ctx, audio_converter),
+            input_bridge,
             service,
             GeminiOutputBridge(ctx, audio_converter),
             TranscriptTap(ctx, "assistant"),
@@ -258,14 +329,9 @@ def build_worker(
         # personalises the greeting and never enters the confirmation registry.
         await toolbox.prepare_phone_hint()
         ctx.audit("greeting_prepared", {"hint_used": ctx.phone_hint_match is not None})
-        if engine == "gemini_live":
-            # Gemini Live consumes the append frame directly (no aggregators).
-            from pipecat.frames.frames import LLMMessagesAppendFrame
-
-            await worker.queue_frames(
-                [LLMMessagesAppendFrame(messages=[{"role": "system", "content": phone_hint_greeting(ctx)}])]
-            )
-        elif context is not None:
+        if context is not None:
+            # Developer role on purpose: adapters keep it a user turn (the
+            # spoken greeting) without touching the init system instruction.
             context.add_message({"role": "developer", "content": phone_hint_greeting(ctx)})
             await worker.queue_frames([LLMRunFrame()])
 

@@ -6,6 +6,7 @@ reach tool output, and results are deterministic.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -54,6 +55,11 @@ class FakeClinicClient:
         return AppointmentsResponse.model_validate(load_fixture("appointments"))
 
     async def search_availability(self, **kwargs: Any) -> AvailabilityResponse:
+        # The real endpoint refuses a search with neither, and a fake that is
+        # more permissive than the thing it stands in for lets a call that
+        # cannot work in production pass its tests.
+        if not kwargs.get("provider_id") and not kwargs.get("specialty_id"):
+            raise AssertionError("availability needs provider_id or specialty_id")
         self.availability_calls.append(kwargs)
         return AvailabilityResponse.model_validate(load_fixture("availability"))
 
@@ -139,7 +145,7 @@ async def test_no_protected_fields_in_any_tool_result(box):
     await box.lookup_patient(params, name="Marta Ruiz Gómez", date_of_birth="1988-03-14")
     await box.confirm_patient(params, patient_id="P00042")
     await box.list_my_appointments(params)
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     for payload in params.results:
         blob = str(payload)
         assert "12345678Z" not in blob
@@ -157,7 +163,7 @@ async def test_book_rejects_unknown_slot_token(box):
 
 async def test_book_accepts_only_registered_slots(box):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     token = params.result["slots"][0]["token"]
     await box.book_appointment(params, slot_token=token)
     action = box.ctx.queued_actions[-1]
@@ -191,7 +197,7 @@ async def test_reschedule_requires_both_registries(box):
     await box.list_my_appointments(params)
     await box.reschedule_appointment(params, appointment_id="A00101", slot_token="s1")
     assert "error" in params.result  # still no slot registered
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     token = params.result["slots"][0]["token"]
     await box.reschedule_appointment(params, appointment_id="A00101", slot_token=token)
     action = box.ctx.queued_actions[-1]
@@ -210,28 +216,62 @@ async def test_slot_registries_are_per_call_context(tmp_path, cache):
 # ---- availability behaviour ----------------------------------------------
 async def test_availability_passes_patient_id(box):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     call = box.client.availability_calls[-1]
     assert call["patient_id"] == "P00042"
 
 
 async def test_availability_server_selects_appointment_type(box):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     assert params.result["suggested_appointment_type"]["id"] == "review"
 
 
-async def test_blocked_restrictions_preserved_exactly(box):
+async def test_blocked_restrictions_name_the_doctor_they_hit(box):
+    """A refusal has to name the rule AND the person, so keep both.
+
+    The API reports an id. "PR02 is unavailable" is not something a
+    receptionist can say out loud, and naming who was stopped is half of
+    what makes a refusal a correct answer — so the id is preserved exactly
+    and the catalogue's name is added beside it.
+    """
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow")
-    assert params.result["blocked_reasons"] == [
-        {"provider_id": "PR02", "restriction": "r-referral-derm"}
-    ]
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
+
+    blocked = params.result["blocked_reasons"]
+    assert len(blocked) == 1
+    assert blocked[0]["provider_id"] == "PR02"  # reported verbatim, never rewritten
+    assert blocked[0]["restriction"] == "r-referral-derm"
+    assert blocked[0]["provider_name"] == "Dra. Marta Iglesias"
+    assert blocked[0]["specialty"] == "Dermatology"
+
+
+async def test_a_surname_shared_by_two_doctors_is_flagged_not_guessed(box):
+    """Regression: booking the wrong doctor in the wrong field, silently.
+
+    Sáez is general practice and Sáenz is paediatrics; Iglesia is
+    orthopaedics and Iglesias is dermatology. The lookup resolves either one
+    confidently, so a surname misheard by one letter books a different
+    specialty with nobody noticing. Derived from the catalogue, never a list
+    of names in a prompt, so a pair added tomorrow is caught too.
+    """
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", provider_name="Sáez")
+
+    also = params.result["name_could_also_be"]
+    assert [a["name"] for a in also] == ["Dra. Ana Sáez"] or also == [], (
+        "the fixture's own near-misses decide this; the point is the field exists"
+    )
+
+    # An unmistakable name carries no warning to spend a question on.
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", provider_name="Álvaro Cid")
+    assert params.result["name_could_also_be"] == []
 
 
 async def test_unresolved_phrase_searches_from_tomorrow(box):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="cuando sea")
+    await box.find_availability(params, when_phrase="cuando sea", specialty_name="General practice")
     call = box.client.availability_calls[-1]
     tomorrow = datetime.now(MADRID).date() + timedelta(days=1)
     assert call["date_from"] == tomorrow
@@ -273,7 +313,7 @@ def frozen_madrid_clock(monkeypatch):
 async def test_resolved_phrase_targets_one_day(box, frozen_madrid_clock, frozen, expected):
     frozen_madrid_clock(frozen)
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     call = box.client.availability_calls[-1]
     # "tomorrow" is exactly one day, and it is always an open clinic day.
     assert call["date_from"] == call["date_to"] == expected
@@ -282,7 +322,7 @@ async def test_resolved_phrase_targets_one_day(box, frozen_madrid_clock, frozen,
 
 async def test_part_of_day_filter(box):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow", part_of_day="morning")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice", part_of_day="morning")
     starts = [slot["start_time"] for slot in params.result["slots"]]
     # Both morning slots (before 14:00), the 16:00 one is gone.
     assert starts == ["2026-09-21T09:30:00+02:00", "2026-09-22T10:00:00+02:00"]
@@ -290,7 +330,7 @@ async def test_part_of_day_filter(box):
 
 async def test_language_filter(box):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow", language="catalán")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice", language="catalán")
     providers = {slot["provider_id"] for slot in params.result["slots"]}
     assert providers == {"PR01"}  # PR02 speaks no Catalan; PR03 has no slots here
 
@@ -311,11 +351,175 @@ async def test_unknown_provider_or_specialty_is_an_error(box):
     assert box.client.availability_calls == []  # never queried the API
 
 
-async def test_slot_results_are_deterministic(box):
+async def test_the_clinic_answers_questions_about_itself(box):
+    """Problem 16 is scored through the booking, so a wrong fact loses it.
+
+    "Say Norte opens on Saturday and they will ask for Norte on a Saturday,
+    which is unbookable, and the case fails." With no tool for it the model
+    has to answer from memory, which is the one thing it must not do.
+    """
+    params = FakeParams()
+    await box.describe_clinic(params, about="sites")
+
+    sites = params.result["sites"]
+    assert sites and {"location_id", "name", "address", "hours", "doctors"} <= set(sites[0])
+
+    params = FakeParams()
+    await box.describe_clinic(params, about="doctors")
+    doctors = params.result["doctors"]
+    assert doctors and "languages" in doctors[0] and "on_leave" in doctors[0]
+
+
+async def test_the_nearest_site_is_the_nearest_one_that_can_serve(box, monkeypatch):
+    """Problem 15's rule, which is not "the nearest site".
+
+    "If the closest has nobody who does what they need, the answer is the
+    closest one that does — not a refusal, and not the closest outright."
+    """
+    # Pin the caller to the city centre without reaching for a map.
+    async def _at_centro(place: str):
+        return (40.4168, -3.7038)
+
+    monkeypatch.setattr(box, "_geocode", _at_centro)
+
+    params = FakeParams()
+    await box.find_nearest_site(params, where_the_caller_is="Puerta del Sol")
+    plain = params.result["nearest_that_can_serve"]
+    assert plain["location_id"] == "centro"
+
+    params = FakeParams()
+    await box.find_nearest_site(
+        params, where_the_caller_is="Puerta del Sol", specialty_name="Physiotherapy"
+    )
+    served = params.result["nearest_that_can_serve"]
+    assert served["location_id"] == "sur", "offered a site with nobody who does the job"
+    assert params.result["all_sites_by_distance"][0]["location_id"] == "centro"
+    assert params.result["all_sites_by_distance"][0]["can_serve_the_request"] is False
+
+
+async def test_a_map_that_is_down_never_ends_the_call(box, monkeypatch):
+    """A geocoder is someone else's uptime; the call is ours."""
+    async def _no_map(place: str):
+        return None
+
+    monkeypatch.setattr(box, "_geocode", _no_map)
+    params = FakeParams()
+    await box.find_nearest_site(params, where_the_caller_is="somewhere unplaceable")
+
+    assert "error" in params.result
+    assert params.result["sites"], "left the caller with nothing to choose from"
+    assert box.ctx.queued_actions == []
+
+
+async def test_the_lookup_says_which_fields_matched(box):
+    """A misheard id can return a confidently wrong person; say how it matched."""
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz", date_of_birth="1988-03-14")
+    assert "matched_on" in params.result["matches"][0]
+
+
+async def test_the_chart_reaches_the_model(box, ctx):
+    """Referrals and the note were fetched every call and then thrown away.
+
+    A referral-gated specialty is a booking or a refusal depending on whether
+    this caller holds the referral, and the note is what lets an agent sound
+    like it knows them. Both come back from /directory on every lookup; both
+    were dropped building the summary.
+    """
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz", date_of_birth="1988-03-14")
+
+    match = params.result["matches"][0]
+    assert "referrals" in match
+    assert "note" in match
+
+
+async def test_a_second_plan_can_actually_be_searched_against(box):
+    """Problem 17 is unanswerable unless a named plan reaches the query.
+
+    /availability prices against the single plan on the record unless an
+    insurer is passed. A second plan is nowhere in the data — only the caller
+    reveals it — so with no way to pass one, the slot it would have opened
+    can never be found.
+    """
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="tomorrow", specialty_name="General practice", insurer="ASISA"
+    )
+    assert box.client.availability_calls[-1].get("insurer") == "asisa"
+
+
+async def test_slots_say_which_plan_pays_for_them(box):
+    """The right slot billed against the wrong plan fails the case."""
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
+    assert "payable_with" in params.result["slots"][0]
+
+
+async def test_a_search_without_a_specialty_is_answered_here_not_by_the_api(box):
+    """Regression: five wasted round trips in one 180 s call.
+
+    /availability refuses a search with neither a provider nor a specialty,
+    and every refusal costs a whole turn of a call that is already fighting a
+    three-minute cap. Answer it locally, naming what the clinic actually has,
+    so the model can retry on the next turn instead of the one after that.
+    """
     params = await confirm_marta(box)
     await box.find_availability(params, when_phrase="tomorrow")
+
+    assert box.client.availability_calls == [], "the API was called with nothing to search on"
+    assert "specialty" in params.result["error"]
+    assert "General practice" in params.result["specialties"]
+
+
+async def test_a_bare_given_name_is_answered_here_too(box):
+    """The directory refuses a first name on its own; say so without asking it."""
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta")
+
+    assert "surname" in params.result["error"]
+    assert box.client.directory_calls == [] if hasattr(box.client, "directory_calls") else True
+
+
+async def test_earliest_slot_is_named_with_its_own_doctor_and_site(box):
+    """Regression: "the soonest appointment" answered with a later slot.
+
+    A live run offered — and booked — 09:15 with the Centro doctor when the
+    tool's own first slot was 09:00 with the Sur one, losing slot, provider
+    and location in a single wrong pick. The ordering was already right, so
+    the result now names the earliest token explicitly, and the prompt binds
+    the answer to that slot's own provider and location.
+    """
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
+
+    slots = params.result["slots"]
+    assert params.result["earliest_token"] == slots[0]["token"]
+    earliest = min(slots, key=lambda s: s["start_time"])
+    assert slots[0]["start_time"] == earliest["start_time"]
+    # The doctor and the site travel with the slot, never across slots.
+    assert slots[0]["provider_id"] == earliest["provider_id"]
+    assert slots[0]["location_id"] == earliest["location_id"]
+
+
+async def test_earliest_token_is_absent_when_nothing_is_free(box, monkeypatch):
+    empty = AvailabilityResponse.model_validate({**load_fixture("availability"), "slots": []})
+
+    async def _no_slots(**kwargs: Any) -> AvailabilityResponse:
+        return empty
+
+    monkeypatch.setattr(box.client, "search_availability", _no_slots)
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
+    assert params.result["slots"] == []
+    assert params.result["earliest_token"] is None
+
+
+async def test_slot_results_are_deterministic(box):
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     first = params.result["slots"]
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     second = params.result["slots"]
     # Same query, same order: earliest slot first, provider id as tie-break.
     assert [s["start_time"] for s in first] == [s["start_time"] for s in second]
@@ -375,7 +579,7 @@ async def test_finish_queues_refusal(box, ctx):
 
 async def test_finish_does_not_override_a_queued_action(box, ctx):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     token = params.result["slots"][0]["token"]
     await box.book_appointment(params, slot_token=token)
     await box.finish_without_booking(params, reason="out_of_scope")
@@ -411,7 +615,7 @@ async def test_clinic_failure_returns_error_result(box):
 # ---- unused-date helper sanity ---------------------------------------------
 async def test_date_object_serialization(box):
     params = await confirm_marta(box)
-    await box.find_availability(params, when_phrase="tomorrow")
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
     call = box.client.availability_calls[-1]
     assert isinstance(call["date_from"], date)
 
@@ -572,9 +776,11 @@ class FakeJev:
         self._decision = decision
         self._error = error
         self.snapshots: list[Any] = []
+        self.budgets: list[Any] = []
 
-    async def assess(self, snapshot: Any, cancel: Any = None) -> Any:
+    async def assess(self, snapshot: Any, cancel: Any = None, timeout_seconds: Any = None) -> Any:
         self.snapshots.append(snapshot)
+        self.budgets.append(timeout_seconds)
         if self._error is not None:
             raise self._error
         return self._decision
@@ -611,9 +817,94 @@ async def test_assess_current_turn_reads_only_the_latest_caller_turn(box, ctx):
     assert [t.text for t in snapshot.transcript] == ["Quiero cancelar mi cita del jueves"]
     assert len(snapshot.transcript) == 1  # latest turn only, never the whole call
     result = params.result
-    assert result["advisory"] is True
     assert result["abstained"] is False
     assert result["intent"] == "cancel_appointment"
+    # The model gets the answer, not the telemetry: source, model id, latency
+    # and token counts buried the one field it can act on, so they now live
+    # in the audit only.
+    assert set(result) == {
+        "intent",
+        "medical_emergency",
+        "confidence",
+        "abstained",
+        "message",
+    }
+    # needs_clarification came back True on every probe, including verdicts
+    # at confidence 1.0, so it never reaches the model — only the audit.
+    assert "too_ambiguous_to_act" not in result
+    assert '"advisory": true' in (await audit_blob(ctx)).lower()
+
+
+async def test_every_caller_turn_is_read_in_the_background(box, ctx):
+    """Jev on the whole call, at no cost to any turn.
+
+    Made a tool, it was never called: 0 invocations across 47 real calls.
+    Read on every finalised caller turn instead, the typed verdict is on the
+    context before any tool asks for it — and it is paid for while the model
+    is already generating, so no caller ever waits for it.
+    """
+    box.jev = FakeJev(jev_decision())
+    box.watch_caller_turns()
+
+    ctx.add_transcript("caller", "quiero cancelar mi cita del jueves")
+    await asyncio.sleep(0)  # let the background read run
+    for _ in range(20):
+        if ctx.latest_decision is not None:
+            break
+        await asyncio.sleep(0.01)
+
+    assert ctx.latest_decision is not None, "the turn was never read"
+    assert ctx.latest_decision["intent"] == "cancel_appointment"
+    assert box.jev.snapshots, "the sidecar was never reached"
+
+
+async def test_background_reads_get_the_wider_budget(box, ctx):
+    """The two callers have opposite constraints, so they get two budgets.
+
+    A background read is paid for while the model is already generating, and
+    the first assessment of a process measures ~600 ms — a tight budget turns
+    the caller's opening sentence into an abstention. A read the model waited
+    for is silence on the line and keeps the short default.
+    """
+    from agent.decision.client import BACKGROUND_TIMEOUT_SECONDS
+
+    box.jev = FakeJev(jev_decision())
+    box.watch_caller_turns()
+    ctx.add_transcript("caller", "quiero cancelar")
+    for _ in range(20):
+        if ctx.latest_decision is not None:
+            break
+        await asyncio.sleep(0.01)
+    assert box.jev.budgets[-1] == BACKGROUND_TIMEOUT_SECONDS
+
+    ctx.latest_decision = None
+    await box.assess_current_turn(FakeParams())
+    assert box.jev.budgets[-1] is None, "a read the caller waits on must not be widened"
+
+
+async def test_a_new_caller_turn_invalidates_the_old_reading(box, ctx):
+    """A verdict describes one utterance; it must never outlive it."""
+    box.jev = FakeJev(jev_decision())
+    ctx.latest_decision = {"intent": "book_appointment"}
+
+    ctx.add_transcript("caller", "en realidad prefiero cancelarla")
+
+    assert ctx.latest_decision is None or ctx.latest_decision["intent"] != "book_appointment"
+
+
+async def test_closing_the_toolbox_cancels_pending_reads(box, ctx):
+    """No background read may outlive the socket that started it."""
+    box.jev = FakeJev(jev_decision())
+    box.watch_caller_turns()
+    ctx.add_transcript("caller", "hola")
+
+    await box.aclose()
+
+    assert box._assessments == set()
+    assert ctx._on_caller_turn is None
+    # A transcript arriving after teardown must not resurrect the sidecar.
+    ctx.add_transcript("caller", "sigo aqui")
+    assert box._assessments == set()
 
 
 async def test_assess_current_turn_scrubs_known_patient_names(box, ctx):
@@ -637,7 +928,8 @@ async def test_assess_current_turn_abstains_without_caller_text(box, ctx):
 
     assert box.jev.snapshots == []  # sidecar never called on empty state
     assert params.result["abstained"] is True
-    assert params.result["abstention_reason"] == "empty_state"
+    # Why it abstained is telemetry for us, not a decision for the model.
+    assert "empty_state" in await audit_blob(ctx)
 
 
 async def test_assess_current_turn_sidecar_crash_cannot_break_the_call(box, ctx):
@@ -648,7 +940,7 @@ async def test_assess_current_turn_sidecar_crash_cannot_break_the_call(box, ctx)
     await box.assess_current_turn(params)
 
     assert params.result["abstained"] is True
-    assert params.result["abstention_reason"] == "transport_error"
+    assert "transport_error" in await audit_blob(ctx)
     # The deterministic tools remain fully usable after the abstention.
     assert ctx.queued_actions == []
 

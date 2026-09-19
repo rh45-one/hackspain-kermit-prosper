@@ -58,6 +58,32 @@ async def test_specialty_lookup_folds_accents(cache: CatalogueCache):
     assert cache.specialty_by_name("dermatologia") is cache.specialties_by_id["dermatology"]
 
 
+async def test_specialty_lookup_accepts_spoken_spanish(cache: CatalogueCache):
+    """Regression: a Spanish ask reached the tool as an unknown specialty.
+
+    The catalogue names specialties in English; callers say "el médico de
+    cabecera" or "el fisioterapeuta". On a live call find_availability
+    answered "no specialty named 'médico de cabecera'" and the agent asked
+    the caller to name their own specialty instead of offering a slot.
+    """
+    gp = cache.specialties_by_id["general"]
+    for spoken in (
+        "médico de cabecera",
+        "medico de cabecera",
+        "medicina general",
+        "el médico de familia",
+        "atención primaria",
+    ):
+        assert cache.specialty_by_name(spoken) is gp, spoken
+
+    assert cache.specialty_by_name("fisioterapeuta") is cache.specialties_by_id["physiotherapy"]
+    assert cache.specialty_by_name("dermatólogo") is cache.specialties_by_id["dermatology"]
+    # The id itself still resolves, for a model that echoes it back verbatim.
+    assert cache.specialty_by_name("physiotherapy") is cache.specialties_by_id["physiotherapy"]
+    # An unknown ask stays unknown rather than resolving to something near it.
+    assert cache.specialty_by_name("astrología") is None
+
+
 async def test_location_and_plan_lookup(cache: CatalogueCache):
     assert cache.location_by_name("centro") is cache.locations_by_id["centro"]
     assert cache.plan_by_name("Sanitas") is cache.plans_by_id["sanitas"]

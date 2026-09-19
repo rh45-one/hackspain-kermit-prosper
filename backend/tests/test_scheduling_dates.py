@@ -121,3 +121,49 @@ def test_open_day_helpers(resolver: MadridDateResolver) -> None:
 def test_unresolvable_raises(resolver: MadridDateResolver) -> None:
     with pytest.raises(ValueError):
         resolver.resolve_relative("sometime soon-ish", dt(2026, 9, 18))
+
+
+# ---- the published phrase vocabulary (problems.md #5) ----------------------
+
+
+PUBLISHED_PHRASES = (
+    ["tomorrow", "the day after tomorrow", "a week from today", "in a fortnight",
+     "on Saturday morning", "first thing on Monday the twelfth of October"]
+    + [f"this coming {d}" for d in ("monday", "tuesday", "wednesday", "thursday",
+                                    "friday", "saturday", "sunday")]
+    + [f"first thing {d}" for d in ("monday", "tuesday", "wednesday", "thursday",
+                                    "friday", "saturday", "sunday")]
+    + [f"{d} afternoon" for d in ("monday", "tuesday", "wednesday", "thursday",
+                                  "friday", "saturday", "sunday")]
+)
+
+
+@pytest.mark.parametrize("phrase", PUBLISHED_PHRASES)
+def test_every_published_phrase_resolves(phrase):
+    """Problem 5 publishes its whole vocabulary; none of it may be unresolvable.
+
+    An unresolvable phrase falls back to a fourteen-day window, which answers
+    a different question from the one the caller asked and loses the case.
+    """
+    resolver = MadridDateResolver()
+    called_on_a_thursday = datetime(2026, 9, 17, 11, 0, tzinfo=MADRID)
+    resolution = resolver.resolve_relative(phrase, called_on_a_thursday)
+
+    assert resolution.date > called_on_a_thursday.date(), "nothing books same-day"
+    assert resolver.is_open_day(resolution.date), "resolved onto a closed day"
+
+
+def test_a_weekday_said_on_its_own_day_is_a_week_away():
+    """"This coming Thursday", said on a Thursday, is not today."""
+    resolver = MadridDateResolver()
+    thursday = datetime(2026, 9, 17, 11, 0, tzinfo=MADRID)
+    assert resolver.resolve_relative("this coming thursday", thursday).date == date(2026, 9, 24)
+
+
+def test_the_closure_day_rolls_forward():
+    """Monday 12 October is Fiesta Nacional: "first thing Monday" is the trap."""
+    resolver = MadridDateResolver()
+    before = datetime(2026, 10, 8, 11, 0, tzinfo=MADRID)  # a Thursday
+    resolution = resolver.resolve_relative("first thing on Monday the twelfth of October", before)
+    assert resolution.date == date(2026, 10, 13)
+    assert resolution.part_of_day == "morning"

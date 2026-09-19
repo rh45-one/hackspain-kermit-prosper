@@ -9,7 +9,9 @@ Design constraints enforced here (see the OpenSpec Jev requirements):
   method that accepts a transcript or state argument from a model tool call.
 * **Pinned model** — defaults to ``jev-1.13.0`` and posts to
   ``/v1/systemone`` with bearer auth.
-* **Hard budget** — one attempt, no retries, 300 ms end-to-end timeout.
+* **Hard budget** — one attempt, no retries, a timeout set from the vendor's
+  published 70-500 ms range (600 ms by default, so the slow tail answers
+  instead of abstaining silently).
 * **Fail closed** — missing key, cancellation, timeout, non-2xx, malformed
   schema and low confidence all return an explicit abstention.
 * **No content in logs** — only abstention/latency/confidence/model metadata is
@@ -26,6 +28,11 @@ from typing import Self
 
 import httpx
 from pydantic import ValidationError
+
+# Budget for a read nobody is waiting on. Measured, the first assessment of a
+# process takes ~600 ms and a tight budget turns the caller's opening sentence
+# into an abstention; a background read can simply wait it out.
+BACKGROUND_TIMEOUT_SECONDS = 2.0
 
 from agent.decision.models import (
     DEFAULT_BASE_URL,
@@ -120,7 +127,12 @@ class JevClient:
 
     def _http(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            timeout = httpx.Timeout(self._timeout_seconds, connect=self._timeout_seconds)
+            # The socket-level timeout is the widest any caller may ask for;
+            # the real per-call bound is enforced in _post_with_controls, so a
+            # background read can outlive the default budget while a read the
+            # caller is waiting on still gets cut short.
+            widest = max(self._timeout_seconds, BACKGROUND_TIMEOUT_SECONDS)
+            timeout = httpx.Timeout(widest, connect=widest)
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=timeout,
@@ -156,12 +168,21 @@ class JevClient:
         snapshot: TurnDecisionInput,
         *,
         cancel: asyncio.Event | None = None,
+        timeout_seconds: float | None = None,
     ) -> TurnDecision:
         """Assess the current turn, or abstain.
 
         ``snapshot`` is the only input: the latest finalized caller transcript
         and call state owned by the server. ``cancel`` is the per-socket cancel
         token; a set token yields an abstention instead of a late answer.
+
+        ``timeout_seconds`` overrides the client budget for one call. It
+        exists because the two callers have opposite constraints: a read that
+        runs in the background while the model is already generating can wait,
+        and should, since the first assessment of a process measures ~600 ms
+        and a tight budget turns the caller's opening sentence — the one that
+        matters most — into an abstention. A read the model explicitly waited
+        for is silence on the line and must stay short.
         """
         started = self._clock()
         if snapshot is None or snapshot.is_empty():
@@ -176,7 +197,7 @@ class JevClient:
             return self._abstain(AbstentionReason.INVALID_INPUT, started)
 
         try:
-            response = await self._post_with_controls(payload, cancel)
+            response = await self._post_with_controls(payload, cancel, timeout_seconds)
         except _CancelledError:
             return self._abstain(AbstentionReason.CANCELLED, started)
         except (TimeoutError, httpx.TimeoutException):
@@ -192,15 +213,17 @@ class JevClient:
         self,
         payload: dict[str, JsonValue],
         cancel: asyncio.Event | None,
+        budget: float | None = None,
     ) -> httpx.Response:
+        budget = self._timeout_seconds if budget is None else float(budget)
         http_task = asyncio.ensure_future(self._post(payload))
         cancel_task = asyncio.ensure_future(cancel.wait()) if cancel is not None else None
         try:
             if cancel_task is None:
-                return await asyncio.wait_for(http_task, timeout=self._timeout_seconds)
+                return await asyncio.wait_for(http_task, timeout=budget)
             done, _pending = await asyncio.wait(
                 {http_task, cancel_task},
-                timeout=self._timeout_seconds,
+                timeout=budget,
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if http_task in done:

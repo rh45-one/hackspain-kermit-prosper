@@ -15,10 +15,13 @@ the per-call registries.
 """
 from __future__ import annotations
 
+import asyncio
+import re
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
+from loguru import logger
 from pipecat.services.llm_service import FunctionCallParams
 
 from agent.brain import deps
@@ -94,6 +97,14 @@ def _scrub_known_names(text: str, ctx: Any) -> str:
 # Fields safe to hand to the LLM or keep in per-call state. National id and
 # phone never leave the clinic client: they are the protected fields problem
 # 14 checks the transcript for, so they are stripped at the source.
+def _fold_plain(text: str) -> str:
+    """Accent- and case-insensitive key, the same rule the catalogue uses."""
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFKD", str(text))
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold().strip()
+
+
 _SAFE_PATIENT_FIELDS = (
     "patient_id",
     "given_name",
@@ -118,12 +129,87 @@ class ToolBox:
         self.engine = str(getattr(settings, "voice_engine", "cascade"))
         self.client = deps.try_clinic_client(settings)
         self.cache = deps.try_catalogue_cache()
+        self._assessments: set[Any] = set()
         self.resolver = deps.try_date_resolver()
         # Advisory sidecar: one isolated client per socket, closed at teardown.
         self.jev = _build_jev_client(settings)
 
+    def watch_caller_turns(self) -> None:
+        """Have Jev read every finalised caller turn, off the critical path.
+
+        Jev is fast (TypeSafe publish 70-500 ms end to end) but a turn is not
+        the place to spend even that: the model is already generating by the
+        time the transcript lands. So each turn is read in the BACKGROUND and
+        the verdict is parked on the CallContext, where any tool can quote it
+        for free. Nothing waits on it, nothing breaks if it never finishes.
+        """
+        self.ctx._on_caller_turn = self._schedule_assessment
+        self._schedule_warmup()
+
+    def _schedule_warmup(self) -> None:
+        """Open the sidecar connection before the first caller turn needs it.
+
+        Measured cold, the first assessment of a process takes ~600 ms and is
+        cut off by the budget — so the FIRST caller turn of a call, the one
+        that decides whether we understood them at all, is exactly the one
+        that abstains. Warm connections answer in 237-299 ms. This burns that
+        cost at connect time, on a fixed harmless string, where nobody is
+        waiting.
+        """
+        if self.jev is None:
+            return
+        try:
+            task = asyncio.create_task(self._warm_jev())
+        except RuntimeError:
+            return
+        self._assessments.add(task)
+        task.add_done_callback(self._assessments.discard)
+
+    async def _warm_jev(self) -> None:
+        from agent.decision.models import TurnDecisionInput
+
+        try:
+            await self.jev.assess(
+                TurnDecisionInput.from_messages(
+                    [{"role": "caller", "text": "hola"}],
+                    context={"phase": "warmup", "identity_status": "unconfirmed",
+                             "patient_confirmed": False},
+                ),
+                cancel=self.ctx.cancel_token,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - warming must never affect the call
+            return
+
+    def _schedule_assessment(self, _text: str) -> None:
+        if self.jev is None:
+            return
+        try:
+            task = asyncio.create_task(self._assess_in_background())
+        except RuntimeError:
+            return  # no running loop (sync test context): nothing to schedule
+        self._assessments.add(task)
+        task.add_done_callback(self._assessments.discard)
+
+    async def _assess_in_background(self) -> None:
+        try:
+            from agent.decision.client import BACKGROUND_TIMEOUT_SECONDS
+
+            self.ctx.latest_decision = await self._jev_assessment(BACKGROUND_TIMEOUT_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - a sidecar must never surface here
+            self.ctx.latest_decision = None
+
     async def aclose(self) -> None:
         """Release per-socket sidecar resources (idempotent)."""
+        self.ctx._on_caller_turn = None
+        for task in list(self._assessments):
+            task.cancel()
+        if self._assessments:
+            await asyncio.gather(*self._assessments, return_exceptions=True)
+            self._assessments.clear()
         if self.jev is not None:
             await self.jev.close()
             self.jev = None
@@ -199,6 +285,17 @@ class ToolBox:
         self.ctx.audit("phone_hint", {"outcome": "matched", "patient_id": match.get("patient_id")})
 
     # ---- tools -----------------------------------------------------------
+    def _known_specialties(self) -> list[str]:
+        """The clinic's real specialty names, from the cached catalogue.
+
+        Read off the index rather than ``cache.catalogue``, whose property
+        raises when the cache was never warmed — a soft "say it another way"
+        must not become a hard tool exception mid-call.
+        """
+        if self.cache is None:
+            return []
+        return sorted({sp.name for sp in self.cache.specialties_by_id.values()})
+
     async def lookup_patient(
         self,
         params: FunctionCallParams,
@@ -221,6 +318,22 @@ class ToolBox:
             kwargs["national_id"] = national_id
         if date_of_birth:
             kwargs["date_of_birth"] = date_of_birth
+
+        # The directory refuses a bare given name, and that refusal costs a
+        # turn. It is answerable here: a first name alone is simply not enough
+        # to find anybody, and the caller is the one who has to fill the gap.
+        if len(str(name).split()) < 2 and not national_id and not date_of_birth:
+            await params.result_callback(
+                {
+                    "error": (
+                        f"{name!r} on its own cannot find anyone: the directory needs a "
+                        "given name with at least one surname, or an exact national id, "
+                        "phone or date of birth. Ask the caller for one and try again."
+                    )
+                }
+            )
+            return
+
         result = await self._call(self.client.search_directory(**kwargs), "lookup_patient")
         if self._is_error(result):
             await params.result_callback(result)
@@ -234,9 +347,36 @@ class ToolBox:
                 "date_of_birth": m.get("date_of_birth"),
                 "insurer": m.get("insurer"),
                 "has_visited_before": m.get("has_visited_before"),
+                # The referrals decide whether a referral-gated specialty is a
+                # booking or a refusal, and the note is what lets a receptionist
+                # sound like they know the person. Both were being dropped on
+                # the floor here while the API returned them every time.
+                "referrals": m.get("referrals") or [],
+                "note": m.get("note"),
+                # WHICH fields matched. Some ids differ from another
+                # patient's by a single digit, so a misheard one returns a
+                # confidently wrong person; seeing that only the name matched
+                # is what tells you to confirm on something else.
+                "matched_on": m.get("matched_fields") or [],
             }
             for m in matches
         ]
+        # Audit the SHAPE of the lookup, never its values: which identifiers
+        # the caller supplied and how many rows came back. Without this, a
+        # failed identification is indistinguishable from a failed API call
+        # in the trace — both audit as tool ok=True — and that cost a whole
+        # debugging round on a live scored call.
+        self.ctx.audit(
+            "patient_lookup",
+            {
+                "count": len(summary),
+                "with_dob": bool(date_of_birth),
+                "with_national_id": bool(national_id),
+                "exact_dob_matches": sum(
+                    1 for m in summary if date_of_birth and m.get("date_of_birth") == date_of_birth
+                ),
+            },
+        )
         await params.result_callback({"matches": summary, "count": len(summary)})
 
     async def confirm_patient(self, params: FunctionCallParams, patient_id: str) -> None:
@@ -291,6 +431,7 @@ class ToolBox:
         location_name: str | None = None,
         part_of_day: str | None = None,
         language: str | None = None,
+        insurer: str | None = None,
     ) -> None:
         """Search real availability. Resolves phrases like 'tomorrow', 'this coming Thursday', 'in a fortnight'.
 
@@ -301,6 +442,7 @@ class ToolBox:
             location_name: Site requested, if any ('Centro', 'Norte', 'Sur').
             part_of_day: 'morning' or 'afternoon', if the caller said one.
             language: Language the caller needs the doctor to speak, if said.
+            insurer: An insurance plan the caller names that is NOT the one on their record. Leave it out and the search prices against the plan on file; a second plan exists nowhere in the data and only the caller can reveal it, so pass it here the moment they mention one.
         """
         if self.client is None:
             await params.result_callback({"error": "clinic layer unavailable"})
@@ -325,10 +467,25 @@ class ToolBox:
             resolved["window"] = [date_from.isoformat(), date_to.isoformat()]
         part = part_of_day or resolved.get("part_of_day")
         kwargs: dict[str, Any] = {"date_from": date_from, "date_to": date_to}
+        sound_alikes: list[dict[str, Any]] = []
         if provider_name and self.cache is not None:
             prov = self.cache.provider_by_name(provider_name)
             if prov is not None:
                 kwargs["provider_id"] = prov.id
+                # A surname is the least reliable thing on a phone line, and
+                # this clinic has pairs one letter apart in DIFFERENT fields.
+                # Resolving one confidently is how the wrong doctor in the
+                # wrong specialty gets booked with nobody noticing, so say
+                # who else it could have been and let the model ask.
+                sound_alikes = [
+                    {
+                        "provider_id": other.id,
+                        "name": other.name,
+                        "specialty": other.specialty_name,
+                    }
+                    for other in self.cache.providers_sounding_like(provider_name)
+                    if other.id != prov.id
+                ]
             else:
                 await params.result_callback({"error": f"no provider named {provider_name!r} in the clinic"})
                 return
@@ -337,7 +494,18 @@ class ToolBox:
             if spec is not None:
                 kwargs["specialty_id"] = spec.id
             else:
-                await params.result_callback({"error": f"no specialty named {specialty_name!r}"})
+                # Name the real catalogue so the model can retry in one turn
+                # instead of asking the caller to name their own specialty.
+                # Name the catalogue from the index, never from
+                # cache.catalogue: that property raises when the cache was
+                # not warmed, which would turn a soft "say it another way"
+                # into a hard tool exception mid-call.
+                await params.result_callback(
+                    {
+                        "error": f"no specialty named {specialty_name!r}",
+                        "specialties": self._known_specialties(),
+                    }
+                )
                 return
         if location_name and self.cache is not None:
             loc = self.cache.location_by_name(location_name)
@@ -346,6 +514,27 @@ class ToolBox:
         patient_id = (self.ctx.confirmed_patient or {}).get("patient_id")
         if patient_id:
             kwargs["patient_id"] = patient_id
+        if insurer and self.cache is not None:
+            plan = self.cache.plan_by_name(insurer)
+            if plan is not None:
+                kwargs["insurer"] = plan.id
+
+        # The API refuses a search with neither a provider nor a specialty, and
+        # a refusal costs a whole turn of a 180 s call. Observed live: five of
+        # these in one call. Answer it here instead, naming what the clinic
+        # actually has, so the retry lands on the next turn.
+        if "provider_id" not in kwargs and "specialty_id" not in kwargs:
+            await params.result_callback(
+                {
+                    "error": (
+                        "a search needs either a specialty or a named doctor; "
+                        "ask the caller which and call again with it"
+                    ),
+                    "specialties": self._known_specialties(),
+                }
+            )
+            return
+
         result = await self._call(self.client.search_availability(**kwargs), "find_availability")
         if self._is_error(result):
             await params.result_callback(result)
@@ -364,22 +553,290 @@ class ToolBox:
         if language and self.cache is not None:
             speaking = {p.id for p in self.cache.providers_speaking(language)}
             slots = [s for s in slots if s.get("provider_id") in speaking]
+
+        # The caller asked for one day and that day has nothing. A closed DAY
+        # is already rolled by the resolver, but a closed HALF of a day is not:
+        # only Centro opens on a Saturday and only in the morning, so "Saturday
+        # afternoon" resolves to a real open day with no afternoon in it. The
+        # published rule is that the caller takes the earliest appointment on
+        # the next open day that still matches the rest of what they asked —
+        # same site, same part of the day — so look forward for them instead of
+        # reporting an empty diary.
+        #
+        # Not when the rule that bit is about the doctor the caller named.
+        # `blocked` is never empty — Dr. Requena's leave shows up on every
+        # single query — so "was anything blocked" is the wrong question. The
+        # right one is whether the caller's OWN request was what got stopped:
+        # asking for Requena by name is a refusal that must name his leave,
+        # while asking for the specialty is a roll.
+        asked_for = kwargs.get("provider_id")
+        refused_in_person = asked_for is not None and any(
+            getattr(b, "provider_id", None) == asked_for for b in result.blocked
+        )
+        if (
+            not slots
+            and not refused_in_person
+            and date_from == date_to
+            and self.resolver is not None
+        ):
+            rolled = self.resolver.next_open_day(date_from + timedelta(days=1))
+            kwargs["date_from"], kwargs["date_to"] = rolled, rolled + timedelta(days=13)
+            wider = await self._call(self.client.search_availability(**kwargs), "find_availability")
+            if not self._is_error(wider):
+                slots = [self._dump(s) for s in wider.slots]
+                if part:
+                    slots = [s for s in slots if (slot_hour(s) < 14) == (part == "morning")]
+                if language and self.cache is not None:
+                    slots = [s for s in slots if s.get("provider_id") in speaking]
+                if slots:
+                    result = wider
+                    resolved["rolled_forward_from"] = date_from.isoformat()
+                    resolved["reason"] = (
+                        "nothing on the day asked for; this is the next open day "
+                        "that matches the rest of the request"
+                    )
+
         # Deterministic order: earliest first, ties broken by provider id.
         slots.sort(key=lambda s: (str(s.get("start_time")), str(s.get("provider_id"))))
         labelled = self.ctx.register_slots(slots[:MAX_REGISTRY_SLOTS])
         appt_type = self._dump(result.appointment_type)
-        # Blocked restrictions are preserved exactly as the API reported them.
-        blocked = [self._dump(b) for b in result.blocked]
+        # Blocked restrictions, with the provider named. The API reports an
+        # id; a model cannot tell a caller "PR02 is unavailable", and the
+        # whole point of a refusal is naming the rule and the person it hit.
+        blocked = []
+        for entry in result.blocked:
+            dumped = self._dump(entry)
+            who = self.cache.provider_by_id(dumped.get("provider_id", "")) if self.cache else None
+            if who is not None:
+                dumped["provider_name"] = who.name
+                dumped["specialty"] = who.specialty_name
+            blocked.append(dumped)
+        offered = labelled[:MAX_SLOTS_IN_RESULT]
         await params.result_callback(
             {
                 "resolved": resolved,
                 "suggested_appointment_type": appt_type,
-                "slots": labelled[:MAX_SLOTS_IN_RESULT],
+                # Ordered earliest first; the earliest is named explicitly so
+                # "the soonest appointment" cannot be answered with a later
+                # slot whose site or doctor happens to read better. Its
+                # provider and location travel with it: booking the token and
+                # confirming another slot's doctor or site is a wrong answer.
+                "earliest_token": offered[0]["token"] if offered else None,
+                "slots": offered,
                 "total_free": len(slots),
+                # Populated only when the name the caller said could have been
+                # somebody else. Empty means the name was unambiguous.
+                "name_could_also_be": sound_alikes,
                 "blocked_reasons": blocked,
                 "empty_calendar": len(slots) == 0 and not blocked,
             }
         )
+
+    async def describe_clinic(self, params: FunctionCallParams, about: str) -> None:
+        """Answer a factual question about the clinic from its own records.
+
+        Use it the moment a caller asks anything about how the clinic works —
+        how many sites there are and where, which doctors there are and what
+        they do, which languages they speak, what a site's opening hours are,
+        which specialties exist, which insurance plans are taken. Never answer
+        any of that from memory: a wrong fact sends the caller to a site that
+        is shut or a doctor who does not exist, and the booking that follows
+        is wrong because of it.
+
+        Args:
+            about: What they asked about — one of 'sites', 'doctors', 'specialties' or 'plans'. Anything else returns all four.
+        """
+        if self.cache is None or not self.cache.warmed:
+            await params.result_callback({"error": "clinic catalogue unavailable"})
+            return
+        catalogue = self.cache.catalogue
+        wanted = _fold_plain(about)
+
+        def sites() -> list[dict[str, Any]]:
+            return [
+                {
+                    "location_id": loc.id,
+                    "name": loc.name,
+                    "address": loc.address,
+                    "hours": [{"weekday": d.weekday, "open": d.intervals} for d in loc.hours],
+                    "doctors": loc.provider_names,
+                }
+                for loc in catalogue.locations
+            ]
+
+        def doctors() -> list[dict[str, Any]]:
+            return [
+                {
+                    "provider_id": pr.id,
+                    "name": pr.name,
+                    "specialty": pr.specialty_name,
+                    "languages": pr.languages,
+                    "sites": pr.location_names,
+                    "on_leave": None
+                    if pr.leave is None
+                    else {"from": str(pr.leave.start), "to": str(pr.leave.end)},
+                }
+                for pr in catalogue.providers
+            ]
+
+        def specialties() -> list[dict[str, Any]]:
+            return [
+                {
+                    "specialty_id": sp.id,
+                    "name": sp.name,
+                    "referral_required": sp.referral_required,
+                    "doctors": sp.provider_names,
+                }
+                for sp in catalogue.specialties
+            ]
+
+        def plans() -> list[dict[str, Any]]:
+            return [
+                {
+                    "policy_id": pl.id,
+                    "name": pl.name,
+                    "covers_specialties": pl.covered_specialty_names,
+                    "does_not_cover_specialties": pl.uncovered_specialty_names,
+                    "covers_sites": pl.covered_location_names,
+                }
+                for pl in catalogue.plans
+            ]
+
+        sections = {"sites": sites, "doctors": doctors, "specialties": specialties, "plans": plans}
+        picked = {k: v() for k, v in sections.items() if k.startswith(wanted[:4] or "~")}
+        await params.result_callback(picked or {k: v() for k, v in sections.items()})
+
+    async def find_nearest_site(
+        self,
+        params: FunctionCallParams,
+        where_the_caller_is: str,
+        specialty_name: str | None = None,
+    ) -> None:
+        """Find which of the clinic's sites is closest to where the caller is.
+
+        The answer is the nearest site that can ACTUALLY serve them: if the
+        closest one has nobody who does what they need, the answer is the
+        closest one that does — not a refusal, and not the closest outright.
+
+        Args:
+            where_the_caller_is: The place they gave, in their words — a street address, a district or a town, e.g. 'Calle de Madrid 54, in Getafe'.
+            specialty_name: The specialty they need, when they have said one, so a site that cannot serve it is never offered.
+        """
+        if self.cache is None or not self.cache.warmed:
+            await params.result_callback({"error": "clinic catalogue unavailable"})
+            return
+
+        point = await self._geocode(where_the_caller_is)
+        if point is None:
+            await params.result_callback(
+                {
+                    "error": f"could not place {where_the_caller_is!r} on the map",
+                    "sites": [
+                        {"location_id": loc.id, "name": loc.name, "address": loc.address}
+                        for loc in self.cache.catalogue.locations
+                    ],
+                    "hint": "ask the caller which town or district they are in",
+                }
+            )
+            return
+
+        wanted: set[str] | None = None
+        if specialty_name:
+            spec = self.cache.specialty_by_name(specialty_name)
+            if spec is not None:
+                wanted = {
+                    loc_name
+                    for pr in self.cache.providers_for_specialty(spec.id)
+                    for loc_name in pr.location_names
+                }
+
+        ranked = []
+        for loc, km in self.cache.nearest_locations(point[0], point[1]):
+            serves = wanted is None or loc.name in wanted
+            ranked.append(
+                {
+                    "location_id": loc.id,
+                    "name": loc.name,
+                    "address": loc.address,
+                    "km_straight_line": round(km, 2),
+                    "can_serve_the_request": serves,
+                }
+            )
+        servable = [r for r in ranked if r["can_serve_the_request"]]
+        await params.result_callback(
+            {
+                "located": where_the_caller_is,
+                "nearest_that_can_serve": servable[0] if servable else None,
+                "all_sites_by_distance": ranked,
+            }
+        )
+
+    async def _geocode(self, place: str) -> tuple[float, float] | None:
+        """Put a spoken place on the map, or give up quietly.
+
+        The map comes first and the shortcut second, which is the opposite of
+        the obvious order and the reason it works: matching the caller's words
+        against the clinic's own addresses sent "Calle de Madrid 54, Getafe"
+        to the Madrid site, because the street is called Madrid. A street name
+        is not a town. Only when the geocoder has nothing to say is the town
+        fallback allowed to guess, and then only on a whole word that is not
+        part of a street name.
+
+        Fails soft in every direction: a geocoder that is slow, down or
+        rate-limited must never be the reason a call ends without an answer.
+        """
+        import httpx
+
+        queries = [place]
+        if "spain" not in _fold_plain(place) and "españa" not in _fold_plain(place):
+            queries.append(f"{place}, Madrid, Spain")
+        # A house number the map has never heard of sinks the whole query, and
+        # the street alone is well inside the margin these cases are drawn
+        # with. Try it before giving up.
+        without_number = re.sub(r"\s*\b\d+\b", "", place).strip(" ,")
+        if without_number and without_number != place:
+            queries.append(f"{without_number}, Madrid, Spain")
+        # And the Spanish street-type prefix, which the geocoder dislikes:
+        # "Calle de Alberto Alcocer" finds nothing, "Alberto Alcocer" lands on
+        # the street. Callers say the prefix; the map would rather they didn't.
+        bare = re.sub(
+            r"^\s*(calle|avenida|avda|plaza|paseo|carretera|camino|ronda|via)\s+(de\s+|del\s+|de\s+la\s+)?",
+            "",
+            without_number or place,
+            flags=re.IGNORECASE,
+        ).strip(" ,")
+        if bare and bare not in (place, without_number):
+            queries.append(f"{bare}, Madrid, Spain")
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(3.0)) as http:
+                for query in queries:
+                    response = await http.get(
+                        "https://nominatim.openstreetmap.org/search",
+                        params={
+                            "q": query,
+                            "format": "json",
+                            "limit": 1,
+                            "countrycodes": "es",
+                        },
+                        headers={"User-Agent": "clinica-arenal-receptionist/1.0"},
+                    )
+                    response.raise_for_status()
+                    hits = response.json()
+                    if hits:
+                        return (float(hits[0]["lat"]), float(hits[0]["lon"]))
+        except Exception as exc:  # noqa: BLE001 - a map lookup must not end a call
+            logger.warning("geocoder unavailable, falling back to town match: {}", exc)
+
+        # Last resort: the caller named the town one of our sites sits in.
+        folded = _fold_plain(place)
+        words = set(folded.replace(",", " ").split())
+        for loc in self.cache.catalogue.locations if self.cache else []:
+            tail = _fold_plain(loc.address).rsplit(",", 1)[-1].strip()
+            town = tail.split()[-1] if tail.split() else ""
+            # A whole word, and never one that is only there as a street name.
+            if town and town in words and f"calle de {town}" not in folded:
+                return (loc.latitude, loc.longitude)
+        return None
 
     async def book_appointment(
         self,
@@ -413,9 +870,19 @@ class ToolBox:
         }
         self.ctx.queued_actions.append(action)
         self.ctx.audit("action_queued", action)
+        reading = self.ctx.latest_decision
         await params.result_callback(
             {
                 "booked_would_be": True,
+                # A second opinion on the words that led here, already paid
+                # for in the background. Advisory: the booking is queued
+                # either way. It is here so that a reading which does NOT
+                # look like a booking gets noticed on the next turn instead
+                # of at the reveal.
+                "caller_intent_reading": None if reading is None else {
+                    "intent": reading.get("intent"),
+                    "confidence": reading.get("confidence"),
+                },
                 "confirm_to_caller": {
                     "doctor": slot.get("provider_name"),
                     "site": slot.get("location_id"),
@@ -523,7 +990,7 @@ class ToolBox:
         """End the call with no booking, for a named, allowed reason.
 
         Args:
-            reason: One of the clinic's refusal reasons, e.g. no_availability, out_of_scope, not_eligible_age, referral_required, provider_on_leave, clinic_closed, patient_not_found, provider_not_found, caller_not_authorised.
+            reason: Exactly one value from the clinic's closed vocabulary, naming the rule that actually bit. The first eleven mirror a standing clinic restriction one-for-one and /availability names the one that stopped a provider in its `blocked` list: not_eligible_age (too young or too old for the specialty), referral_required (the specialty needs one and they have none), provider_not_in_network (that doctor refuses their plan), specialty_not_covered (their plan does not cover it), location_not_covered (their plan does not cover that site), insurer_referral_required (their plan demands its own referral), allowance_exhausted (their plan has run out of visits), provider_on_leave, location_hours (the site is shut then), type_not_offered (that specialty does not offer that visit type), patient_history (their record rules it out). The rest end a call that no rule refused: no_availability (the diary is simply full), clinic_closed, patient_not_found, provider_not_found, caller_not_authorised, out_of_scope (not a receptionist's job), medical_emergency.
         """
         reason = reason.strip().lower()
         if reason not in deps.CLOSED_REASONS:
@@ -544,7 +1011,22 @@ class ToolBox:
         await params.result_callback({"noted": True, "reason": reason})
 
     async def escalate_call(self, params: FunctionCallParams, reason: str = "medical_emergency") -> None:
-        """Escalate the call to a human, for emergencies only.
+        """Hand the call to a human. Book nothing.
+
+        Use it the moment a caller describes any of these, in these words or
+        near them — they are the clinic's own red flags and none of them is
+        an appointment:
+
+        - tight pain across the chest, struggling to catch their breath
+        - one side of the face suddenly droopy, an arm gone weak, words slurred
+        - cannot get their breath at all, came on out of nowhere, stopping
+          between words
+        - a cut bleeding heavily that will not stop after ten minutes of pressure
+        - banged their head an hour ago, confused and being sick since
+
+        Recognising one is not a clinical judgement and not a close call: it
+        is this list. Stop scheduling, tell them to get urgent help now (112
+        or urgent care), and escalate with medical_emergency.
 
         Args:
             reason: Why the call escalates; use medical_emergency for health emergencies.
@@ -559,22 +1041,39 @@ class ToolBox:
 
     # ---- Jev advisory (Gemini path only) ----------------------------------
     async def assess_current_turn(self, params: FunctionCallParams) -> None:
-        """Advisory assessment of the caller's latest finalized utterance.
+        """Answer one question: what did the caller just ask you to do?
 
-        Zero-argument by contract: everything it reads comes from the
-        CallContext (the latest finalized caller text, never model-supplied),
-        it is redacted locally, and Jev's typed answer or explicit abstention
-        is returned. Run it before high-risk/write tools when available; its
-        output NEVER authorizes or vetoes anything - the registry-validated
-        tools decide. On abstention (timeout, error, low confidence) simply
-        continue with the deterministic tools and ask the caller to clarify
-        when appropriate.
+        Returns a second opinion on their LAST sentence as a typed intent —
+        book_appointment, reschedule_appointment, cancel_appointment,
+        register_patient, ask_information, escalate, out_of_scope, other —
+        plus whether it reads as a medical emergency and whether it is too
+        ambiguous to act on.
+
+        Call it when, and only when, you are about to act and you are not
+        sure what they meant: a short reply to an offer you cannot read as
+        yes or no ("bueno", "ya veremos", "go on then"), a sentence that
+        might be a new request or a confirmation of the old one, or anything
+        that might be an emergency. Do not call it when the caller was
+        plain. It costs the caller half a second of silence.
+
+        Takes no arguments: it reads the caller's own words from the call
+        state, redacted, never anything you pass in. It is advisory — it
+        never authorises or blocks anything, the real tools decide. If it
+        abstains, carry on and ask the caller to clarify.
         """
-        decision = await self._jev_assessment()
+        # The background reader has usually answered for this turn already;
+        # reuse it rather than spend the caller's silence a second time.
+        decision = self.ctx.latest_decision or await self._jev_assessment()
+        self.ctx.latest_decision = decision
         await params.result_callback(decision)
 
-    async def _jev_assessment(self) -> dict[str, Any]:
-        """Invoke redaction + Jev; return a PII-free advisory dict."""
+    async def _jev_assessment(self, budget: float | None = None) -> dict[str, Any]:
+        """Invoke redaction + Jev; return a PII-free advisory dict.
+
+        ``budget`` overrides the per-call timeout. Background reads pass the
+        wider one; a read the model is waiting on keeps the tight default,
+        because that one is silence on the line.
+        """
         from agent.decision.models import AbstentionReason, TurnDecision, TurnDecisionInput
 
         if self.jev is None:
@@ -602,7 +1101,9 @@ class ToolBox:
             },
         )
         try:
-            decision = await self.jev.assess(snapshot, cancel=self.ctx.cancel_token)
+            decision = await self.jev.assess(
+                snapshot, cancel=self.ctx.cancel_token, timeout_seconds=budget
+            )
         except Exception:  # noqa: BLE001 - sidecar must never crash the call
             decision = TurnDecision(abstained=True, abstention_reason=AbstentionReason.TRANSPORT_ERROR)
         # Metadata only: intent/confidence/latency/usage. Never the transcript.
@@ -611,12 +1112,29 @@ class ToolBox:
 
     @staticmethod
     def _jev_result(decision: Any) -> dict[str, Any]:
-        result = decision.as_audit_dict()
-        result["message"] = (
-            "Advisory only: it never authorizes or blocks an action. On abstention, "
-            "continue with the deterministic tools and clarify with the caller if needed."
-        )
-        return result
+        """The answer the model needs, and nothing else.
+
+        The full projection (source, model, latency, token counts) goes to
+        the audit; handing it to the model as well buried the one field that
+        matters under telemetry it cannot act on.
+        """
+        full = decision.as_audit_dict()
+        # needs_clarification is deliberately NOT forwarded. Measured over
+        # six probes it came back True every time, including on verdicts with
+        # confidence 1.0 — handing the model "too ambiguous to act" on an
+        # unambiguous booking would make it second-guess correct work. It
+        # stays in the audit, where a wrong signal costs nothing.
+        return {
+            "intent": full.get("intent"),
+            "medical_emergency": full.get("medical_emergency"),
+            "confidence": full.get("confidence"),
+            "abstained": full.get("abstained"),
+            "message": (
+                "A second opinion, not a decision: it never authorises or blocks "
+                "anything. If it abstained, carry on with your own judgement and "
+                "ask the caller to clarify if you still cannot tell."
+            ),
+        }
 
     # ---- reflow seam (ClinicReflow) --------------------------------------
     async def get_reflow_context(self, params: FunctionCallParams, appointment_id: str) -> None:
@@ -675,6 +1193,8 @@ class ToolBox:
             self.cancel_appointment,
             self.reschedule_appointment,
             self.register_new_patient,
+            self.describe_clinic,
+            self.find_nearest_site,
             self.finish_without_booking,
             self.escalate_call,
             self.get_reflow_context,

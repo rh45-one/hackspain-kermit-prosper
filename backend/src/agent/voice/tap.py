@@ -1,7 +1,12 @@
 """Pass-through frame processor that records the spoken conversation."""
 from __future__ import annotations
 
-from pipecat.frames.frames import Frame, InterimTranscriptionFrame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import (
+    Frame,
+    InterimTranscriptionFrame,
+    LLMTextFrame,
+    TranscriptionFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from agent.voice.context import CallContext
@@ -20,6 +25,11 @@ class TranscriptTap(FrameProcessor):
         if isinstance(frame, TranscriptionFrame) and not isinstance(frame, InterimTranscriptionFrame):
             if self._role == "caller" or direction == FrameDirection.DOWNSTREAM:
                 self._ctx.add_transcript(self._role, frame.text)
-        elif isinstance(frame, TextFrame) and self._role == "assistant":
+        elif isinstance(frame, LLMTextFrame) and self._role == "assistant":
+            # LLMTextFrame only, never TextFrame at large: a speech-to-speech
+            # service pushes the same chunk twice, once as LLMTextFrame and
+            # once as TTSTextFrame (both TextFrame subclasses), which doubled
+            # every assistant line in the audit and in Jev's snapshot. Both
+            # engines emit LLMTextFrame, so this records each chunk once.
             self._ctx.add_transcript("assistant", frame.text)
         await self.push_frame(frame, direction)

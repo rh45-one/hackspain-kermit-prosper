@@ -49,12 +49,27 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_live_model: str = "gemini-3.8-live"
     gemini_voice_id: str = ""
+    # Gemini Live speech_config.language_code. pipecat defaults it to en-US,
+    # which pulls a Spanish call into English mid-conversation; the clinic is
+    # in Madrid, so the wire default is Spanish. The system prompt still tells
+    # the model to follow a caller who speaks another language.
+    gemini_language: str = "es-ES"
+    # RNNoise on the inbound wire. Measured at 2.48 ms per 20 ms frame, which
+    # one call absorbs easily and ten do not: ten concurrent calls would ask
+    # for 1240 ms of CPU per second of audio on a single event loop, and a
+    # loop that falls behind is exactly the failure this whole path fights.
+    # Off by default; worth turning on for the Noise problem, where the bed
+    # is mixed at 5 dB SNR and a clean signal is the whole point.
+    noise_suppression: bool = False
 
     # TypeSafe Jev structured-decision sidecar (advisory only).
     typesafe_api_key: str = ""
     typesafe_base_url: str = "https://api.typesafe.ai"
     jev_model: str = "jev-1.13.0"
-    jev_timeout_seconds: float = 0.300
+    # TypeSafe publishes 70-500 ms end-to-end for Jev, so a 300 ms budget
+    # turned the slow half of that range into silent abstentions. 600 ms
+    # covers the published tail with margin and still fits inside a turn.
+    jev_timeout_seconds: float = 0.600
     jev_min_confidence: float = 0.5
 
     # Server

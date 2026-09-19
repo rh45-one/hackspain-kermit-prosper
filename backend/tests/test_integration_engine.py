@@ -156,21 +156,107 @@ async def test_gemini_engine_builds_bridged_pipeline(tmp_path):
 
     parts = FakePipeline.built[-1]
     kinds = [type(p).__name__ for p in parts]
-    # input -> caller tap -> input bridge -> service -> output bridge -> assistant tap -> output
+    # input -> user aggregator -> caller tap -> input bridge -> service ->
+    # output bridge -> assistant tap -> output -> assistant aggregator.
+    # The aggregators are required: the LLMContextFrame they emit is what
+    # sets the service's _ready_for_realtime_input flag. The user aggregator
+    # sits BEFORE the bridge because it owns the local VAD analyzer, which
+    # must see the wire-rate 8 kHz frames the pipeline is configured for; the
+    # caller tap sits AFTER it because the aggregator consumes the upstream
+    # user TranscriptionFrames the tap needs to record.
     assert kinds == [
         "FrameProcessor",
+        "LLMUserAggregator",
         "TranscriptTap",
         "GeminiInputBridge",
         "RecordedGeminiService",
         "GeminiOutputBridge",
         "TranscriptTap",
         "FrameProcessor",
+        "LLMAssistantAggregator",
     ]
     service = next(p for p in parts if isinstance(p, RecordedGeminiService))
     assert service.kwargs["api_key"] == "k"
 
     toolbox_service = RecordedGeminiService.instances[-1]
     assert toolbox_service.kwargs["tools"] == service.kwargs["tools"]
+
+
+async def test_local_vad_decides_the_turns_with_telephony_parameters(tmp_path):
+    """The analyzer, and the parameters, are both the point.
+
+    Gemini's own endpointing waits ~5 s per turn, which these calls cannot
+    afford. Handing turns to Silero is worth about four seconds an exchange
+    — but only with telephony parameters: pipecat's default min_volume of
+    0.6 is a loud-room threshold and an 8 kHz mu-law line carries speech far
+    below it. Shipping the analyzer with that default is how the caller's
+    "Hello." goes unheard and the agent sits silent.
+    """
+    settings = EngineSettings(voice_engine="gemini_live", gemini_api_key="k")
+    build(tmp_path, "CA-vad", settings)
+
+    parts = FakePipeline.built[-1]
+    user_agg = next(p for p in parts if type(p).__name__ == "LLMUserAggregator")
+    bridge = next(p for p in parts if isinstance(p, GeminiInputBridge))
+    analyzer = user_agg._params.vad_analyzer
+
+    assert analyzer is not None, "nothing would end a caller turn"
+    params = analyzer.params
+    assert params.min_volume == 0.0, "a loud-room threshold on a telephone line"
+    assert params.stop_secs >= 0.5, "would end the turn on a breath mid-sentence"
+
+    # The analyzer must see wire-rate audio, so it sits ahead of the bridge.
+    assert parts.index(user_agg) < parts.index(bridge)
+
+
+async def test_caller_tap_sits_where_upstream_transcriptions_reach_it(tmp_path):
+    """Regression: a whole call recorded with zero caller turns.
+
+    The Gemini service pushes user TranscriptionFrames UPSTREAM, and
+    LLMUserAggregator consumes TranscriptionFrame without forwarding it. A
+    caller tap placed ahead of the aggregator therefore never sees one: the
+    audit trail held only assistant lines and assess_current_turn had no
+    caller text to assess. The tap has to sit between the aggregator and the
+    service, and the frames must survive the bridge in between.
+    """
+    from pipecat.frames.frames import TranscriptionFrame
+    from pipecat.utils.time import time_now_iso8601
+
+    settings = EngineSettings(voice_engine="gemini_live", gemini_api_key="k")
+    ctx = make_ctx(tmp_path, "CA-tap")
+    pl.build_worker(
+        FakeTransport(), ctx, settings, gemini_service_factory=RecordedGeminiService
+    )
+
+    parts = FakePipeline.built[-1]
+    user_agg = next(p for p in parts if type(p).__name__ == "LLMUserAggregator")
+    caller_tap = next(p for p in parts if type(p).__name__ == "TranscriptTap")
+    service = next(p for p in parts if isinstance(p, RecordedGeminiService))
+    assert parts.index(user_agg) < parts.index(caller_tap) < parts.index(service)
+
+    # The upstream leg the service actually uses: bridge, then tap.
+    bridge = next(p for p in parts if isinstance(p, GeminiInputBridge))
+    frame = TranscriptionFrame(text="quiero una cita", user_id="", timestamp=time_now_iso8601())
+    await bridge.process_frame(frame, FrameDirection.UPSTREAM)
+    await caller_tap.process_frame(frame, FrameDirection.UPSTREAM)
+    assert any(t["role"] == "caller" for t in ctx.transcript)
+
+
+async def test_assistant_text_is_recorded_once_per_chunk(tmp_path):
+    """A speech-to-speech service emits each chunk as LLMTextFrame AND
+    TTSTextFrame; both are TextFrames, so the tap used to log it twice."""
+    from pipecat.frames.frames import AggregationType, LLMTextFrame, TTSTextFrame
+
+    from agent.voice.tap import TranscriptTap
+
+    ctx = make_ctx(tmp_path, "CA-dup")
+    tap = TranscriptTap(ctx, "assistant")
+    await tap.process_frame(LLMTextFrame("Perfecto."), FrameDirection.DOWNSTREAM)
+    await tap.process_frame(
+        TTSTextFrame("Perfecto.", aggregated_by=AggregationType.SENTENCE),
+        FrameDirection.DOWNSTREAM,
+    )
+    assert [t["text"] for t in ctx.transcript if t["role"] == "assistant"] == ["Perfecto."]
 
 
 async def test_gemini_tools_come_from_the_registry_validated_toolbox(tmp_path):
@@ -190,19 +276,28 @@ async def test_gemini_tools_come_from_the_registry_validated_toolbox(tmp_path):
     await toolbox.aclose()
 
 
-async def test_gemini_greeting_is_queued_as_append_frame(tmp_path):
+async def test_gemini_greeting_flows_through_context_aggregator(tmp_path):
     settings = EngineSettings(voice_engine="gemini_live", gemini_api_key="k")
     transport, worker = build(tmp_path, "CA-greet", settings)
 
     await transport.handlers["on_client_connected"](transport, None)
 
-    from pipecat.frames.frames import LLMMessagesAppendFrame
+    from pipecat.frames.frames import LLMRunFrame
 
     frames = [f for batch in worker.queued for f in batch]
-    appends = [f for f in frames if isinstance(f, LLMMessagesAppendFrame)]
-    assert appends, "Gemini path must receive the greeting via LLMMessagesAppendFrame"
-    content = appends[-1].messages[-1]["content"]
-    assert "phone is ringing" in content
+    assert any(isinstance(f, LLMRunFrame) for f in frames), (
+        "Gemini path must trigger the greeting through LLMRunFrame"
+    )
+    # The greeting rides in the shared LLMContext as a developer message:
+    # the user aggregator turns it into the LLMContextFrame that both
+    # speaks the greeting and unlocks the service's realtime input gate.
+    parts = FakePipeline.built[-1]
+    user_agg = next(
+        p for p in parts if type(p).__name__ == "LLMUserAggregator"
+    )
+    messages = user_agg._context.messages
+    assert messages[-1]["role"] == "developer"
+    assert "phone is ringing" in messages[-1]["content"]
 
 
 async def test_per_socket_isolation_across_engines(tmp_path):

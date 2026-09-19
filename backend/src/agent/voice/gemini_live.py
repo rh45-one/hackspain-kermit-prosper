@@ -57,9 +57,10 @@ from agent.voice.twilio import ProsperTwilioSerializer
 # which must not be a hard dependency of this module (the factory is
 # dependency-guarded and testable with fakes without it).
 try:
-    from pipecat.services.google.gemini_live.llm import GeminiModalities
+    from pipecat.services.google.gemini_live.llm import GeminiModalities, GeminiVADParams
 except ImportError:  # pragma: no cover - exercised when google-genai is absent
     GeminiModalities = None
+    GeminiVADParams = None
 
 # Pinned audio host (OpenSpec D2/D3). Never a thinking variant: this id
 # contains no "thinking" marker and the factory sets no thinking config.
@@ -142,6 +143,14 @@ class GeminiInputBridge(_AudioBridgeBase):
     :class:`InputAudioRawFrame` on any direction: 8 kHz wire frames are
     resampled up, frames already at 16 kHz pass through, anything else is
     counted and dropped.
+
+    Rate conversion and nothing else. It once carried a keep-alive that
+    manufactured silence, a watchdog that committed turns by force, and a
+    ladder of spoken nudges — all of it propping up Gemini's server-side
+    VAD. Turns are decided locally now, so none of that has anything left to
+    do, and the machinery had become the problem: the watchdog ended turns
+    while callers were still thinking, and a live call has the agent reading
+    "[Waiting for user response]" out loud.
     """
 
     def _convert(self, frame: Frame) -> Frame | None:
@@ -166,10 +175,7 @@ class GeminiInputBridge(_AudioBridgeBase):
         if await self._reset_on_interrupt(frame, direction):
             return
         converted = self._convert(frame)
-        if converted is not None:
-            await self.push_frame(converted, direction)
-        else:
-            await self.push_frame(frame, direction)
+        await self.push_frame(converted if converted is not None else frame, direction)
 
 
 class GeminiOutputBridge(_AudioBridgeBase):
@@ -231,6 +237,17 @@ def _gemini_voice_id(settings: Any) -> str:
     return str(getattr(settings, "gemini_voice_id", "") or "Charon")
 
 
+def _gemini_language(settings: Any) -> str:
+    """Resolve the Gemini speech language code, defaulting to Spanish.
+
+    pipecat leaves ``speech_config.language_code`` at ``en-US``; observed on a
+    real call, that drags a Spanish conversation into English one turn after
+    the greeting. The clinic is in Madrid, so the wire default is ``es-ES``
+    and the system prompt still governs switching to a caller's own language.
+    """
+    return str(getattr(settings, "gemini_language", "") or "es-ES")
+
+
 def create_gemini_live_service(
     settings: Any,
     toolbox: Any,
@@ -282,17 +299,43 @@ def create_gemini_live_service(
         return None
 
     # Settings pinned for the Prosper path: the exact model id (no
-    # extended-thinking variant), audio modality only, no thinking config,
-    # no VAD overrides — and one instance per socket, created by this call.
+    # extended-thinking variant), audio modality only, no thinking config
+    # — and one instance per socket, created by this call.
+    #
+    # Server-side VAD is OFF and the pipeline's own Silero decides the turns.
+    #
+    # Measured, this is worth about four seconds per exchange. Gemini's own
+    # endpointing takes ~5 s of silence to close a caller turn; local VAD
+    # closes it in under one. Over the ~24 exchanges these calls run, that is
+    # the difference between finishing inside the three-minute cap and being
+    # cut off mid-booking, which is how 15 of 20 calls died.
+    #
+    # It was tried once before and reverted, because a call lost the caller's
+    # "Hello." and sat silent — with server VAD off, pipecat only forwards
+    # audio while _user_is_speaking (llm.py:1746), so a missed onset buries
+    # the turn. That risk was real and is now measured rather than feared:
+    # Silero detects this telephony path at full volume, at -12 dB and at
+    # -22 dB, for a long sentence and for a bare "Hello.". See
+    # agent.voice.pipeline for the telephony VAD parameters that go with it.
+    #
+    vad_params = GeminiVADParams(disabled=True) if GeminiVADParams is not None else None
     service = service_cls(
         api_key=api_key,
         settings=service_cls.Settings(
             model=GEMINI_LIVE_MODEL,
             modalities=audio_modality,
             voice=_gemini_voice_id(settings),
+            language=_gemini_language(settings),
+            vad=vad_params,
         ),
         system_instruction=prompts.SYSTEM_PROMPT,
         tools=toolbox.tools(),
     )
-    logger.info("Gemini Live service created: model={} (per-socket instance)", GEMINI_LIVE_MODEL)
+    logger.info(
+        "Gemini Live service created: model={} language={} server_vad={} "
+        "(per-socket instance)",
+        GEMINI_LIVE_MODEL,
+        _gemini_language(settings),
+        "off (local VAD drives turns)" if vad_params is not None and vad_params.disabled else "on",
+    )
     return service

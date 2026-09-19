@@ -403,8 +403,16 @@ async def test_logs_never_contain_transcript_or_identifiers(caplog: pytest.LogCa
 
 
 def test_assess_exposes_no_model_supplied_transcript_argument():
+    """The content of an assessment is server-owned, always.
+
+    ``snapshot`` is built by the host from the CallContext; nothing the model
+    says may reach this method as an argument. Operational knobs the host sets
+    for itself — a per-call timeout — are allowed and listed explicitly here,
+    so adding one is a deliberate act and adding a content argument still
+    fails this test.
+    """
     params = set(inspect.signature(JevClient.assess).parameters)
-    assert params == {"self", "snapshot", "cancel"}
+    assert params == {"self", "snapshot", "cancel", "timeout_seconds"}
     assert not ({"transcript", "state", "text", "messages", "arguments"} & params)
 
 

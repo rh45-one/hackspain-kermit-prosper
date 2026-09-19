@@ -37,6 +37,13 @@ class CallContext:
     # Latest finalized caller utterance (server-owned; the only text Jev's
     # assess_current_turn is allowed to read). Written by add_transcript.
     latest_caller_turn: str | None = None
+    # Jev's typed reading of that turn, refreshed in the background as each
+    # caller turn finalises so the tools can quote it without paying for it.
+    latest_decision: dict[str, Any] | None = None
+    # Set by the ToolBox so every finalised caller turn is read by Jev in the
+    # background. A plain callable, not a coroutine: the context must not own
+    # a task or a sidecar, and add_transcript must never await anything.
+    _on_caller_turn: Any = None
 
     # Per-call registries: tokens handed to the LLM, real values kept here.
     slot_registry: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -111,6 +118,9 @@ class CallContext:
         if role == "caller":
             # Finalized caller text: the ONLY transcript Jev may ever see.
             self.latest_caller_turn = text
+            self.latest_decision = None  # the old reading describes an old turn
+            if self._on_caller_turn is not None:
+                self._on_caller_turn(text)
         self.audit("transcript", {"role": role, "text": text})
 
     # ---- registries ------------------------------------------------------
@@ -130,6 +140,10 @@ class CallContext:
                     "start_time": slot.get("start_time"),
                     "duration_minutes": slot.get("duration_minutes"),
                     "appointment_type_id": slot.get("appointment_type_id"),
+                    # Which plans actually pay for THIS slot. Without it the
+                    # billing plan is a guess, and the right slot billed
+                    # against the wrong plan fails the case outright.
+                    "payable_with": slot.get("payable_with") or [],
                 }
             )
         return labelled
