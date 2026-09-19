@@ -54,7 +54,7 @@ def test_the_brief_says_which_language_to_open_in(tmp_path):
     )
 
     assert "català, inglés, español" in prompt
-    assert "Open in that language" in prompt
+    assert "Abre en ese idioma" in prompt
 
 
 def test_a_colleague_we_cannot_place_leaves_the_language_unsaid(tmp_path):
