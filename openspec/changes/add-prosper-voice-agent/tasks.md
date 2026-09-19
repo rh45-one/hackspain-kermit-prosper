@@ -42,10 +42,17 @@ module; live-gate items stay unchecked.
 - [ ] 5.3 Problem 3 (doctor/site) + problem 4 (register) rehearsal — live harness
 - [ ] 5.4 Run All #1, read verdicts, fix fields — live harness
 
-## 6. Jury platform (worker C, later wave)
+## 6. Jury platform / FrontDesk (worker C)
 
-- [ ] 6.1 Ops console: live call timeline, transcripts, actions, costs — `ops/console.py` present and wired; no automated test yet
-- [ ] 6.2 ClinicReflow demo seam: "doctor unavailable" → affected list → negotiation call → plan delta — `voice/reflow.py` seam present; optimizer is out of scope here
+- [x] 6.1 FastAPI `/ops` HTML+JSON fallback over `data/calls/*.jsonl`
+- [x] 6.2 Next.js FrontDesk scaffold in `frontend/` (App Router, Tailwind, shadcn/ui, lucide, date-fns, Europe/Madrid)
+- [x] 6.3 Dashboard shell: sidebar (Calls, Calendar, Patients, Settings) + header (tunnel status, n/10 capacity)
+- [x] 6.4 `/calls` live monitor: 10-card grid, ≥2 mock concurrent calls, transcript, barge-in, live entities, handover
+- [x] 6.5 `/patients` directory: name + DNI/NIE filters (control letter), detail with history and derived triage
+- [x] 6.6 `/calendar` week/day view in Europe/Madrid with BOOKED / CANCELLED / REFUSED / DIVERTED colours
+- [x] 6.7 `/settings`: tunnel URL (`ws://`/`wss://` only), voice/prompt, knowledge-source uploads (CSV / SQL / API)
+- [ ] 6.8 ClinicReflow demo seam: "doctor unavailable" → affected list → negotiation call → plan delta
+- [x] 6.9 Observatory metrics on `/calls`: capacity ring, hourly load/submissions, closed outcome mix (mock-first)
 
 ## 7. Gemini Live audio host (new)
 

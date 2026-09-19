@@ -33,6 +33,10 @@ the Deepgram → OpenAI-compatible LLM → ElevenLabs cascade as rollback.
   seconds, exactly once, retrying idempotently and treating 409 as success.
 - Per-call structured audit and metrics (model, audio conversion, TTFT, tool
   calls, Jev latency/confidence/abstention, cost).
+- A Next.js FrontDesk in `frontend/` for clinic staff: live call monitor,
+  patient directory, Europe/Madrid calendar, and agent settings. Mock data
+  first; later the same shapes as `/ops/api/*` and `/api/v1/directory`.
+- Deployment runbook: ngrok static EU domain, backend `make run`, env template.
 
 ## Non-goals
 
@@ -48,7 +52,12 @@ the Deepgram → OpenAI-compatible LLM → ElevenLabs cascade as rollback.
 - Identifies callers, books/reschedules/cancels/registers, refuses with the closed vocabulary, escalates red flags — always submitting an action.
 - Handles 10+ concurrent sockets with zero shared conversation state.
 
+### frontdesk-ops-console
+- Staff dashboard in `frontend/`: up to 10 live call cards, patient search
+  (name + DNI/NIE), appointment calendar in Europe/Madrid, tunnel/voice
+  settings. FastAPI `/ops` stays the JSON/HTML fallback.
+
 ## Impact
 
 - Adds the Gemini/Jev path under backend/src/agent and backend/tests.
-- Planning reconciliation only; the deterministic core is untouched.
+- New `frontend/` Next.js App Router app (operator UI). Root README points at it.
