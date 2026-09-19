@@ -49,6 +49,14 @@ respeta las reglas de cobertura y **envía la acción exacta que espera la
 plataforma, campo por campo**. Un campo mal y el caso es incorrecto, igual
 que en el reto: no hay puntos parciales.
 
+**Un solo run no compara dos versiones del agente.** El agente no es
+determinista: dos ejecuciones idénticas del mismo código movieron **6 de 21
+escenarios, en las dos direcciones** (medido el 19 sep 2026). Si tocas el
+backend y pasas de 13 a 15 correctas, eso cabe entero dentro del ruido. Usa
+`repetitions: 3` o más, mira la **tabla de estabilidad** del informe, y basa
+las decisiones en los escenarios que salen *siempre incorrectos*: ésos son
+fallos de verdad. El total no es un número que se pueda leer.
+
 **Qué no mide**:
 - **No dice si vas a puntuar.** Los datos son un fixture inventado de 6
   pacientes y 7 médicos; la clínica real tiene ~3.000 y 12. Verde aquí es

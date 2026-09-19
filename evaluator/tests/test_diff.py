@@ -114,6 +114,19 @@ class TestFormat:
         assert "NUEVOS ACIERTOS" in text
         assert "fail -> pass" in text
 
+    def test_warns_that_a_flip_may_be_noise(self, tmp_path):
+        """A verdict flip is not evidence on its own: the agent is stochastic."""
+        a = _write_run(tmp_path, "c", [_case(verdict="fail")])
+        b = _write_run(tmp_path, "d", [_case(verdict="pass")])
+        text = format_diff(diff_runs(a, b))
+        assert "no es" in text and "determinista" in text
+        assert "estabilidad" in text
+
+    def test_no_warning_when_nothing_moved(self, tmp_path):
+        a = _write_run(tmp_path, "e", [_case(verdict="pass")])
+        b = _write_run(tmp_path, "f", [_case(verdict="pass")])
+        assert "determinista" not in format_diff(diff_runs(a, b))
+
     def test_missing_dir_raises(self, tmp_path):
         import pytest
 

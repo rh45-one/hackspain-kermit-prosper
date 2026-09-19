@@ -216,6 +216,70 @@ def _local_points(cases: list) -> tuple[float, float]:
     return round(points, 2), covered_max
 
 
+def _stability(cases: list, candidates: list[str]) -> tuple[str, str]:
+    """Per-scenario pass rate, and how wide the noise band is.
+
+    Two identical runs of the same agent moved six of 21 scenarios, in both
+    directions. A single verdict per scenario hides that: 1/3 and 3/3 are
+    not the same result and must not be printed the same. Returns
+    (headline, table); both empty when there is only one repetition.
+    """
+    by_case: dict[tuple[str, str], list] = defaultdict(list)
+    for c in cases:
+        if c["verdict"] != "invalid_evaluation":
+            by_case[(c["candidate"], c["scenario_id"])].append(c)
+    if not by_case or max(len(g) for g in by_case.values()) < 2:
+        return "", ""
+
+    scenarios = sorted({sid for _, sid in by_case})
+    rows = []
+    unstable_total = 0
+    for sid in scenarios:
+        cells = [f"<td><b>{_esc(sid)}</b></td>"]
+        for cand in candidates:
+            group = by_case.get((cand, sid), [])
+            if not group:
+                cells.append("<td>-</td>")
+                continue
+            passed = sum(1 for c in group if c["verdict"] == "pass")
+            n = len(group)
+            if passed == n:
+                cls, verdict = "pass", "siempre correcta"
+            elif passed == 0:
+                cls, verdict = "fail", "siempre incorrecta"
+            else:
+                cls, verdict = "warn", "<b>INESTABLE</b>"
+                unstable_total += 1
+            cells.append(
+                f'<td class="{cls}">{passed}/{n}<br>'
+                f"<span class='meta'>{verdict}</span></td>"
+            )
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+
+    total = len(scenarios) * max(1, len(candidates))
+    pct = round(100 * unstable_total / total) if total else 0
+    headline = (
+        f'<div class="banner"><b>Banda de ruido: {unstable_total} de {total} '
+        f"escenarios dan resultados distintos entre repeticiones ({pct}%).</b> "
+        "El agente no es determinista, así que <b>una sola ejecución no "
+        "compara dos versiones</b>: una diferencia menor que esa banda no es "
+        "una mejora ni un empeoramiento, es ruido. Lo que sí se puede leer "
+        "es la tasa por escenario, y sobre todo los que salen "
+        "<b>siempre incorrectos</b>: ésos son fallos de verdad."
+        "</div>"
+        if unstable_total
+        else '<p class="meta">Ningún escenario cambió de veredicto entre '
+        "repeticiones en esta ejecución.</p>"
+    )
+    header = "".join(f"<th>{_esc(c)}</th>" for c in candidates)
+    table = (
+        "<h2>Estabilidad por escenario</h2>"
+        f"{headline}"
+        f"<table><tr><th>escenario</th>{header}</tr>{''.join(rows)}</table>"
+    )
+    return headline, table
+
+
 def render_report(run_dir: str | Path) -> Path:
     run_dir = Path(run_dir)
     manifest = json.loads((run_dir / "manifest.json").read_text())
@@ -375,6 +439,8 @@ def render_report(run_dir: str | Path) -> Path:
         else ""
     )
 
+    _, stability_table = _stability(cases, candidates)
+
     page = f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <title>Evaluador local - {_esc(manifest['experiment'])}</title>
@@ -414,6 +480,10 @@ no cuenta ni a favor ni en contra.</li>
 <li><b>Puntos locales</b>: cada familia de problema pesa distinto. Es una
 estimación calculada aquí, con estos datos de mentira; no es la puntuación
 oficial.</li>
+<li><b>El agente no es determinista.</b> Dos ejecuciones idénticas del mismo
+código pueden dar veredictos distintos en el mismo escenario. Con
+<code>repetitions</code> mayor que 1 hay abajo una tabla de estabilidad: mira
+ésa antes de concluir que algo ha mejorado.</li>
 </ul>
 <h2>Resumen por configuración</h2>
 <table><tr><th>candidato</th><th>correctas / evaluables</th>
@@ -421,6 +491,7 @@ oficial.</li>
 <th>no evaluables</th><th>tiempo de respuesta p50/p95</th><th>coste</th></tr>
 {"".join(summary_rows)}
 </table>
+{stability_table}
 <h2>Pass rate por problema</h2>
 <table><tr><th>problema</th>{"".join(f"<th>{_esc(c)}</th>" for c in candidates)}</tr>
 {"".join(rows)}
