@@ -168,18 +168,23 @@ async def _catalogue() -> Any | None:
     if _WARM_TRIED:
         return None
     _WARM_TRIED = True
-    config = settings()
-    if not getattr(config, "prosper_api_key", ""):
-        return None
-    client = deps.try_clinic_client(config)
-    if client is None:
-        return None
+    client: Any | None = None
+    # Everything from here is inside the guard, the client construction
+    # included: `deps.try_clinic_client` calls the constructor outside its own
+    # try, so bad configuration raises out of it and would reach a reader whose
+    # whole job is to answer. A cold catalogue degrades to ids, never to a 500.
     try:
+        config = settings()
+        if not getattr(config, "prosper_api_key", ""):
+            return None
+        client = deps.try_clinic_client(config)
+        if client is None:
+            return None
         await deps.warm_shared_catalogue(client)
-    except Exception:  # noqa: BLE001 - a cold catalogue degrades to ids, never a 500
+    except Exception:  # noqa: BLE001
         return None
     finally:
-        close = getattr(client, "close", None)
+        close = getattr(client, "close", None) if client is not None else None
         if close is not None:
             await close()
     return cache if cache.warmed else None
@@ -275,6 +280,12 @@ def _narrate(event: str, data: dict[str, Any], cache: Any | None) -> str | None:
         slots = data.get("slots", 0)
         when = f' para "{asked}"' if asked else ""
         if slots == 0:
+            # WHY there was nothing, not just that there was nothing. "No hay
+            # hueco" and "su plan no cubre esa sede" are different answers, and
+            # the second is the one a person at the desk can act on.
+            rules = [_reason_es(r) for r in data.get("blocked") or []]
+            if rules:
+                return f"Buscó huecos{when} y no había ninguno libre: {_join_es(rules)}."
             return f"Buscó huecos{when} y no había ninguno libre."
         if slots == 1:
             return f"Buscó huecos{when}: 1 disponible."
