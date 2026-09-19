@@ -1,0 +1,57 @@
+t=2026-09-19T12:52:37+0200 lvl=info msg="command usage" msg="Flag --region has been deprecated, ngrok automatically chooses the region with lowest latency"
+t=2026-09-19T12:52:37+0200 lvl=info msg="no configuration paths supplied"
+t=2026-09-19T12:52:37+0200 lvl=info msg="using configuration at default config path" path="/Users/ginesmartinez/Library/Application Support/ngrok/ngrok.yml"
+t=2026-09-19T12:52:37+0200 lvl=info msg="open config file" path="/Users/ginesmartinez/Library/Application Support/ngrok/ngrok.yml" err=<nil>
+t=2026-09-19T12:52:37+0200 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-09-19T12:52:37+0200 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-09-19T12:52:37+0200 lvl=info msg="client session established" obj=tunnels.session
+t=2026-09-19T12:52:37+0200 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-09-19T12:52:37+0200 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:7860 url=https://retrain-hatching-stencil.ngrok-free.dev
+t=2026-09-19T12:52:45+0200 lvl=info msg=start pg=/api/tunnels id=92cad7b73186edb8
+t=2026-09-19T12:52:45+0200 lvl=info msg=end pg=/api/tunnels id=92cad7b73186edb8 status=200 dur=142.875µs
+t=2026-09-19T12:52:55+0200 lvl=info msg="join connections" obj=join id=843b969ecda2 l=127.0.0.1:7860 r=[2a0c:5a83:4d03:2200:f012:10c6:6802:4a21]:62474
+t=2026-09-19T12:52:55+0200 lvl=info msg="join connections" obj=join id=e1b3830b56d2 l=127.0.0.1:7860 r=[2a0c:5a83:4d03:2200:f012:10c6:6802:4a21]:62477
+t=2026-09-19T12:53:07+0200 lvl=info msg="join connections" obj=join id=cf7284931f7d l=127.0.0.1:7860 r=[2a0c:5a83:4d03:2200:f012:10c6:6802:4a21]:62514
+t=2026-09-19T13:04:15+0200 lvl=info msg=start pg=/api/requests/http id=c375a6eaf5c31612
+t=2026-09-19T13:04:15+0200 lvl=info msg=end pg=/api/requests/http id=c375a6eaf5c31612 status=200 dur=4.101541ms
+t=2026-09-19T13:23:44+0200 lvl=info msg="join connections" obj=join id=abe43821efd2 l=127.0.0.1:7860 r=52.19.228.98:64649
+t=2026-09-19T13:31:28+0200 lvl=info msg="join connections" obj=join id=75c489953c1f l=127.0.0.1:7860 r=52.19.228.98:41806
+t=2026-09-19T13:47:41+0200 lvl=info msg="join connections" obj=join id=ea043e8df23a l=127.0.0.1:7860 r=52.19.228.98:39692
+t=2026-09-19T13:47:42+0200 lvl=info msg="join connections" obj=join id=64cb50356652 l=127.0.0.1:7860 r=52.19.228.98:18424
+t=2026-09-19T13:47:44+0200 lvl=info msg="join connections" obj=join id=7484bccfbd56 l=127.0.0.1:7860 r=52.19.228.98:47540
+t=2026-09-19T13:49:01+0200 lvl=info msg="join connections" obj=join id=f4710fe608f0 l=127.0.0.1:7860 r=52.19.228.98:12850
+t=2026-09-19T13:50:08+0200 lvl=info msg="join connections" obj=join id=cbae1680e7e3 l=127.0.0.1:7860 r=52.19.228.98:40562
+t=2026-09-19T13:50:14+0200 lvl=info msg="join connections" obj=join id=d81229773b1c l=127.0.0.1:7860 r=52.19.228.98:11142
+t=2026-09-19T13:51:03+0200 lvl=info msg="join connections" obj=join id=952a1c8b9960 l=127.0.0.1:7860 r=52.19.228.98:5591
+t=2026-09-19T13:51:22+0200 lvl=info msg="join connections" obj=join id=1a6f40d8df24 l=127.0.0.1:7860 r=52.19.228.98:57721
+t=2026-09-19T13:51:43+0200 lvl=info msg="join connections" obj=join id=515698acf25a l=127.0.0.1:7860 r=52.19.228.98:37676
+t=2026-09-19T13:52:35+0200 lvl=info msg="join connections" obj=join id=71ca514fbcfd l=127.0.0.1:7860 r=52.19.228.98:29757
+t=2026-09-19T13:52:51+0200 lvl=info msg="join connections" obj=join id=20e9ae45e008 l=127.0.0.1:7860 r=52.19.228.98:4203
+t=2026-09-19T13:54:14+0200 lvl=info msg="join connections" obj=join id=b452d8f91d8a l=127.0.0.1:7860 r=52.19.228.98:32104
+t=2026-09-19T13:55:07+0200 lvl=info msg="join connections" obj=join id=daf8af7fd814 l=127.0.0.1:7860 r=52.19.228.98:48488
+t=2026-09-19T13:55:38+0200 lvl=info msg="join connections" obj=join id=39857343f06f l=127.0.0.1:7860 r=52.19.228.98:24378
+t=2026-09-19T13:56:46+0200 lvl=info msg="join connections" obj=join id=a56dd6da1f1e l=127.0.0.1:7860 r=52.19.228.98:49862
+t=2026-09-19T13:56:50+0200 lvl=info msg="join connections" obj=join id=91c254f87f6e l=127.0.0.1:7860 r=52.19.228.98:8745
+t=2026-09-19T13:57:48+0200 lvl=info msg="join connections" obj=join id=f77f1e9b0cd4 l=127.0.0.1:7860 r=52.19.228.98:42229
+t=2026-09-19T13:58:27+0200 lvl=info msg="join connections" obj=join id=ed45214b9650 l=127.0.0.1:7860 r=52.19.228.98:32706
+t=2026-09-19T13:58:33+0200 lvl=info msg="join connections" obj=join id=5b6b13817909 l=127.0.0.1:7860 r=52.19.228.98:18101
+t=2026-09-19T14:00:00+0200 lvl=info msg="join connections" obj=join id=855cce9a55a7 l=127.0.0.1:7860 r=52.19.228.98:50329
+t=2026-09-19T14:00:01+0200 lvl=info msg="join connections" obj=join id=95b340ef7983 l=127.0.0.1:7860 r=52.19.228.98:65205
+t=2026-09-19T14:00:31+0200 lvl=info msg="join connections" obj=join id=9237a290d3af l=127.0.0.1:7860 r=52.19.228.98:48305
+t=2026-09-19T14:01:38+0200 lvl=info msg="join connections" obj=join id=18d92c56a66d l=127.0.0.1:7860 r=52.19.228.98:33287
+t=2026-09-19T14:02:15+0200 lvl=info msg="join connections" obj=join id=5f5c593fc3b2 l=127.0.0.1:7860 r=52.19.228.98:25717
+t=2026-09-19T14:02:27+0200 lvl=info msg="join connections" obj=join id=c3f23f8b35e9 l=127.0.0.1:7860 r=52.19.228.98:17342
+t=2026-09-19T14:04:01+0200 lvl=info msg="join connections" obj=join id=3b61860b6739 l=127.0.0.1:7860 r=52.19.228.98:14968
+t=2026-09-19T14:04:08+0200 lvl=info msg="join connections" obj=join id=4c9c80011503 l=127.0.0.1:7860 r=52.19.228.98:50418
+t=2026-09-19T14:04:19+0200 lvl=info msg="join connections" obj=join id=4e4ef712870c l=127.0.0.1:7860 r=52.19.228.98:8137
+t=2026-09-19T14:05:25+0200 lvl=info msg="join connections" obj=join id=717dff307e5f l=127.0.0.1:7860 r=52.19.228.98:1045
+t=2026-09-19T14:05:39+0200 lvl=info msg="join connections" obj=join id=85d23f973254 l=127.0.0.1:7860 r=52.19.228.98:18836
+t=2026-09-19T14:06:13+0200 lvl=info msg="join connections" obj=join id=8d1b1cf9de97 l=127.0.0.1:7860 r=52.19.228.98:44171
+t=2026-09-19T14:07:22+0200 lvl=info msg="join connections" obj=join id=964cb49d6d54 l=127.0.0.1:7860 r=52.19.228.98:7116
+t=2026-09-19T14:07:26+0200 lvl=info msg="join connections" obj=join id=2d5687f54301 l=127.0.0.1:7860 r=52.19.228.98:29439
+t=2026-09-19T14:08:58+0200 lvl=info msg="join connections" obj=join id=c7fb98b74897 l=127.0.0.1:7860 r=52.19.228.98:16609
+t=2026-09-19T14:09:21+0200 lvl=info msg="join connections" obj=join id=4c8186a21f89 l=127.0.0.1:7860 r=52.19.228.98:15745
+t=2026-09-19T14:09:49+0200 lvl=info msg="join connections" obj=join id=188bbd90f230 l=127.0.0.1:7860 r=52.19.228.98:39120
+t=2026-09-19T14:13:39+0200 lvl=info msg="join connections" obj=join id=b62169360fab l=127.0.0.1:7860 r=[2a0c:5a83:4d03:2200:f012:10c6:6802:4a21]:59860
+t=2026-09-19T14:13:56+0200 lvl=info msg=start pg=/api/tunnels id=6dc2e614e34f2b89
+t=2026-09-19T14:13:56+0200 lvl=info msg=end pg=/api/tunnels id=6dc2e614e34f2b89 status=200 dur=62.834µs

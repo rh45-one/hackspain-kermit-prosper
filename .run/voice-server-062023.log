@@ -1,0 +1,11 @@
+2026-09-19 06:16:42.843 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.12.14 (main, Sep  1 2026, 14:09:38) [Clang 22.1.3 ]) ᓚᘏᗢ
+INFO:     Started server process [4933]
+INFO:     Waiting for application startup.
+2026-09-19 06:16:43.558 | INFO     | __main__:lifespan:38 - clinic catalogue warmed: 12 providers
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:7860 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55563 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4933]

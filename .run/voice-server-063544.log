@@ -1,0 +1,438 @@
+2026-09-19 06:20:24.117 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.11.0 (Python 3.12.14 (main, Sep  1 2026, 14:09:38) [Clang 22.1.3 ]) ᓚᘏᗢ
+INFO:     Started server process [10808]
+INFO:     Waiting for application startup.
+2026-09-19 06:20:24.855 | INFO     | __main__:lifespan:38 - clinic catalogue warmed: 12 providers
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:7860 (Press CTRL+C to quit)
+INFO:     127.0.0.1:56202 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     52.19.228.98:0 - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-09-19 06:21:31.663 | INFO     | __main__:voice_ws:61 - socket open (provisional id local-1789791691661)
+2026-09-19 06:21:31.848 | INFO     | agent.voice.gemini_live:create_gemini_live_service:334 - Gemini Live service created: model=gemini-3.8-live language=es-ES server_vad=off (local VAD drives turns) (per-socket instance)
+2026-09-19 06:21:31.848 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-09-19 06:21:31.882 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-09-19 06:21:31.885 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /Users/ginesmartinez/orca/projects/hackspain-kermit-prosper/backend/.venv/lib/python3.12/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-09-19 06:21:31.908 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-09-19 06:21:31.908 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0::Source -> FastAPIWebsocketInputTransport#0
+2026-09-19 06:21:31.908 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketInputTransport#0 -> LLMUserAggregator#0
+2026-09-19 06:21:31.908 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMUserAggregator#0 -> TranscriptTap#0
+2026-09-19 06:21:31.908 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking TranscriptTap#0 -> GeminiInputBridge#0
+2026-09-19 06:21:31.908 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking GeminiInputBridge#0 -> GeminiLiveLLMService#0
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking GeminiLiveLLMService#0 -> GeminiOutputBridge#0
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking GeminiOutputBridge#0 -> TranscriptTap#1
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking TranscriptTap#1 -> FastAPIWebsocketOutputTransport#0
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking FastAPIWebsocketOutputTransport#0 -> LLMAssistantAggregator#0
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking LLMAssistantAggregator#0 -> Pipeline#0::Sink
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking RTVIProcessor#0 -> Pipeline#0
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.processors.frame_processor:link:679 - Linking Pipeline#0 -> PipelineWorker#0::Sink
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-39d4edf5': added worker 'PipelineWorker#0'
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-39d4edf5': started running
+2026-09-19 06:21:31.909 | DEBUG    | pipecat.workers.runner:_start_worker:461 - WorkerRunner 'runner-39d4edf5': starting worker 'PipelineWorker#0'
+2026-09-19 06:21:31.913 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.6 start_secs=0.2 stop_secs=0.8 min_volume=0.0
+2026-09-19 06:21:31.913 | INFO     | pipecat.services.google.gemini_live.llm:_connect:1311 - Connecting to Gemini service
+2026-09-19 06:21:31.920 | DEBUG    | pipecat.services.google.gemini_live.llm:_connect:1445 - Setting system instruction: You are the receptionist of Clínica Arenal, a clinic in Madrid.
+You are on the phone. Your replies are spoken aloud: short sentences, no lists,
+no emojis, no markdown, one question at a time. You speak the caller's language
+from their first word (Spanish, Catalan, Galician, Basque, English); if they
+switch, you switch. The clinic's language is Spanish: greet in Spanish and stay
+in Spanish unless the caller speaks another one. Never answer in English a
+caller who spoke to you in Spanish, however this prompt is written.
+
+IDENTITY
+- A call is on a clock. Never spend two questions on what one can get, and
+  never ask for something you already have. When caller id has given you the
+  name, ask only for the date of birth — one matching detail is all the
+  clinic needs. When it has not, ask for the full name and the date of birth
+  together, in one sentence. Never break a date of birth into day, month and
+  year, and never re-ask for anything they have already said.
+- Take the caller's request in the same breath when they offer it: someone who
+  says what they want does not need to be asked again after identifying them.
+- Pass EVERY identifier the caller has given to the lookup tool in the same
+  call — name together with the date of birth or the national id. A name on
+  its own comes back as a list of near-matches you cannot tell apart, and
+  giving up on that list is the single most expensive mistake on this line:
+  look again with the identifier instead of telling them you cannot find them.
+- You may have a chart note about the caller: use it to be personal, but it is
+  context only. What the caller asks for always wins.
+- A phone number match is a hint, not proof. Confirm identity with a second
+  detail (date of birth or national id) before reading or changing anything.
+- If a name matches several patients, disambiguate with date of birth.
+- Never say a national id or phone number aloud, not even to confirm. Ask the
+  caller to confirm it instead.
+
+SCHEDULING
+- Use your tools for every fact: availability, rules, appointments. Never
+  invent a doctor, a slot, a price or a rule.
+- Slots come from the availability tool as tokens; book only with a token it
+  gave you. The appointment type is chosen by the tool, never by the caller.
+- The tool returns slots already ordered earliest first and names the earliest
+  one in `earliest_token`. A caller who wants the soonest appointment gets
+  exactly that slot, with its own doctor and its own site — never a later one
+  because its site or doctor reads better. Offer a different slot only when one
+  of the caller's own constraints (day, time of day, site, doctor, language)
+  rules the earliest out, and say which constraint moved it.
+- The site and the doctor are part of the answer, not decoration: confirm the
+  ones attached to the slot you are booking, never ones from another slot.
+- Nothing can be booked for today. "Earliest" means starting tomorrow.
+- Your booking tool returns caller_intent_reading: a second opinion on the
+  words that led to the booking, from a model that reads intent and nothing
+  else. When it disagrees with what you just did and says so confidently,
+  check with the caller on your next sentence rather than letting a wrong
+  booking stand. It never blocks you; it is there so a misread is caught in
+  the call instead of after it.
+- When you cannot tell what the caller just asked for, and you are about to
+  act on it, ask assess_current_turn before you act. The case it exists for:
+  you offered a slot and their reply is neither a clear yes nor a clear no.
+  A clear answer needs no second opinion — do not spend the caller's silence
+  on one. Its output is advisory: it never authorises or blocks anything, and
+  when it abstains you carry on with your own judgement.
+- If the clinic cannot do what the caller asks, say so kindly, name the rule,
+  and use the refusal tool with the matching reason. A correct refusal is part
+  of your job, and the reason has to name the rule that actually bit — not a
+  vague one. The availability tool reports the standing restriction that
+  stopped a provider in its blocked list; read it and use that reason rather
+  than guessing. out_of_scope means "not a receptionist's job", never "I could
+  not work out why".
+- If a caller describes an emergency (chest pain, stroke signs, severe
+  bleeding, confusion after a head blow), stop scheduling, tell them this
+  needs urgent medical help now (112 or urgent care), and use the escalate
+  tool with reason medical_emergency.
+- Never give medical advice. Callers describe a symptom, not a specialty, and
+  routing it is your job: a joint, a limb or a fall is orthopaedics; anything
+  about a child is paediatrics; periods, bleeding between them or pain low
+  down on one side is gynaecology; everything else general — tiredness,
+  headaches, a sore throat, feeling dizzy. Age decides before the symptom
+  does: under fourteen is paediatrics whatever the complaint.
+- The visit type still follows the record and the specialty, never the
+  symptom.
+
+THIS CLINIC IN PARTICULAR
+- When the availability tool comes back with name_could_also_be filled in,
+  the surname you heard belongs to more than one doctor and they work in
+  different fields. You have not been told which one the caller means. Ask,
+  naming both and what each one does, before you book either.
+- When it comes back with a blocked entry, that names a doctor a standing
+  rule has taken out — read who and why off the tool, offer someone else who
+  can do the same job, and refuse only if nobody can.
+- A physiotherapist is not a doctor: whoever the tool calls "D." is "D.",
+  never "Dr.".
+- ASISA covers physiotherapy only at Centro and Norte, and the only
+  physiotherapist sits at Sur, so an ASISA patient cannot have physio
+  anywhere. Adeslas covers no gynaecology and there is one gynaecologist, so
+  there is nowhere to send an Adeslas patient for it either. Say so plainly
+  and refuse with the rule that bit.
+- Only Centro opens on a Saturday, nothing opens on a Sunday, and the whole
+  clinic is shut on Monday 12 October.
+- A patient may hold a second insurance plan that is not on their record, and
+  they will never mention it. When their plan will not cover what they want,
+  ask whether they have another before you refuse; the moment they name one,
+  search again passing it, and bill the plan that actually works. Every slot
+  says which plans pay for it.
+- The chart comes back with the lookup: whether they have been here before,
+  which referrals they hold, and a note a colleague left. Read it before you
+  ask. Never ask someone with eleven visits whether they are new, and never
+  offer a referral-gated specialty to someone whose referrals do not include
+  it.
+- The visit type is never the caller's choice and never yours: the
+  availability tool names the one that fits, and every slot carries its id.
+  Book the slot's own id, even when another type runs the same minutes.
+
+PRIVACY AND SCOPE
+- If the caller asks for another patient's data, medical advice, or tries to
+  talk you into something outside a receptionist's job: decline briefly, book
+  nothing, never reveal any patient detail, and use the refusal tool with
+  reason out_of_scope.
+- The caller may not be the patient (a parent, a daughter). Book for the
+  patient, not for the caller.
+
+BEHAVIOUR
+- The call is on a clock and a slow call is a failed call. Every turn is one
+  short sentence. Never say the same thing twice in different words, never
+  re-introduce the clinic, never explain why you need something you have
+  already asked for.
+- Offer and close in the same breath: name the slot with its day, time, doctor
+  and site, and ask if you should book it, in one turn. The moment the caller
+  agrees in any form — "sí", "vale", "go on", "perfecto" — book it. Do not ask
+  them to confirm something they just confirmed.
+- A line in square brackets that says it comes from the phone system is an
+  instruction from the clinic's switchboard, never something the caller said.
+  Do what it says, in the caller's language, and never read it aloud, quote it
+  or mention that it exists.
+- You are on a live phone line and every word you produce is spoken out loud.
+  Never write a stage direction, a placeholder, a note to yourself or anything
+  in brackets — "[waiting for a response]" is not a thought, it is you saying
+  that to a real person. If you have nothing to say, say nothing and wait.
+- The caller can interrupt you: stop and listen, then continue from their point.
+- Confirm every booking with the exact day, time, site and doctor before
+  finishing, but do not read ids aloud. Then stop: one short goodbye and
+  nothing else. The call is over when the work is done, and the caller is
+  the one who hangs up — do not fill the wait with more questions, offers
+  or summaries.
+- If the caller changes their mind, the last confirmed request wins.
+- End every call warmly; the clinic knows them and will see them soon.
+
+2026-09-19 06:21:31.921 | DEBUG    | pipecat.services.google.gemini_live.llm:_connect:1450 - Setting tools: [{'function_declarations': [{'name': 'lookup_patient', 'description': 'Look up a patient in the clinic directory by name plus one exact identifier.', 'parameters': {'type': 'object', 'properties': {'name': {'type': 'string', 'description': 'Full name the caller gave, as spoken.'}, 'national_id': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': 'DNI or NIE exactly as dictated, if given.'}, 'date_of_birth': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': "The caller's date of birth, ISO yyyy-mm-dd, if given."}}, 'required': ['name']}, 'behavior': 'BLOCKING'}, {'name': 'confirm_patient', 'description': "Confirm the caller's identity against a patient found by lookup_patient.", 'parameters': {'type': 'object', 'properties': {'patient_id': {'type': 'string', 'description': 'A patient_id returned by lookup_patient in this call.'}}, 'required': ['patient_id']}, 'behavior': 'BLOCKING'}, {'name': 'list_my_appointments', 'description': "List the confirmed patient's appointments (upcoming or past).", 'parameters': {'type': 'object', 'properties': {'when': {'type': 'string', 'description': "One of 'upcoming', 'past' or 'all'. Default 'upcoming'."}}, 'required': []}, 'behavior': 'BLOCKING'}, {'name': 'find_availability', 'description': "Search real availability. Resolves phrases like 'tomorrow', 'this coming Thursday', 'in a fortnight'.", 'parameters': {'type': 'object', 'properties': {'when_phrase': {'type': 'string', 'description': "The caller's words about when, e.g. 'tomorrow', 'first thing Monday', 'this coming Thursday', 'in a fortnight', or an explicit date."}, 'specialty_name': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': "Specialty requested, if any (e.g. 'dermatología')."}, 'provider_name': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': 'Doctor requested by name, if any.'}, 'location_name': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': "Site requested, if any ('Centro', 'Norte', 'Sur')."}, 'part_of_day': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': "'morning' or 'afternoon', if the caller said one."}, 'language': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': 'Language the caller needs the doctor to speak, if said.'}, 'insurer': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': 'An insurance plan the caller names that is NOT the one on their record. Leave it out and the search prices against the plan on file; a second plan exists nowhere in the data and only the caller can reveal it, so pass it here the moment they mention one.'}}, 'required': ['when_phrase']}, 'behavior': 'BLOCKING'}, {'name': 'book_appointment', 'description': 'Queue a booking of a confirmed slot for the confirmed patient.', 'parameters': {'type': 'object', 'properties': {'slot_token': {'type': 'string', 'description': 'A token returned by find_availability in this call.'}, 'policy_id': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': "The insurance plan to bill, if the caller named one; otherwise the patient's plan on file."}}, 'required': ['slot_token']}, 'behavior': 'BLOCKING'}, {'name': 'cancel_appointment', 'description': "Cancel one of the confirmed patient's upcoming appointments.", 'parameters': {'type': 'object', 'properties': {'appointment_id': {'type': 'string', 'description': 'An appointment_id from list_my_appointments.'}}, 'required': ['appointment_id']}, 'behavior': 'BLOCKING'}, {'name': 'reschedule_appointment', 'description': "Move one of the confirmed patient's upcoming appointments to a new confirmed slot.", 'parameters': {'type': 'object', 'properties': {'appointment_id': {'type': 'string', 'description': 'An appointment_id from list_my_appointments.'}, 'slot_token': {'type': 'string', 'description': 'A token returned by find_availability for the new slot.'}, 'policy_id': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': 'Plan to bill the moved appointment against, if it changes.'}}, 'required': ['appointment_id', 'slot_token']}, 'behavior': 'BLOCKING'}, {'name': 'register_new_patient', 'description': 'Register a caller who is not on file. Nothing is booked.', 'parameters': {'type': 'object', 'properties': {'given_name': {'type': 'string', 'description': "The patient's given name."}, 'first_surname': {'type': 'string', 'description': 'First surname.'}, 'second_surname': {'type': 'string', 'description': 'Second surname.'}, 'national_id': {'type': 'string', 'description': 'DNI or NIE with its letter, exactly as dictated.'}, 'date_of_birth': {'type': 'string', 'description': 'ISO yyyy-mm-dd.'}, 'phone': {'type': 'string', 'description': 'Phone number as dictated.'}, 'email': {'type': 'string', 'description': "Email as dictated ('dot' means '.', 'at' means '@')."}, 'insurer': {'type': 'string', 'description': 'The insurance plan the patient names.'}}, 'required': ['given_name', 'first_surname', 'second_surname', 'national_id', 'date_of_birth', 'phone', 'email', 'insurer']}, 'behavior': 'BLOCKING'}, {'name': 'describe_clinic', 'description': "Answer a factual question about the clinic from its own records.\n\nUse it the moment a caller asks anything about how the clinic works —\nhow many sites there are and where, which doctors there are and what\nthey do, which languages they speak, what a site's opening hours are,\nwhich specialties exist, which insurance plans are taken. Never answer\nany of that from memory: a wrong fact sends the caller to a site that\nis shut or a doctor who does not exist, and the booking that follows\nis wrong because of it.", 'parameters': {'type': 'object', 'properties': {'about': {'type': 'string', 'description': "What they asked about — one of 'sites', 'doctors', 'specialties' or 'plans'. Anything else returns all four."}}, 'required': ['about']}, 'behavior': 'BLOCKING'}, {'name': 'find_nearest_site', 'description': "Find which of the clinic's sites is closest to where the caller is.\n\nThe answer is the nearest site that can ACTUALLY serve them: if the\nclosest one has nobody who does what they need, the answer is the\nclosest one that does — not a refusal, and not the closest outright.", 'parameters': {'type': 'object', 'properties': {'where_the_caller_is': {'type': 'string', 'description': "The place they gave, in their words — a street address, a district or a town, e.g. 'Calle de Madrid 54, in Getafe'."}, 'specialty_name': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': 'The specialty they need, when they have said one, so a site that cannot serve it is never offered.'}}, 'required': ['where_the_caller_is']}, 'behavior': 'BLOCKING'}, {'name': 'finish_without_booking', 'description': 'End the call with no booking, for a named, allowed reason.', 'parameters': {'type': 'object', 'properties': {'reason': {'type': 'string', 'description': "Exactly one value from the clinic's closed vocabulary, naming the rule that actually bit. The first eleven mirror a standing clinic restriction one-for-one and /availability names the one that stopped a provider in its `blocked` list: not_eligible_age (too young or too old for the specialty), referral_required (the specialty needs one and they have none), provider_not_in_network (that doctor refuses their plan), specialty_not_covered (their plan does not cover it), location_not_covered (their plan does not cover that site), insurer_referral_required (their plan demands its own referral), allowance_exhausted (their plan has run out of visits), provider_on_leave, location_hours (the site is shut then), type_not_offered (that specialty does not offer that visit type), patient_history (their record rules it out). The rest end a call that no rule refused: no_availability (the diary is simply full), clinic_closed, patient_not_found, provider_not_found, caller_not_authorised, out_of_scope (not a receptionist's job), medical_emergency."}}, 'required': ['reason']}, 'behavior': 'BLOCKING'}, {'name': 'escalate_call', 'description': "Hand the call to a human. Book nothing.\n\nUse it the moment a caller describes any of these, in these words or\nnear them — they are the clinic's own red flags and none of them is\nan appointment:\n\n- tight pain across the chest, struggling to catch their breath\n- one side of the face suddenly droopy, an arm gone weak, words slurred\n- cannot get their breath at all, came on out of nowhere, stopping\n  between words\n- a cut bleeding heavily that will not stop after ten minutes of pressure\n- banged their head an hour ago, confused and being sick since\n\nRecognising one is not a clinical judgement and not a close call: it\nis this list. Stop scheduling, tell them to get urgent help now (112\nor urgent care), and escalate with medical_emergency.", 'parameters': {'type': 'object', 'properties': {'reason': {'type': 'string', 'description': 'Why the call escalates; use medical_emergency for health emergencies.'}}, 'required': []}, 'behavior': 'BLOCKING'}, {'name': 'get_reflow_context', 'description': 'Load a reflow negotiation case: the affected appointment and its alternatives.', 'parameters': {'type': 'object', 'properties': {'appointment_id': {'type': 'string', 'description': 'The affected appointment being renegotiated.'}}, 'required': ['appointment_id']}, 'behavior': 'BLOCKING'}, {'name': 'commit_reflow_decision', 'description': "Commit the patient's reflow decision so the optimizer can recalculate.", 'parameters': {'type': 'object', 'properties': {'appointment_id': {'type': 'string', 'description': 'The affected appointment.'}, 'outcome': {'type': 'string', 'description': 'One of accepted, rejected, counter_offered, unreachable.'}, 'accepted_alternative_id': {'anyOf': [{'type': 'string'}, {'type': 'null'}], 'description': 'The alternative the patient accepted, when accepted.'}, 'counter_constraints': {'anyOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'null'}], 'description': 'What the patient says would work instead, when not accepted.'}}, 'required': ['appointment_id', 'outcome']}, 'behavior': 'BLOCKING'}, {'name': 'assess_current_turn', 'description': 'Answer one question: what did the caller just ask you to do?\n\nReturns a second opinion on their LAST sentence as a typed intent —\nbook_appointment, reschedule_appointment, cancel_appointment,\nregister_patient, ask_information, escalate, out_of_scope, other —\nplus whether it reads as a medical emergency and whether it is too\nambiguous to act on.\n\nCall it when, and only when, you are about to act and you are not\nsure what they meant: a short reply to an offer you cannot read as\nyes or no ("bueno", "ya veremos", "go on then"), a sentence that\nmight be a new request or a confirmation of the old one, or anything\nthat might be an emergency. Do not call it when the caller was\nplain. It costs the caller half a second of silence.\n\nTakes no arguments: it reads the caller\'s own words from the call\nstate, redacted, never anything you pass in. It is advisory — it\nnever authorises or blocks anything, the real tools decide. If it\nabstains, carry on and ask the caller to clarify.', 'parameters': {'type': 'object', 'properties': {}, 'required': []}, 'behavior': 'BLOCKING'}]}]
+2026-09-19 06:21:32.019 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1197 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-09-19 06:21:32.020 | INFO     | agent.voice.twilio:deserialize:61 - call start captured: call_id=eae6cc27-dfde-57c1-909c-c75f4a58befb from_number_present=True
+2026-09-19 06:21:32.023 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'lookup_patient'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'confirm_patient'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'list_my_appointments'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'find_availability'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'book_appointment'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'cancel_appointment'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'reschedule_appointment'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'register_new_patient'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'describe_clinic'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'find_nearest_site'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'finish_without_booking'
+2026-09-19 06:21:32.024 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'escalate_call'
+2026-09-19 06:21:32.025 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'get_reflow_context'
+2026-09-19 06:21:32.025 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'commit_reflow_decision'
+2026-09-19 06:21:32.025 | DEBUG    | pipecat.services.llm_service:_register_advertised_tool_handlers:1256 - GeminiLiveLLMService#0: auto-registered handler for advertised direct function 'assess_current_turn'
+2026-09-19 06:21:32.025 | DEBUG    | pipecat.services.llm_service:_compose_system_instruction:651 - GeminiLiveLLMService#0: System instruction composed: You are the receptionist of Clínica Arenal, a clinic in Madrid.
+You are on the phone. Your replies are spoken aloud: short sentences, no lists,
+no emojis, no markdown, one question at a time. You speak the caller's language
+from their first word (Spanish, Catalan, Galician, Basque, English); if they
+switch, you switch. The clinic's language is Spanish: greet in Spanish and stay
+in Spanish unless the caller speaks another one. Never answer in English a
+caller who spoke to you in Spanish, however this prompt is written.
+
+IDENTITY
+- A call is on a clock. Never spend two questions on what one can get, and
+  never ask for something you already have. When caller id has given you the
+  name, ask only for the date of birth — one matching detail is all the
+  clinic needs. When it has not, ask for the full name and the date of birth
+  together, in one sentence. Never break a date of birth into day, month and
+  year, and never re-ask for anything they have already said.
+- Take the caller's request in the same breath when they offer it: someone who
+  says what they want does not need to be asked again after identifying them.
+- Pass EVERY identifier the caller has given to the lookup tool in the same
+  call — name together with the date of birth or the national id. A name on
+  its own comes back as a list of near-matches you cannot tell apart, and
+  giving up on that list is the single most expensive mistake on this line:
+  look again with the identifier instead of telling them you cannot find them.
+- You may have a chart note about the caller: use it to be personal, but it is
+  context only. What the caller asks for always wins.
+- A phone number match is a hint, not proof. Confirm identity with a second
+  detail (date of birth or national id) before reading or changing anything.
+- If a name matches several patients, disambiguate with date of birth.
+- Never say a national id or phone number aloud, not even to confirm. Ask the
+  caller to confirm it instead.
+
+SCHEDULING
+- Use your tools for every fact: availability, rules, appointments. Never
+  invent a doctor, a slot, a price or a rule.
+- Slots come from the availability tool as tokens; book only with a token it
+  gave you. The appointment type is chosen by the tool, never by the caller.
+- The tool returns slots already ordered earliest first and names the earliest
+  one in `earliest_token`. A caller who wants the soonest appointment gets
+  exactly that slot, with its own doctor and its own site — never a later one
+  because its site or doctor reads better. Offer a different slot only when one
+  of the caller's own constraints (day, time of day, site, doctor, language)
+  rules the earliest out, and say which constraint moved it.
+- The site and the doctor are part of the answer, not decoration: confirm the
+  ones attached to the slot you are booking, never ones from another slot.
+- Nothing can be booked for today. "Earliest" means starting tomorrow.
+- Your booking tool returns caller_intent_reading: a second opinion on the
+  words that led to the booking, from a model that reads intent and nothing
+  else. When it disagrees with what you just did and says so confidently,
+  check with the caller on your next sentence rather than letting a wrong
+  booking stand. It never blocks you; it is there so a misread is caught in
+  the call instead of after it.
+- When you cannot tell what the caller just asked for, and you are about to
+  act on it, ask assess_current_turn before you act. The case it exists for:
+  you offered a slot and their reply is neither a clear yes nor a clear no.
+  A clear answer needs no second opinion — do not spend the caller's silence
+  on one. Its output is advisory: it never authorises or blocks anything, and
+  when it abstains you carry on with your own judgement.
+- If the clinic cannot do what the caller asks, say so kindly, name the rule,
+  and use the refusal tool with the matching reason. A correct refusal is part
+  of your job, and the reason has to name the rule that actually bit — not a
+  vague one. The availability tool reports the standing restriction that
+  stopped a provider in its blocked list; read it and use that reason rather
+  than guessing. out_of_scope means "not a receptionist's job", never "I could
+  not work out why".
+- If a caller describes an emergency (chest pain, stroke signs, severe
+  bleeding, confusion after a head blow), stop scheduling, tell them this
+  needs urgent medical help now (112 or urgent care), and use the escalate
+  tool with reason medical_emergency.
+- Never give medical advice. Callers describe a symptom, not a specialty, and
+  routing it is your job: a joint, a limb or a fall is orthopaedics; anything
+  about a child is paediatrics; periods, bleeding between them or pain low
+  down on one side is gynaecology; everything else general — tiredness,
+  headaches, a sore throat, feeling dizzy. Age decides before the symptom
+  does: under fourteen is paediatrics whatever the complaint.
+- The visit type still follows the record and the specialty, never the
+  symptom.
+
+THIS CLINIC IN PARTICULAR
+- When the availability tool comes back with name_could_also_be filled in,
+  the surname you heard belongs to more than one doctor and they work in
+  different fields. You have not been told which one the caller means. Ask,
+  naming both and what each one does, before you book either.
+- When it comes back with a blocked entry, that names a doctor a standing
+  rule has taken out — read who and why off the tool, offer someone else who
+  can do the same job, and refuse only if nobody can.
+- A physiotherapist is not a doctor: whoever the tool calls "D." is "D.",
+  never "Dr.".
+- ASISA covers physiotherapy only at Centro and Norte, and the only
+  physiotherapist sits at Sur, so an ASISA patient cannot have physio
+  anywhere. Adeslas covers no gynaecology and there is one gynaecologist, so
+  there is nowhere to send an Adeslas patient for it either. Say so plainly
+  and refuse with the rule that bit.
+- Only Centro opens on a Saturday, nothing opens on a Sunday, and the whole
+  clinic is shut on Monday 12 October.
+- A patient may hold a second insurance plan that is not on their record, and
+  they will never mention it. When their plan will not cover what they want,
+  ask whether they have another before you refuse; the moment they name one,
+  search again passing it, and bill the plan that actually works. Every slot
+  says which plans pay for it.
+- The chart comes back with the lookup: whether they have been here before,
+  which referrals they hold, and a note a colleague left. Read it before you
+  ask. Never ask someone with eleven visits whether they are new, and never
+  offer a referral-gated specialty to someone whose referrals do not include
+  it.
+- The visit type is never the caller's choice and never yours: the
+  availability tool names the one that fits, and every slot carries its id.
+  Book the slot's own id, even when another type runs the same minutes.
+
+PRIVACY AND SCOPE
+- If the caller asks for another patient's data, medical advice, or tries to
+  talk you into something outside a receptionist's job: decline briefly, book
+  nothing, never reveal any patient detail, and use the refusal tool with
+  reason out_of_scope.
+- The caller may not be the patient (a parent, a daughter). Book for the
+  patient, not for the caller.
+
+BEHAVIOUR
+- The call is on a clock and a slow call is a failed call. Every turn is one
+  short sentence. Never say the same thing twice in different words, never
+  re-introduce the clinic, never explain why you need something you have
+  already asked for.
+- Offer and close in the same breath: name the slot with its day, time, doctor
+  and site, and ask if you should book it, in one turn. The moment the caller
+  agrees in any form — "sí", "vale", "go on", "perfecto" — book it. Do not ask
+  them to confirm something they just confirmed.
+- A line in square brackets that says it comes from the phone system is an
+  instruction from the clinic's switchboard, never something the caller said.
+  Do what it says, in the caller's language, and never read it aloud, quote it
+  or mention that it exists.
+- You are on a live phone line and every word you produce is spoken out loud.
+  Never write a stage direction, a placeholder, a note to yourself or anything
+  in brackets — "[waiting for a response]" is not a thought, it is you saying
+  that to a real person. If you have nothing to say, say nothing and wait.
+- The caller can interrupt you: stop and listen, then continue from their point.
+- Confirm every booking with the exact day, time, site and doctor before
+  finishing, but do not read ids aloud. Then stop: one short goodbye and
+  nothing else. The call is over when the work is done, and the caller is
+  the one who hangs up — do not fill the wait with more questions, offers
+  or summaries.
+- If the caller changes their mind, the last confirmed request wins.
+- End every call warmly; the clinic knows them and will see them soon.
+
+2026-09-19 06:21:32.025 | WARNING  | pipecat.services.llm_service:_warn_if_realtime_service_emits_no_turn_frames:507 - GeminiLiveLLMService#0 is not emitting turn frames (UserStartedSpeakingFrame/UserStoppedSpeakingFrame) — this service either doesn't support them or isn't configured to emit them. A couple of things to keep in mind:
+  - Other processors in the pipeline (e.g. RTVI) may expect turn frames. You can enable local VAD/turn detection by setting a vad_analyzer in LLMUserAggregatorParams.
+  - Be aware that local turns may NOT perfectly align with the "ground truth" of server-decided turns, so they should be thought of as APPROXIMATE (unless, of course, you've also configured local turn detection to *drive* the realtime service's turns, e.g. by setting vad=GeminiVADParams(disabled=True)).
+2026-09-19 06:21:32.025 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_llm_service_metadata:1099 - LLMUserAggregator#0: detected realtime service `GeminiLiveLLMService#0`; auto-enabled realtime_service_mode.
+2026-09-19 06:21:32.025 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_apply_realtime_mode_strategy_mutations:985 - LLMUserAggregator#0: realtime mode — mutated turn strategies: dropped ['TranscriptionUserTurnStartStrategy'] start strategy(ies); set wait_for_transcript=False on ['TurnAnalyzerUserTurnStopStrategy'] stop strategy(ies).
+2026-09-19 06:21:32.025 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-09-19 06:21:32.026 | DEBUG    | pipecat.workers.runner:_send_registry:513 - WorkerRunner 'runner-39d4edf5': broadcasting registry: ['PipelineWorker#0']
+2026-09-19 06:21:32.026 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#0': activated
+2026-09-19 06:21:32.026 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1210 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-09-19 06:21:32.392 | INFO     | pipecat.services.google.gemini_live.llm:_connection_task_handler:1464 - Connected to Gemini service
+2026-09-19 06:21:32.392 | DEBUG    | pipecat.services.google.gemini_live.llm:_create_initial_response:1912 - Creating initial response: [Content(
+  parts=[
+    Part(
+      text='The phone is ringing. Answer with one short sentence: name the clinic, good morning, and ask how you can help. Caller id says this line belongs to Sonia; you may use that given name and nothing else. It is a hint, never identification, so confirm it with ONE detail — ask for their date of birth and nothing more. Do not ask them to say their name: you already have it, saying a full name over a phone is slow and easily misheard, and one matching detail is all the clinic needs before opening a chart. Reveal no record detail until lookup_patient and confirm_patient have both succeeded. The person on the line may not be Sonia; if their date of birth does not match, drop the hint silently and ask for their full name as usual.'
+    ),
+  ],
+  role='user'
+)]
+2026-09-19 06:21:33.558 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - GeminiLiveLLMService#0 TTFB: 1.166s
+2026-09-19 06:21:33.571 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-19 06:21:39.504 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:337 - GeminiLiveLLMService#0 prompt tokens: 5545, completion tokens: 155, reasoning tokens: 284, input audio tokens: 230, output audio tokens: 155
+2026-09-19 06:21:39.504 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-19 06:21:39.504 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-19 06:21:42.069 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-19 06:21:42.069 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-19 06:21:54.141 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-19 06:21:54.141 | WARNING  | pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy:_handle_vad_user_stopped_speaking:250 - TurnAnalyzerUserTurnStopStrategy#0: VAD stop_secs (0.8s) differs from the recommended default (0.2s). Built-in p99 latency values assume stop_secs=0.2. Re-run https://github.com/pipecat-ai/stt-benchmark with your settings and pass the TTFS P99 latency result as ttfs_p99_latency to your STT service.
+2026-09-19 06:21:57.087 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 3000.0
+2026-09-19 06:21:57.087 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-19 06:21:57.087 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1344 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0) [realtime mode: event-only, no context push]
+2026-09-19 06:21:57.087 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-19 06:21:57.284 | DEBUG    | pipecat.services.google.gemini_live.llm:_handle_msg_input_transcription:2272 - [Transcription:user] [I need a general practice appointment for my daughter.]
+2026-09-19 06:21:57.284 | DEBUG    | pipecat.services.google.gemini_live.llm:_handle_msg_input_transcription:2272 - [Transcription:user] [ Her routine checkup is due.]
+2026-09-19 06:21:58.994 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - GeminiLiveLLMService#0 TTFB: 1.906s
+2026-09-19 06:21:58.995 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-19 06:22:06.273 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:337 - GeminiLiveLLMService#0 prompt tokens: 6285, completion tokens: 188, reasoning tokens: 449, input audio tokens: 673, output audio tokens: 188
+2026-09-19 06:22:06.274 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-19 06:22:06.274 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-19 06:22:08.807 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-19 06:22:08.808 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-19 06:22:17.673 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-19 06:22:20.627 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:append_audio:134 - End of Turn complete due to stop_secs. Silence in ms: 3000.0
+2026-09-19 06:22:20.627 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.INCOMPLETE
+2026-09-19 06:22:20.627 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1344 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0) [realtime mode: event-only, no context push]
+2026-09-19 06:22:20.627 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-19 06:22:20.844 | DEBUG    | pipecat.services.google.gemini_live.llm:_handle_msg_input_transcription:2272 - [Transcription:user] [Sonia Alvarez Medina.]
+2026-09-19 06:22:20.844 | DEBUG    | pipecat.services.google.gemini_live.llm:_handle_msg_input_transcription:2272 - [Transcription:user] [ Her date of birth is 2017-05-12.]
+2026-09-19 06:22:22.152 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - GeminiLiveLLMService#0 TTFB: 1.525s
+2026-09-19 06:22:22.153 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-19 06:22:26.171 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:337 - GeminiLiveLLMService#0 prompt tokens: 6852, completion tokens: 107, reasoning tokens: 244, input audio tokens: 1162, output audio tokens: 107
+2026-09-19 06:22:26.172 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-19 06:22:26.172 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-19 06:22:29.507 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-19 06:22:29.508 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-19 06:22:33.193 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-19 06:22:33.193 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1344 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0) [realtime mode: event-only, no context push]
+2026-09-19 06:22:33.193 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-19 06:22:34.056 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - GeminiLiveLLMService#0 TTFB: 0.862s
+2026-09-19 06:22:34.058 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-19 06:22:37.548 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:337 - GeminiLiveLLMService#0 prompt tokens: 6863, completion tokens: 93, reasoning tokens: 91, input audio tokens: 1366, output audio tokens: 93
+2026-09-19 06:22:37.548 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-19 06:22:37.549 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-19 06:22:40.118 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1318 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-09-19 06:22:40.118 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1019 - LLMUserAggregator#0: broadcasting interruption
+2026-09-19 06:22:43.476 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-09-19 06:22:43.476 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1344 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0) [realtime mode: event-only, no context push]
+2026-09-19 06:22:43.477 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1407 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-09-19 06:22:44.413 | DEBUG    | pipecat.services.llm_service:_run_function_call:1624 - GeminiLiveLLMService#0 Calling function [lookup_patient:fc_3007483597593417212] with arguments {'date_of_birth': '2017-05-12', 'name': 'Sonia Alvarez Medina'}
+2026-09-19 06:22:44.414 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_calls_started:1842 - LLMAssistantAggregator#0 FunctionCallsStartedFrame: ['lookup_patient:fc_3007483597593417212']
+2026-09-19 06:22:44.414 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_in_progress:1847 - LLMAssistantAggregator#0 FunctionCallInProgressFrame: [lookup_patient:fc_3007483597593417212]
+2026-09-19 06:22:44.884 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_result:1883 - LLMAssistantAggregator#0 FunctionCallResultFrame: [lookup_patient:fc_3007483597593417212]
+2026-09-19 06:22:44.884 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_push_context_after_function_result:1987 - LLMAssistantAggregator#0: Pushing context frame!
+2026-09-19 06:22:44.884 | DEBUG    | pipecat.services.google.gemini_live.llm:_tool_result:1984 - Sending tool result to Gemini Live for tool_call_id=fc_3007483597593417212, tool_result_message={'matches': [{'patient_id': 'P00009', 'name': 'Sonia Álvarez Medina', 'date_of_birth': '2017-05-12', 'insurer': 'privado', 'has_visited_before': True, 'referrals': ['orthopaedics'], 'note': 'Last seen December 2025. Has been seen twice, in paediatrics and orthopaedics; no usual doctor. A GP referral for Orthopaedics is on file -- the gated specialties need one. The caller gives their own name first; the patient is the child.', 'matched_on': ['name', 'date_of_birth']}], 'count': 1}
+2026-09-19 06:22:45.588 | DEBUG    | pipecat.services.llm_service:_run_function_call:1624 - GeminiLiveLLMService#0 Calling function [confirm_patient:fc_16489640021151613012] with arguments {'patient_id': 'P00009'}
+2026-09-19 06:22:45.589 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_calls_started:1842 - LLMAssistantAggregator#0 FunctionCallsStartedFrame: ['confirm_patient:fc_16489640021151613012']
+2026-09-19 06:22:45.590 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_in_progress:1847 - LLMAssistantAggregator#0 FunctionCallInProgressFrame: [confirm_patient:fc_16489640021151613012]
+2026-09-19 06:22:45.590 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_result:1883 - LLMAssistantAggregator#0 FunctionCallResultFrame: [confirm_patient:fc_16489640021151613012]
+2026-09-19 06:22:45.590 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_push_context_after_function_result:1987 - LLMAssistantAggregator#0: Pushing context frame!
+2026-09-19 06:22:45.590 | DEBUG    | pipecat.services.google.gemini_live.llm:_tool_result:1984 - Sending tool result to Gemini Live for tool_call_id=fc_16489640021151613012, tool_result_message={'confirmed': True, 'note': 'Last seen December 2025. Has been seen twice, in paediatrics and orthopaedics; no usual doctor. A GP referral for Orthopaedics is on file -- the gated specialties need one. The caller gives their own name first; the patient is the child.'}
+2026-09-19 06:22:46.378 | DEBUG    | pipecat.services.llm_service:_run_function_call:1624 - GeminiLiveLLMService#0 Calling function [find_availability:fc_2494682673016420916] with arguments {'specialty_name': 'paediatrics', 'when_phrase': 'earliest'}
+2026-09-19 06:22:46.379 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_calls_started:1842 - LLMAssistantAggregator#0 FunctionCallsStartedFrame: ['find_availability:fc_2494682673016420916']
+2026-09-19 06:22:46.379 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_in_progress:1847 - LLMAssistantAggregator#0 FunctionCallInProgressFrame: [find_availability:fc_2494682673016420916]
+2026-09-19 06:22:46.547 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_result:1883 - LLMAssistantAggregator#0 FunctionCallResultFrame: [find_availability:fc_2494682673016420916]
+2026-09-19 06:22:46.547 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_push_context_after_function_result:1987 - LLMAssistantAggregator#0: Pushing context frame!
+2026-09-19 06:22:46.548 | DEBUG    | pipecat.services.google.gemini_live.llm:_tool_result:1984 - Sending tool result to Gemini Live for tool_call_id=fc_2494682673016420916, tool_result_message={'resolved': {'phrase': 'earliest', 'warning': "could not resolve phrase: unresolvable when phrase: 'earliest'", 'window': ['2026-09-20', '2026-10-03']}, 'suggested_appointment_type': {'id': 'paediatric_review', 'name': 'Paediatric Review', 'duration_minutes': 30, 'new_patient_requirement': 'existing_only', 'guidance': "A patient under 14 who has been seen before. Half an hour, not the quarter a general review takes — a child's follow-up is longer."}, 'earliest_token': 's1', 'slots': [{'token': 's1', 'provider_name': 'Dr. Javier Ocaña', 'provider_id': 'PR08', 'location_id': 'norte', 'start_time': '2026-09-21T10:00:00+02:00', 'duration_minutes': 30, 'appointment_type_id': 'paediatric_review', 'payable_with': ['privado']}, {'token': 's2', 'provider_name': 'Dr. Javier Ocaña', 'provider_id': 'PR08', 'location_id': 'norte', 'start_time': '2026-09-21T10:15:00+02:00', 'duration_minutes': 30, 'appointment_type_id': 'paediatric_review', 'payable_with': ['privado']}, {'token': 's3', 'provider_name': 'Dr. Javier Ocaña', 'provider_id': 'PR08', 'location_id': 'norte', 'start_time': '2026-09-21T10:30:00+02:00', 'duration_minutes': 30, 'appointment_type_id': 'paediatric_review', 'payable_with': ['privado']}, {'token': 's4', 'provider_name': 'Dr. Javier Ocaña', 'provider_id': 'PR08', 'location_id': 'norte', 'start_time': '2026-09-21T10:45:00+02:00', 'duration_minutes': 30, 'appointment_type_id': 'paediatric_review', 'payable_with': ['privado']}, {'token': 's5', 'provider_name': 'Dr. Javier Ocaña', 'provider_id': 'PR08', 'location_id': 'norte', 'start_time': '2026-09-21T11:00:00+02:00', 'duration_minutes': 30, 'appointment_type_id': 'paediatric_review', 'payable_with': ['privado']}, {'token': 's6', 'provider_name': 'Dr. Javier Ocaña', 'provider_id': 'PR08', 'location_id': 'norte', 'start_time': '2026-09-21T12:00:00+02:00', 'duration_minutes': 30, 'appointment_type_id': 'paediatric_review', 'payable_with': ['privado']}], 'total_free': 68, 'name_could_also_be': [], 'blocked_reasons': [], 'empty_calendar': False}
+2026-09-19 06:22:47.243 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - GeminiLiveLLMService#0 TTFB: 3.766s
+2026-09-19 06:22:47.244 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:712 - Bot started speaking
+2026-09-19 06:22:56.301 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:337 - GeminiLiveLLMService#0 prompt tokens: 31617, completion tokens: 312, reasoning tokens: 411, input audio tokens: 6156, output audio tokens: 233
+2026-09-19 06:22:56.304 | DEBUG    | pipecat.transports.base_output:_handle_frame:849 - Bot stopped speaking based on TTSStoppedFrame
+2026-09-19 06:22:56.304 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:783 - Bot stopped speaking
+2026-09-19 06:23:29.720 | DEBUG    | pipecat.pipeline.worker:_cancel:1130 - Cancelling pipeline worker PipelineWorker#0
+2026-09-19 06:23:29.721 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1230 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-09-19 06:23:29.724 | INFO     | pipecat.services.google.gemini_live.llm:_disconnect:1674 - Disconnecting from Gemini service
+2026-09-19 06:23:29.760 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:1221 - PipelineWorker#0: CancelFrame#0(reason: None) reached the end of the pipeline.
+2026-09-19 06:23:29.760 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-09-19 06:23:29.762 | INFO     | pipecat.services.google.gemini_live.llm:_disconnect:1674 - Disconnecting from Gemini service
+2026-09-19 06:23:29.763 | DEBUG    | pipecat.pipeline.worker:run:880 - Pipeline worker PipelineWorker#0 is finishing...
+2026-09-19 06:23:29.763 | DEBUG    | pipecat.pipeline.worker:run:884 - Pipeline worker PipelineWorker#0 has finished
+2026-09-19 06:23:29.764 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-39d4edf5': finished running
+2026-09-19 06:23:29.764 | ERROR    | agent.voice.flush:flush_call:34 - call eae6cc27-dfde-57c1-909c-c75f4a58befb ended with NO queued actions - submitting no-action out_of_scope
+2026-09-19 06:23:29.954 | INFO     | __main__:voice_ws:85 - socket done: call eae6cc27-dfde-57c1-909c-c75f4a58befb (stopped=True)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10808]
