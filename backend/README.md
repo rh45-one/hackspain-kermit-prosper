@@ -68,6 +68,7 @@ runs in degraded/offline mode and skips the warm call.
 | `GET /ops` | ops console | Live call timeline, transcripts, actions. |
 | `GET /ops/api/calls[?]` | ops console | JSON view over `data/calls/*.jsonl`. |
 | `GET /ops/api/reflow` | ops console | JSON view over the reflow queue. |
+| `POST /turns` | voice server | Text bench adapter. Mounted only with `TURNS_ADAPTER`, loopback or `OPS_TOKEN` only. See the text bench section. |
 
 ## Test, lint and smoke checks
 
@@ -103,6 +104,46 @@ tunnel before a run:
 printf 'PUBLIC_WS_URL=wss://your-name.ngrok-free.app/ws\n' >> .env
 make check-ws
 ```
+
+## Text bench (`POST /turns`) — run this before touching the scored server
+
+`evaluator/README.md` is the single source for how the bench is run, the
+`/turns` contract, what it measures and what it does not, and the dataset
+warning. **Read it there, not here.** This section covers only the backend
+side: how to bring this process up so the bench can drive it.
+
+The one-line version of the warning, because it must travel with every number:
+the bench runs against an invented miniature of 6 patients and 7 doctors
+against ~3,000 and 12 in the real clinic. **Green means the logic holds, never
+that the answer is the one the platform expects.**
+
+### Bringing the agent up for a bench run
+
+**Never use port 7860.** That instance has the ngrok tunnel registered with the
+platform and answers scored calls; restarting it has already killed a run.
+
+```sh
+VOICE_WS_PORT=17999 \
+TURNS_ADAPTER=1 \
+VOICE_ENGINE=gemini_live \
+GEMINI_API_KEY=... \
+PROSPER_API_BASE_URL=http://127.0.0.1:18090 \
+PROSPER_API_KEY=pk-local-eval \
+DATA_DIR=/tmp/bench-data \
+uv run python -m agent.voice.server
+```
+
+**Start the local clinic before this process, not after.** The catalogue is
+warmed once in the server lifespan (`voice/server.py`), so a clinic that comes
+up later leaves the cache cold and `describe_clinic`, `find_nearest_site` and
+the calendar window all degrade — silently, which is the worst part.
+
+| Variable | Why it matters |
+|---|---|
+| `TURNS_ADAPTER` | Mounts `POST /turns`. Absent, nothing is mounted: the process answering scored calls never serves test routes. |
+| `TURNS_MODEL` | Defaults to `gemini-3.8-flash`. The scored path's `gemini-3.8-live` is audio-only and has no text API, so the bench cannot run the scored model. |
+| `TURNS_DATA_DIR` | Defaults to `<DATA_DIR>/turns`. Keeps bench traces out of `data/calls/`, where a run would bury the scored traces under 60 fake ones. |
+| `OPS_TOKEN` | `/turns` sits behind the ops access check: loopback only, or this token. A reachable `/turns` runs the real ToolBox and submits against the live Prosper API with our key. |
 
 ## Local simulator (no harness)
 
