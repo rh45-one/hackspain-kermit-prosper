@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pronto · Pitch técnico · KermitPanic</title>
+<link rel="icon" href="../presentation/assets/pronto-mark.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,500;1,600;1,700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --coral: #ff5533;
+    --coral-soft: #ffebd6;
+    --paper: #fffefb;
+    --ink: #1d211f;
+    --ink-2: #3d423f;
+    --muted: #5c635e;
+    --quiet: #8a918c;
+    --surface: #f4f6f4;
+    --border: #dfe3df;
+    --green: #118d57;
+    --green-soft: #caefce;
+    --blue-soft: #e6f1f7;
+    --red: #b71d18;
+    --red-soft: #ffd6d6;
+    --yellow: #b76e00;
+    --yellow-soft: #fff8d4;
+    --font: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --ease: cubic-bezier(.16, 1, .3, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; width: 100%; height: 100%; overflow: hidden;
+    background: var(--ink); color: var(--ink); font-family: var(--font);
+  }
+  .board {
+    position: absolute; top: 50%; left: 50%;
+    width: 1920px; height: 1080px; margin: -540px 0 0 -960px;
+    transform-origin: center; overflow: hidden; background: var(--paper);
+  }
+  .progress {
+    position: absolute; inset: 0 0 auto; height: 6px;
+    z-index: 10; background: var(--surface);
+  }
+  .progress i {
+    display: block; height: 100%; width: 10%;
+    background: var(--coral); transition: width 280ms var(--ease);
+  }
+  .stage, .slide { position: absolute; inset: 0; }
+  .slide {
+    display: none; flex-direction: column;
+    padding: 58px 100px 88px;
+    background: var(--paper);
+  }
+  .slide.is-on { display: flex; }
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px; margin-bottom: 24px; flex: 0 0 auto;
+  }
+  .lockup { display: flex; align-items: center; gap: 14px; }
+  .lockup .mark {
+    width: 56px; height: 56px; border-radius: 12px; overflow: hidden;
+  }
+  .lockup img { display: block; width: 100%; height: 100%; }
+  .lockup .wordmark { width: auto; height: 31px; max-width: 190px; }
+  .eyebrow {
+    font-size: 23px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .eyebrow b { color: var(--coral); }
+  .title {
+    margin: 0 0 24px; max-width: 24ch;
+    font-size: 64px; line-height: 1.06; letter-spacing: -.035em;
+    font-style: italic; font-weight: 600;
+  }
+  .title em { color: var(--coral); font-style: italic; }
+  .lead {
+    margin: -8px 0 24px; max-width: 52ch;
+    font-size: 29px; line-height: 1.32; color: var(--muted);
+  }
+  .foot {
+    position: absolute; left: 100px; right: 100px; bottom: 32px;
+    z-index: 5; display: flex; justify-content: space-between;
+    font-size: 22px; font-weight: 500; color: var(--quiet);
+  }
+  .count { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .notes {
+    display: none; position: absolute; inset: auto 0 0; z-index: 12;
+    padding: 20px 100px; background: var(--ink); color: var(--paper);
+    font-size: 26px; line-height: 1.35;
+  }
+  .board.show-notes .notes { display: block; }
+  .notes b { color: var(--coral); }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+  .slide.is-on .anim { animation: rise 500ms var(--ease) both; }
+  .slide.is-on .a1 { animation-delay: 40ms; }
+  .slide.is-on .a2 { animation-delay: 100ms; }
+  .slide.is-on .a3 { animation-delay: 160ms; }
+
+  .icon { display: block; width: 62px; height: 62px; }
+  .icon.sm { width: 48px; height: 48px; }
+  .on-dark { filter: invert(1); }
+  .kicker {
+    display: block; margin-bottom: 10px;
+    color: var(--coral); font-size: 20px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase;
+  }
+  .cards-3 {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 22px; flex: 1; min-height: 0;
+  }
+  .card {
+    padding: 28px; border: 1px solid var(--border);
+    border-radius: 22px; background: var(--paper);
+    display: flex; flex-direction: column; min-width: 0;
+  }
+  .card .icon { margin-bottom: 20px; }
+  .card h2 {
+    margin: 0 0 13px; font-size: 36px; line-height: 1.08;
+    letter-spacing: -.025em;
+  }
+  .card p {
+    margin: 0; font-size: 29px; line-height: 1.34; color: var(--ink-2);
+  }
+  .card strong { color: var(--ink); }
+  .card.coral { background: var(--coral-soft); border-color: #f3cfb4; }
+  .card.blue { background: var(--blue-soft); border-color: #c5dce8; }
+  .card.green { background: var(--green-soft); border-color: #a8d9b0; }
+  .card.red { background: var(--red-soft); border-color: #f0b8b8; }
+  .card.dark { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .card.dark p, .card.dark .sub { color: rgba(255,255,255,.76); }
+  .card.dark strong { color: var(--paper); }
+  .tag {
+    display: inline-flex; align-self: flex-start; margin-top: auto;
+    padding: 8px 12px; border-radius: 999px;
+    background: rgba(255,255,255,.65); color: var(--ink);
+    font-size: 20px; font-weight: 700; letter-spacing: .03em;
+  }
+  .tag.dark { color: var(--paper); background: rgba(255,255,255,.12); }
+
+  /* 01 — cover */
+  .cover {
+    padding: 0; justify-content: center; align-items: center; text-align: center;
+    background:
+      radial-gradient(ellipse 55% 45% at 50% 35%, rgba(255,85,51,.13), transparent 66%),
+      radial-gradient(ellipse 55% 40% at 100% 100%, var(--surface), transparent 58%),
+      var(--paper);
+  }
+  .cover-wrap { width: 1500px; display: grid; justify-items: center; gap: 24px; }
+  .cover-brand {
+    display: flex; align-items: center; justify-content: center; gap: 34px;
+    margin: 0; max-width: none;
+  }
+  .cover-mark {
+    width: 166px; height: 166px; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 20px 50px rgba(29,33,31,.15);
+  }
+  .cover-mark img { width: 100%; height: 100%; display: block; }
+  .cover-wordmark-hero {
+    display: block; width: auto; height: 150px; max-width: 720px;
+  }
+  .cover-tagline {
+    margin: 0; max-width: 26ch; text-wrap: balance;
+    font-size: 55px; line-height: 1.08; letter-spacing: -.035em;
+    font-style: italic; font-weight: 600;
+  }
+  .cover-tagline em { color: var(--coral); font-style: italic; }
+  .cover-sub {
+    margin: 0; max-width: 48ch; font-size: 31px;
+    line-height: 1.35; color: var(--ink-2);
+  }
+  .cover-points {
+    display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;
+  }
+  .cover-points span {
+    padding: 10px 16px; border: 1px solid var(--border);
+    border-radius: 999px; background: rgba(255,255,255,.76);
+    font-size: 22px; font-weight: 600;
+  }
+  .cover-meta {
+    margin: 4px 0 0; font-size: 23px; font-weight: 600;
+    color: var(--quiet); letter-spacing: .06em; text-transform: uppercase;
+  }
+  .cover-meta b { color: var(--coral); }
+
+  /* 02 */
+  .metric {
+    margin: 8px 0 8px; color: var(--coral);
+    font-size: 72px; line-height: 1; font-weight: 700; letter-spacing: -.045em;
+  }
+  .card .metric {
+    margin: 8px 0;
+    color: var(--coral);
+    font-size: 72px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -.045em;
+  }
+  .metric-cap {
+    margin: 0 0 18px; font-size: 23px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .source-note {
+    margin: 16px 0 0; font-size: 20px; color: var(--quiet);
+  }
+
+  /* 03 */
+  .solution-card .kicker { margin-top: auto; padding-top: 18px; }
+
+  /* 04 architecture */
+  .architecture {
+    display: grid; grid-template-columns: 1fr 70px 1fr 70px 1fr;
+    align-items: stretch; flex: 1; min-height: 0;
+  }
+  .arch-node {
+    padding: 28px; border-radius: 22px; border: 1px solid var(--border);
+    background: var(--paper); display: flex; flex-direction: column;
+  }
+  .arch-node:nth-of-type(1) { background: var(--blue-soft); border-color: #c5dce8; }
+  .arch-node:nth-of-type(2) { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .arch-node:nth-of-type(3) { background: var(--coral-soft); border-color: #f3cfb4; }
+  .arch-node .port {
+    align-self: flex-start; margin-bottom: 20px; padding: 8px 12px;
+    border-radius: 999px; background: rgba(255,255,255,.72);
+    font-size: 20px; font-weight: 700;
+  }
+  .arch-node:nth-of-type(2) .port { background: rgba(255,255,255,.12); }
+  .arch-node h2 { margin: 0 0 16px; font-size: 40px; line-height: 1.05; }
+  .arch-node p { margin: 0; font-size: 27px; line-height: 1.34; color: var(--ink-2); }
+  .arch-node:nth-of-type(2) p { color: rgba(255,255,255,.76); }
+  .stack {
+    margin-top: auto; padding-top: 18px; font-size: 22px; font-weight: 700;
+    color: var(--coral);
+  }
+  .connector {
+    position: relative; align-self: center;
+    height: 4px; margin: 0 10px;
+    border-radius: 999px; background: var(--coral);
+  }
+  .connector::after {
+    content: ""; position: absolute; right: 2px; top: -6px;
+    width: 13px; height: 13px; border-top: 4px solid var(--coral);
+    border-right: 4px solid var(--coral); transform: rotate(45deg);
+  }
+  .deploy-note {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 14px; padding: 11px 16px;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); font-size: 21px; color: var(--muted);
+  }
+  .deploy-note strong { color: var(--ink); }
+
+  /* 05 security */
+  .security-band {
+    display: flex; align-items: center; gap: 16px;
+    margin: -4px 0 22px; padding: 14px 18px;
+    background: var(--yellow-soft); border: 1px solid #f0e0a0;
+    border-radius: 14px; font-size: 24px; color: var(--ink-2);
+  }
+  .security-band strong { color: var(--yellow); }
+  .code {
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: .82em; color: var(--red);
+  }
+
+  /* 06 evaluator */
+  .scenario-count {
+    display: flex; align-items: baseline; gap: 14px; margin: -6px 0 20px;
+  }
+  .scenario-count strong {
+    color: var(--coral); font-size: 62px; line-height: 1; letter-spacing: -.04em;
+  }
+  .scenario-count span { font-size: 28px; color: var(--muted); }
+  .challenge {
+    display: grid; grid-template-columns: auto 1fr; gap: 20px;
+    align-items: start;
+  }
+  .challenge .n {
+    width: 46px; height: 46px; display: grid; place-items: center;
+    border-radius: 50%; background: var(--ink); color: var(--paper);
+    font-size: 22px; font-weight: 700;
+  }
+
+  /* 07 targets */
+  .target .metric { margin-top: 2px; }
+  .target .metric small { font-size: 30px; letter-spacing: 0; }
+  .target h2 { margin-top: 6px; }
+  .target-flag {
+    display: inline-flex; align-self: flex-start; margin-bottom: 18px;
+    color: var(--yellow); font-size: 20px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+
+  /* 08 */
+  .status {
+    display: inline-flex; align-self: flex-start; margin-bottom: 18px;
+    padding: 7px 11px; border-radius: 999px;
+    font-size: 19px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  }
+  .status.built { background: var(--green-soft); color: var(--green); }
+  .status.deploy { background: var(--blue-soft); color: #356477; }
+  .status.roadmap { background: var(--yellow-soft); color: var(--yellow); }
+
+  /* 09 */
+  .timeline {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 24px; flex: 1; position: relative;
+  }
+  .timeline::before {
+    content: ""; position: absolute; left: 14%; right: 14%; top: 48px;
+    height: 3px; background: var(--border);
+  }
+  .milestone {
+    position: relative; padding: 100px 30px 30px; border: 1px solid var(--border);
+    border-radius: 22px; background: var(--paper);
+  }
+  .milestone::before {
+    content: ""; position: absolute; top: 36px; left: 50%; z-index: 2;
+    width: 26px; height: 26px; margin-left: -13px;
+    border-radius: 50%; background: var(--coral);
+    box-shadow: 0 0 0 10px var(--coral-soft);
+  }
+  .milestone time {
+    display: block; color: var(--coral); font-size: 22px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; margin-bottom: 14px;
+  }
+  .milestone h2 { margin: 0 0 14px; font-size: 39px; line-height: 1.08; }
+  .milestone p { margin: 0; font-size: 27px; line-height: 1.35; color: var(--ink-2); }
+
+  /* 10 */
+  .closing {
+    background:
+      radial-gradient(ellipse 50% 55% at 50% 42%, rgba(255,85,51,.14), transparent 67%),
+      var(--paper);
+    justify-content: center; align-items: center; text-align: center;
+  }
+  .closing .cover-mark { width: 150px; height: 150px; border-radius: 34px; }
+  .closing-brand {
+    display: flex; align-items: center; justify-content: center; gap: 32px;
+    margin: 0;
+  }
+  .closing-wordmark {
+    display: block; width: auto; height: 136px; max-width: 680px;
+  }
+  .closing-tagline {
+    margin: 30px 0 18px; max-width: 19ch;
+    font-size: 64px; line-height: 1.04; letter-spacing: -.04em;
+    font-style: italic; font-weight: 600;
+  }
+  .closing-tagline em { color: var(--coral); font-style: italic; }
+  .closing-points {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    width: 1450px; gap: 18px; margin-top: 22px;
+  }
+  .closing-points div {
+    padding: 20px; border-radius: 16px; border: 1px solid var(--border);
+    background: rgba(255,255,255,.72); font-size: 27px; font-weight: 600;
+  }
+  .qa { margin: 34px 0 0; color: var(--coral); font-size: 34px; font-weight: 700; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .anim { animation: none !important; }
+    .progress i { transition: none; }
+  }
+  @media print {
+    body { background: white; }
+    .board { position: static; margin: 0; transform: none !important; }
+    .slide { display: flex !important; position: relative; height: 1080px; page-break-after: always; }
+    .notes { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<main class="board" id="board">
+  <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+  <div class="stage" id="stage">
+
+    <section class="slide cover is-on" data-notes="Abrimos con la tesis: desplegar voz clínica no es conseguir que converse, sino conseguir que opere sin inventar.">
+      <div class="cover-wrap anim">
+        <span class="kicker">Pitch técnico · Primera presentación</span>
+        <h1 class="cover-brand" aria-label="Pronto">
+          <span class="cover-mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span>
+          <img class="cover-wordmark-hero" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" />
+        </h1>
+        <p class="cover-tagline">Auditoría y orquestación de <em>voz clínica</em></p>
+        <p class="cover-sub">De la demo conversacional a la tolerancia cero: inbound triage, Outbound Recovery y gobernanza médica en tiempo real.</p>
+        <div class="cover-points">
+          <span>Voice AI clínico</span>
+          <span>Reglas deterministas</span>
+          <span>Auditoría campo a campo</span>
+        </div>
+        <p class="cover-meta"><b>KermitPanic</b> · HackSpain 2026</p>
+      </div>
+    </section>
+
+    <section class="slide" data-notes="Las dos cifras son hipótesis de impacto del pitch, no resultados del producto. El problema demostrable es la falta de control sobre lo prometido por voz.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>02</b> · Problema B2B</span>
+      </div>
+      <h1 class="title anim">La brecha de confianza en la <em>recepción sanitaria</em></h1>
+      <div class="cards-3">
+        <article class="card coral anim a1">
+          <img class="icon" src="../presentation/assets/icons/phone-missed.svg" alt="" />
+          <p class="metric">35%</p>
+          <p class="metric-cap">llamadas perdidas en hora punta</p>
+          <p>Sobrecarga y cancelaciones sin cubrir pueden superar <strong>120k €/año</strong> en la hipótesis de clínica del pitch.</p>
+        </article>
+        <article class="card red anim a2">
+          <img class="icon" src="../presentation/assets/icons/shield-check.svg" alt="" />
+          <h2>Una alucinación sí tiene coste</h2>
+          <p>Sedes cerradas, doctores incompatibles con la póliza o emergencias vitales ignoradas: el error conversacional se convierte en riesgo clínico.</p>
+        </article>
+        <article class="card dark anim a3">
+          <img class="icon on-dark" src="../presentation/assets/icons/chart-no-axes-combined.svg" alt="" />
+          <h2>Sin observabilidad</h2>
+          <p>La clínica necesita auditar <strong>qué oyó, qué prometió y qué escribió</strong> el agente, campo a campo.</p>
+          <span class="tag dark">Hipótesis → validar en piloto</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide" data-notes="Tres capas: consola para operar, motor de voz para atender y evaluador para certificar. La voz genera; las reglas autorizan.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>03</b> · Pronto</span>
+      </div>
+      <h1 class="title anim">Gobernanza determinista sobre <em>voz generativa</em></h1>
+      <div class="cards-3">
+        <article class="card solution-card blue anim a1">
+          <img class="icon" src="../presentation/assets/icons/chart-no-axes-combined.svg" alt="" />
+          <h2>FrontDesk Web Console</h2>
+          <p>Dashboard ejecutivo y panel en tiempo real: transcripción estructurada, auditoría y estado operativo de cada llamada.</p>
+          <span class="kicker">Next.js 16 · Tailwind · Radix</span>
+        </article>
+        <article class="card solution-card coral anim a2">
+          <img class="icon" src="../presentation/assets/icons/phone-incoming.svg" alt="" />
+          <h2>Motor de baja latencia</h2>
+          <p>Audio bidireccional con Gemini Live + Pipecat; las reglas clínicas y los identificadores se resuelven fuera del modelo.</p>
+          <span class="kicker">Genera voz · no autoridad</span>
+        </article>
+        <article class="card solution-card green anim a3">
+          <img class="icon" src="../presentation/assets/icons/shield-check.svg" alt="" />
+          <h2>Adversarial Evaluator</h2>
+          <p>21 escenarios versionados cubren las 18 familias del reto antes de exponer el agente a pacientes reales.</p>
+          <span class="kicker">Reglas · LLM patient · audio</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide" data-notes="En local hay dos procesos: voz 7860 y ops 7861. En Fly se unifican detrás de un puerto para compartir estado y volumen.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>04</b> · Arquitectura end-to-end</span>
+      </div>
+      <h1 class="title anim">Audio streaming + telemetría <em>en tiempo real</em></h1>
+      <div class="architecture">
+        <article class="arch-node anim a1">
+          <span class="port">:7860 · Voice Gateway</span>
+          <h2>FastAPI + Pipecat</h2>
+          <p>WebSocket full-duplex µ-law 8 kHz compatible con Twilio Media Streams. Bridge a Gemini Live <strong>gemini-3.8-live</strong>.</p>
+          <span class="stack">20 ms frames · barge-in · ToolBox</span>
+        </article>
+        <i class="connector" aria-hidden="true"></i>
+        <article class="arch-node anim a2">
+          <span class="port">:7861 · Ops &amp; Telemetry</span>
+          <h2>Audit JSONL</h2>
+          <p>Lectura reactiva de <strong>DATA_DIR/calls/</strong>, turnos listening/speaking, eventos de barge-in, herramientas y submissions.</p>
+          <span class="stack">Append-only · por call_id · auditable</span>
+        </article>
+        <i class="connector" aria-hidden="true"></i>
+        <article class="arch-node anim a3">
+          <span class="port">Front B2B</span>
+          <h2>Next.js 16</h2>
+          <p>Proxy protegido por token de ops, renderizado de auditoría y control manual para el operador.</p>
+          <span class="stack">Tailwind · Radix · Human-in-the-Loop</span>
+        </article>
+      </div>
+      <div class="deploy-note"><strong>Producción</strong><span>Servicio unificado en un puerto · estado y auditoría sobre volumen persistente.</span></div>
+    </section>
+
+    <section class="slide" data-notes="No afirmamos certificación HIPAA o RGPD. Mostramos controles técnicos verificables: minimización, redacción y autoridad fuera del modelo.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>05</b> · Seguridad estructural</span>
+      </div>
+      <h1 class="title anim">Privacidad por diseño y <em>menor superficie de ataque</em></h1>
+      <div class="security-band anim"><strong>Importante:</strong> controles orientados a RGPD/HIPAA; no equivalen a una certificación legal.</div>
+      <div class="cards-3">
+        <article class="card blue anim a1">
+          <img class="icon" src="../presentation/assets/icons/shield-check.svg" alt="" />
+          <span class="kicker">Minimización PII</span>
+          <h2>Allowlist local</h2>
+          <p><span class="code">_SAFE_PATIENT_FIELDS</span> excluye DNI y teléfono del objeto de paciente confirmado. Jev recibe texto redaccionado localmente.</p>
+        </article>
+        <article class="card coral anim a2">
+          <img class="icon" src="../presentation/assets/icons/chart-no-axes-combined.svg" alt="" />
+          <span class="kicker">Sidecar asesor</span>
+          <h2>TypeSafe JevClient</h2>
+          <p>Clasificación en background; conexiones calientes medidas en <strong>237–299 ms</strong>. Puede anotar o abstenerse, nunca escribir.</p>
+        </article>
+        <article class="card dark anim a3">
+          <img class="icon on-dark" src="../presentation/assets/icons/calendar-check-2.svg" alt="" />
+          <span class="kicker">Commit seguro</span>
+          <h2>El modelo no inserta</h2>
+          <p>Book, reschedule, cancel, register y escalate pasan por IDs validados, catálogo cacheado y <strong>/api/v1/submit/&lt;route&gt;</strong>.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide" data-notes="El evaluador no es una demo aislada: guarda oráculos, audio, latencias, submissions y evidencia. Privacidad de voz tiene un límite explícito si no hay transcript.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>06</b> · Banco adversarial</span>
+      </div>
+      <h1 class="title anim">Evaluación exhaustiva: <em>18 familias</em> de problemas</h1>
+      <div class="scenario-count anim"><strong>21</strong><span>escenarios versionados · reglas + paciente LLM · evidencia reproducible</span></div>
+      <div class="cards-3">
+        <article class="card challenge blue anim a1">
+          <span class="n">01</span>
+          <div><h2>Estrés acústico</h2><p>Ruido sintético a <strong>5 dB SNR</strong>, llamadas concurrentes, interrupciones, silencios y cambios de opinión.</p></div>
+        </article>
+        <article class="card challenge coral anim a2">
+          <span class="n">02</span>
+          <div><h2>Lógica compleja</h2><p>Second Policy, Nearest Site, matrices de cobertura y cambio Catalán / Español / Inglés.</p></div>
+        </article>
+        <article class="card challenge red anim a3">
+          <span class="n">03</span>
+          <div><h2>Safety &amp; attacks</h2><p>Banderas rojas → 112, prompt injection y extracción de datos de terceros.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide" data-notes="Estas cifras no salen de un piloto real del repositorio. Se presentan como objetivos contractuales que el piloto debe medir, con instrumentos ya construidos.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>07</b> · Impacto y ROI</span>
+      </div>
+      <h1 class="title anim">Objetivos medibles del <em>piloto clínico</em></h1>
+      <p class="lead anim">No son resultados observados todavía: son umbrales de éxito instrumentados desde Pronto.</p>
+      <div class="cards-3">
+        <article class="card target blue anim a1">
+          <span class="target-flag">Objetivo piloto</span>
+          <p class="metric">94,4%</p>
+          <h2>Resolución autónoma</h2>
+          <p>Reducir la gestión media de <strong>4,5 min a 1,2 min</strong> por paciente.</p>
+        </article>
+        <article class="card target green anim a2">
+          <span class="target-flag">Objetivo piloto</span>
+          <p class="metric">82%</p>
+          <h2>Outbound Recovery</h2>
+          <p>Citas recuperadas en menos de <strong>15 minutos</strong> tras una baja médica.</p>
+        </article>
+        <article class="card target dark anim a3">
+          <span class="target-flag">Objetivo verificable</span>
+          <p class="metric">0 <small>fugas</small></p>
+          <h2>Privacidad adversarial</h2>
+          <p>Leak checks sobre texto y audits reales; cualquier comprobación no ejecutada queda visible, nunca como pass silencioso.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide" data-notes="Separamos estado real: control humano ya existe, el despliegue es CDG y FHIR queda en roadmap. Fly no tiene región mad.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>08</b> · Casos de uso y escala</span>
+      </div>
+      <h1 class="title anim">De una clínica a <em>redes hospitalarias</em></h1>
+      <div class="cards-3">
+        <article class="card blue anim a1">
+          <span class="status built">Construido</span>
+          <img class="icon" src="../presentation/assets/icons/headset.svg" alt="" />
+          <h2>Recepcionista + IA</h2>
+          <p>Transcripción estructurada en vivo y acción <strong>“Tomar el control”</strong> para intervención humana inmediata.</p>
+        </article>
+        <article class="card coral anim a2">
+          <span class="status deploy">Despliegue</span>
+          <img class="icon" src="../presentation/assets/icons/hospital.svg" alt="" />
+          <h2>Concurrencia elástica</h2>
+          <p>Contenedor Fly.io en <strong>cdg (París)</strong>, siempre activo, WebSockets nativos y volumen persistente. Diagnosticado hasta 20 sockets.</p>
+        </article>
+        <article class="card anim a3">
+          <span class="status roadmap">Roadmap</span>
+          <img class="icon" src="../presentation/assets/icons/chart-no-axes-combined.svg" alt="" />
+          <h2>HL7 / FHIR</h2>
+          <p>Conectores modulares con EHRs españoles e internacionales; contrato desacoplado del motor de voz.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide" data-notes="Turns ya existe: el hito Q4 es endurecerlo como gate de CI. El fallback dinámico es futuro; hoy el cambio de engine es explícito y registrado.">
+      <div class="top">
+        <div class="lockup"><span class="mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span><img class="wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" /></div>
+        <span class="eyebrow"><b>09</b> · Roadmap técnico</span>
+      </div>
+      <h1 class="title anim">Hacia el sistema operativo de la <em>voz hospitalaria</em></h1>
+      <div class="timeline">
+        <article class="milestone anim a1">
+          <time>Q4 2026</time>
+          <h2>CI/CD clínico continuo</h2>
+          <p>Endurecer <strong>/turns</strong> y el simulador determinista como gate reproducible por cada cambio de prompt, regla o proveedor.</p>
+        </article>
+        <article class="milestone anim a2">
+          <time>Q1 2027</time>
+          <h2>Motor multi-voz</h2>
+          <p>Fallback explícito y auditable hacia cascada on-premise cuando la red o el proveedor degraden.</p>
+        </article>
+        <article class="milestone anim a3">
+          <time>Q2 2027</time>
+          <h2>Post-consulta</h2>
+          <p>Adherencia terapéutica y llamadas postoperatorias proactivas con auditoría y escalado humano.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide closing" data-notes="Cerramos sin decir production-ready: la base está probada offline; quedan la live gate, el piloto y el trabajo de compliance.">
+      <h1 class="closing-brand anim" aria-label="Pronto">
+        <span class="cover-mark"><img src="../presentation/assets/pronto-mark.svg" alt="" /></span>
+        <img class="closing-wordmark" src="../presentation/assets/pronto-wordmark-clean.svg" alt="Pronto" />
+      </h1>
+      <p class="closing-tagline anim"><em>Confianza, eficiencia y seguridad</em> en voz médica</p>
+      <div class="closing-points">
+        <div class="anim a1">Gobernanza determinista para voz médica</div>
+        <div class="anim a2">21 escenarios · 18 familias adversariales</div>
+        <div class="anim a3">Base offline validada · live gate pendiente</div>
+      </div>
+      <p class="qa anim a3">Muchas gracias · Abrimos preguntas</p>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <span>Pronto · KermitPanic · HackSpain 2026</span>
+    <span class="count" id="count">1 / 10</span>
+  </footer>
+  <aside class="notes" id="notes"></aside>
+</main>
+
+<script>
+  const board = document.getElementById("board");
+  const slides = [...document.querySelectorAll(".slide")];
+  const bar = document.getElementById("bar");
+  const count = document.getElementById("count");
+  const notes = document.getElementById("notes");
+  let i = 0;
+
+  function fit() {
+    const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    board.style.transform = `scale(${scale})`;
+  }
+
+  function render() {
+    slides.forEach((slide, index) => slide.classList.toggle("is-on", index === i));
+    bar.style.width = `${((i + 1) / slides.length) * 100}%`;
+    count.textContent = `${i + 1} / ${slides.length}`;
+    notes.innerHTML = `<b>Say</b> — ${slides[i].dataset.notes || ""}`;
+  }
+
+  function go(delta) {
+    i = Math.max(0, Math.min(slides.length - 1, i + delta));
+    render();
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (["ArrowRight", "PageDown", " ", "Enter"].includes(event.key)) {
+      event.preventDefault(); go(1);
+    } else if (["ArrowLeft", "PageUp", "Backspace"].includes(event.key)) {
+      event.preventDefault(); go(-1);
+    } else if (event.key === "Home") {
+      i = 0; render();
+    } else if (event.key === "End") {
+      i = slides.length - 1; render();
+    } else if (event.key.toLowerCase() === "n") {
+      board.classList.toggle("show-notes");
+    } else if (event.key.toLowerCase() === "f") {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    } else if (/^[0-9]$/.test(event.key)) {
+      i = event.key === "0" ? 9 : Number(event.key) - 1;
+      render();
+    }
+  });
+
+  document.getElementById("stage").addEventListener("click", (event) => {
+    go(event.clientX > window.innerWidth / 2 ? 1 : -1);
+  });
+  window.addEventListener("resize", fit);
+  fit();
+  render();
+</script>
+</body>
+</html>
