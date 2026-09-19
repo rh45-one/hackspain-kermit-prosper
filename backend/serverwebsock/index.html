@@ -24,50 +24,28 @@
             <p class="clinic-name">Clínica Arenal</p>
           </div>
         </div>
-        <p class="header-status" role="status"><span aria-hidden="true"></span> Simulador de voz</p>
+        <p class="header-status" role="status"><span aria-hidden="true"></span> Prueba local</p>
       </div>
     </header>
 
     <main class="call-shell">
-      <section class="page-intro" data-reveal aria-labelledby="page-title">
-        <p class="kicker"><span aria-hidden="true"></span> Recepción virtual</p>
-        <h1 id="page-title">Prueba una llamada de recepción.</h1>
-        <p class="intro">Habla con el agente como lo haría un paciente. Esta llamada usa el circuito real, pero no envía acciones a Prosper.</p>
-      </section>
+      <p class="kicker"><span aria-hidden="true"></span> Recepción virtual</p>
+      <h1 id="page-title">Habla con recepción.</h1>
+      <p class="intro">Simulación local. No se envían acciones a Prosper.</p>
 
-      <section class="call-well" data-reveal aria-labelledby="call-panel-title">
-        <div class="call-card">
-          <div class="call-card-header">
-            <div>
-              <p class="card-label">Línea de recepción</p>
-              <h2 id="call-panel-title">Nueva llamada</h2>
-            </div>
-            <span class="demo-badge">DEMO</span>
-          </div>
-
-          <div class="call-control">
-            <div class="call-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.2 1.2.4 2.5.6 3.8.6.5 0 .9.4.9.9v3.4c0 .5-.4.9-.9.9A17.1 17.1 0 0 1 3.2 3.7c0-.5.4-.9.9-.9h3.4c.5 0 .9.4.9.9 0 1.3.2 2.6.6 3.8.1.4 0 .8-.2 1.1l-2.2 2.2Z"/></svg>
-            </div>
-            <div>
-              <p class="control-title">Canal de prueba</p>
-              <p class="control-copy">El agente escuchará al iniciar la llamada.</p>
-            </div>
-          </div>
-
-          <button id="call-button" class="call-button" type="button" aria-pressed="false">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.2 1.2.4 2.5.6 3.8.6.5 0 .9.4.9.9v3.4c0 .5-.4.9-.9.9A17.1 17.1 0 0 1 3.2 3.7c0-.5.4-.9.9-.9h3.4c.5 0 .9.4.9.9 0 1.3.2 2.6.6 3.8.1.4 0 .8-.2 1.1l-2.2 2.2Z"/>
-            </svg>
-            <span id="call-label">Iniciar llamada</span>
-          </button>
-
-          <div class="call-status-row">
-            <span class="status-label">Estado de línea</span>
-            <p id="call-status" class="status" role="status" aria-live="polite">Lista para llamar</p>
-          </div>
-          <p class="privacy-note">Al iniciar, el navegador solicitará acceso al micrófono. Puedes colgar en cualquier momento.</p>
+      <section class="call-panel" aria-labelledby="page-title">
+        <div class="call-meta">
+          <span>Canal de prueba</span>
+          <span>Micrófono requerido</span>
         </div>
+        <button id="call-button" class="call-button" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.2 1.2.4 2.5.6 3.8.6.5 0 .9.4.9.9v3.4c0 .5-.4.9-.9.9A17.1 17.1 0 0 1 3.2 3.7c0-.5.4-.9.9-.9h3.4c.5 0 .9.4.9.9 0 1.3.2 2.6.6 3.8.1.4 0 .8-.2 1.1l-2.2 2.2Z"/>
+          </svg>
+          <span id="call-label">Iniciar llamada</span>
+        </button>
+        <p id="call-status" class="status" role="status" aria-live="polite">Lista para llamar</p>
+        <p class="privacy-note">Solicitaremos acceso al micrófono al iniciar.</p>
       </section>
     </main>
   </body>

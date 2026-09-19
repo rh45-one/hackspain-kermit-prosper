@@ -408,22 +408,3 @@ window.addEventListener("pagehide", () => {
     void releaseResources();
   }
 });
-
-function revealSections() {
-  const sections = document.querySelectorAll("[data-reveal]");
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) {
-    for (const section of sections) section.classList.add("is-visible");
-    return;
-  }
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      }
-    }
-  }, {threshold: 0.08, rootMargin: "0px 0px -8%"});
-  for (const section of sections) observer.observe(section);
-}
-
-revealSections();
