@@ -12,8 +12,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
 from agent.config import settings
+from agent.ops.frontdesk import router as frontdesk_router
 
 app = FastAPI(title="ClinicReflow ops", docs_url=None, redoc_url=None)
+app.include_router(frontdesk_router)
 
 _INDEX = """<!doctype html><html><head><title>ClinicReflow — ops</title>
 <meta charset="utf-8">

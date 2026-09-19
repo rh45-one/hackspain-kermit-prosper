@@ -10,7 +10,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MOCK_PATIENTS } from "@/lib/mock-data";
 import {
   fullName,
   outcomeFromAction,
@@ -27,7 +26,7 @@ import {
   monthTitleEs,
   weekdayShortEs,
 } from "@/lib/timezone";
-import { CLINIC_TZ, type Appointment, type ReceptionOutcome } from "@/lib/types";
+import { CLINIC_TZ, type Appointment, type Patient, type ReceptionOutcome } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const HOURS = Array.from({ length: 12 }, (_, index) => 8 + index);
@@ -35,12 +34,13 @@ const HOUR_HEIGHT = 64;
 const START_MINUTES = 8 * 60;
 const DAY_HEIGHT = HOURS.length * HOUR_HEIGHT;
 
-function patientLabel(patientId: string): string {
-  const patient = MOCK_PATIENTS.find((item) => item.patient_id === patientId);
+function patientLabel(patientId: string, patients: Patient[]): string {
+  const patient = patients.find((item) => item.patient_id === patientId);
   return patient ? fullName(patient) : patientId;
 }
 
 function AppointmentChip({ item }: { item: Appointment }) {
+  const { patients } = useFrontdesk();
   const outcome = outcomeFromAction(item.action);
   const start = minutesFromMidnightMadrid(item.start_time);
   const top = ((start - START_MINUTES) / 60) * HOUR_HEIGHT;
@@ -58,7 +58,7 @@ function AppointmentChip({ item }: { item: Appointment }) {
         <span>{formatMadrid(item.start_time, "HH:mm")}</span>
         <span>{OUTCOME_STYLES[outcome].label}</span>
       </div>
-      <p className="truncate">{patientLabel(item.patient_id)}</p>
+      <p className="truncate">{patientLabel(item.patient_id, patients)}</p>
       {outcome === "REFUSED" && item.reason ? (
         <p className="truncate text-[10px] text-quiet">
           {REASON_LABELS[item.reason]}
@@ -90,7 +90,7 @@ function Legend() {
 }
 
 export function AppointmentsCalendar() {
-  const { appointments } = useFrontdesk();
+  const { appointments, demo } = useFrontdesk();
   const [dayKey, setDayKey] = useState(() => madridDayKey(new Date()));
   const [mode, setMode] = useState<"week" | "day">("week");
 
@@ -125,8 +125,9 @@ export function AppointmentsCalendar() {
     <div>
       <div className="mb-10 flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
         <PageHeader className="mb-0" kicker="Agenda Europe/Madrid" title="Calendario de citas">
-          Instants convertidos a Europe/Madrid. Un rechazo se lee en slate, con
-          la regla, sin abrir nada.
+          {demo ? "Agenda simulada con resultados del agente." :
+            "Citas existentes de la clínica, actualizadas cada minuto. Los envíos del agente no modifican este EHR."}
+          {" "}Horas en Europe/Madrid.
         </PageHeader>
         <Legend />
       </div>

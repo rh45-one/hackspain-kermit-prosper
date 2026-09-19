@@ -40,17 +40,12 @@ El agente se apunta a la clínica local con su configuración habitual
 (`PROSPER_API_BASE_URL`); el mismo base URL sirve clínica y submissions:
 
 ```sh
-# terminal A — clínica local (la runner también la levanta sola)
-uv run --project evaluator python -m evaluator.cli clinic \
-    --dataset evaluator/data/clinic_dataset.json --port 8090
-
-# terminal B — agente con la clínica y el receptor locales
-cd backend
+# terminal A — agente; el runner arranca la clínica local en 8090
 PROSPER_API_BASE_URL=http://localhost:8090 \
 PROSPER_API_KEY=pk-local-eval \
-uv run python -m agent.voice.server
+uv run --project backend python -m agent.serve
 
-# terminal C — experimento
+# terminal B — experimento (no arrancar otra clínica en 8090)
 uv run --project evaluator python -m evaluator.cli run \
     --config evaluator/experiments/agent-local.yaml
 ```
@@ -60,6 +55,11 @@ Si el agente ya corre por su cuenta, basta `ws_url` en el candidato; si pones
 del experimento es una configuración (modelo, prompts, proveedores) del
 mismo agente — compara configuraciones con varios `candidates` +
 `repetitions`.
+
+La plantilla necesita escenarios con audio o `tts: true` y un TTS instalado
+para una prueba de voz; los turnos solo de texto se convierten en silencio.
+Consulta [la guía de integración](../integration/README.md) para pruebas de
+contrato sin credenciales, FrontDesk y las limitaciones del reloj del agente.
 
 ## Formato de escenario
 

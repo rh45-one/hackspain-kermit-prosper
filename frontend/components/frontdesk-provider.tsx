@@ -28,6 +28,10 @@ import { CALL_CAPACITY } from "@/lib/types";
 const SETTINGS_KEY = "frontdesk.settings";
 
 type FrontdeskContextValue = {
+  demo: boolean;
+  connectionError: string | null;
+  clinicError: string | null;
+  loading: boolean;
   settings: AgentSettings;
   saveSettings: (next: AgentSettings) => { ok: true } | { ok: false; error: string };
   addKnowledgeSource: (source: Omit<KnowledgeSource, "id">) => void;
@@ -54,26 +58,89 @@ function loadSettings(): AgentSettings {
   }
 }
 
-export function FrontdeskProvider({ children }: { children: React.ReactNode }) {
+export function FrontdeskProvider({
+  children, demo,
+}: { children: React.ReactNode; demo: boolean }) {
   const [settings, setSettings] = useState<AgentSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
-  const [calls, setCalls] = useState<LiveCall[]>(() => cloneLiveCalls());
+  const [calls, setCalls] = useState<LiveCall[]>(() => demo ? cloneLiveCalls() : []);
+  const [patients, setPatients] = useState<Patient[]>(() => demo ? MOCK_PATIENTS : []);
+  const [appointments, setAppointments] = useState<Appointment[]>(() => demo ? MOCK_APPOINTMENTS : []);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [clinicError, setClinicError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!demo);
 
   useEffect(() => {
+    if (!demo) return;
     queueMicrotask(() => {
       setSettings(loadSettings());
       setHydrated(true);
     });
-  }, []);
+  }, [demo]);
 
   useEffect(() => {
+    if (!demo) return;
     if (!hydrated) {
       return;
     }
     window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }, [hydrated, settings]);
+  }, [demo, hydrated, settings]);
 
   useEffect(() => {
+    if (demo) return;
+    const controller = new AbortController();
+    const timers: Partial<Record<"calls" | "clinic", number>> = {};
+    async function refresh(resource: "calls" | "clinic") {
+      try {
+        const response = await fetch(`/api/frontdesk/${resource}`, {
+          cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) {
+          const error: { detail?: string } = await response.json();
+          throw new Error(error.detail ?? `HTTP ${response.status}`);
+        }
+        if (resource === "calls") {
+          const data: LiveCall[] = await response.json();
+          if (controller.signal.aborted) return;
+          setCalls(data);
+          setConnectionError(null);
+        } else {
+          const data: { patients: Patient[]; appointments: Appointment[] } = await response.json();
+          if (controller.signal.aborted) return;
+          setPatients(data.patients);
+          setAppointments(data.appointments);
+          setClinicError(null);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        const message = error instanceof Error ? error.message : "Error de conexión";
+        if (resource === "calls") {
+          setConnectionError(message);
+          setCalls([]);
+        } else {
+          setClinicError(message);
+          setPatients([]);
+          setAppointments([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          if (resource === "calls") setLoading(false);
+          timers[resource] = window.setTimeout(
+            () => void refresh(resource), resource === "calls" ? 3000 : 60000,
+          );
+        }
+      }
+    }
+    void refresh("calls");
+    void refresh("clinic");
+    return () => {
+      controller.abort();
+      Object.values(timers).forEach(window.clearTimeout);
+    };
+  }, [demo]);
+
+  useEffect(() => {
+    if (!demo) return;
     const timer = window.setInterval(() => {
       setCalls((current) =>
         current.map((call) => {
@@ -95,9 +162,10 @@ export function FrontdeskProvider({ children }: { children: React.ReactNode }) {
       );
     }, 1600);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [demo]);
 
   const saveSettings = useCallback((next: AgentSettings) => {
+    if (!demo) return { ok: false as const, error: "Configura el agente mediante backend/.env" };
     const url = next.tunnelUrl.trim();
     if (url && !isValidTunnelUrl(url)) {
       return {
@@ -107,9 +175,10 @@ export function FrontdeskProvider({ children }: { children: React.ReactNode }) {
     }
     setSettings({ ...next, tunnelUrl: url });
     return { ok: true as const };
-  }, []);
+  }, [demo]);
 
   const addKnowledgeSource = useCallback((source: Omit<KnowledgeSource, "id">) => {
+    if (!demo) return;
     setSettings((current) => ({
       ...current,
       knowledgeSources: [
@@ -117,9 +186,10 @@ export function FrontdeskProvider({ children }: { children: React.ReactNode }) {
         { ...source, id: `ks-${crypto.randomUUID()}` },
       ],
     }));
-  }, []);
+  }, [demo]);
 
   const takeControl = useCallback((callId: string) => {
+    if (!demo) return;
     setCalls((current) =>
       current.map((call) =>
         call.callId === callId
@@ -142,24 +212,30 @@ export function FrontdeskProvider({ children }: { children: React.ReactNode }) {
           : call,
       ),
     );
-  }, []);
+  }, [demo]);
 
   const activeCount = calls.filter((call) => call.status === "active").length;
 
   const value = useMemo<FrontdeskContextValue>(
     () => ({
+      demo,
+      connectionError,
+      clinicError,
+      loading,
       settings,
       saveSettings,
       addKnowledgeSource,
       calls,
       activeCount,
-      capacityLabel: `${activeCount}/${CALL_CAPACITY} llamadas activas`,
+      capacityLabel: demo ? `${activeCount}/${CALL_CAPACITY} llamadas activas` :
+        `${activeCount} llamadas abiertas en el registro`,
       tunnelConfigured: isValidTunnelUrl(settings.tunnelUrl),
       takeControl,
-      patients: MOCK_PATIENTS,
-      appointments: MOCK_APPOINTMENTS,
+      patients,
+      appointments,
     }),
-    [activeCount, addKnowledgeSource, calls, saveSettings, settings, takeControl],
+    [activeCount, addKnowledgeSource, calls, saveSettings, settings, takeControl,
+      demo, connectionError, clinicError, loading, patients, appointments],
   );
 
   return (

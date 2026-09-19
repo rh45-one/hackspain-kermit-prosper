@@ -289,10 +289,29 @@ function OutcomeBars() {
 }
 
 export function ObservatoryCharts() {
-  const { activeCount, calls, appointments } = useFrontdesk();
+  const { activeCount, calls, appointments, demo } = useFrontdesk();
   const refusals = refusalReasons(appointments);
   const barges = bargeInCount(calls);
   const flushPct = Math.round(FLUSH_WITHIN_WINDOW * 100);
+
+  if (!demo) {
+    const summaries = calls.flatMap((call) => call.diagnostic ? [call.diagnostic] : []);
+    const metrics = [
+      ["Envíos aceptados", summaries.reduce((sum, item) => sum + (item.submissions_succeeded ?? 0), 0)],
+      ["Envíos fallidos", summaries.reduce((sum, item) => sum + (item.submissions_failed ?? 0), 0)],
+      ["Llamadas con fallback", summaries.filter((item) => item.fallback_action_added).length],
+    ];
+    return (
+      <dl className="grid gap-4 sm:grid-cols-3">
+        {metrics.map(([label, value]) => (
+          <div key={label} className="surface rounded-[18px] p-[var(--card-padding)]">
+            <dt className="text-[13px] text-quiet">{label} · últimos registros</dt>
+            <dd className="mt-2 font-heading text-2xl">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
 
   return (
     <div data-reveal="fade">

@@ -19,7 +19,8 @@ const NAV = [
 
 export function ObservatoryChrome() {
   const pathname = usePathname();
-  const { settings, tunnelConfigured, capacityLabel, activeCount } = useFrontdesk();
+  const { settings, tunnelConfigured, capacityLabel, activeCount,
+    demo, connectionError, clinicError, loading } = useFrontdesk();
   const [now, setNow] = useState("");
   const [scrolled, setScrolled] = useState(false);
 
@@ -87,7 +88,7 @@ export function ObservatoryChrome() {
               "hidden items-center gap-2 font-heading text-[12px] leading-none text-quiet lg:flex",
               tunnelConfigured && "text-steel",
             )}
-            title={settings.tunnelUrl || "Sin túnel"}
+            title={demo ? settings.tunnelUrl || "Sin túnel demo" : "Sondeo HTTP · solo lectura"}
           >
             <span
               className={cn(
@@ -95,14 +96,14 @@ export function ObservatoryChrome() {
                 tunnelConfigured && "bg-brass",
               )}
             />
-            {tunnelConfigured ? "Túnel listo" : "Sin túnel"}
+            {demo ? (tunnelConfigured ? "Túnel demo" : "Sin túnel demo") : "Consulta del backend"}
           </p>
           <p className="hidden font-mono text-[11px] leading-none text-quiet xl:block">
             {now || "Europe/Madrid"}
           </p>
           <span className="rounded-lg border border-mist bg-canvas-white px-3 py-2 font-heading text-[12px] leading-none text-graphite shadow-sm sm:px-3.5">
             <span className="mr-1.5 text-brass">●</span>
-            <span className="sm:hidden">{activeCount}/{CALL_CAPACITY}</span>
+            <span className="sm:hidden">{activeCount}{demo ? `/${CALL_CAPACITY}` : " abiertas"}</span>
             <span className="hidden sm:inline">{capacityLabel}</span>
           </span>
         </div>
@@ -132,6 +133,11 @@ export function ObservatoryChrome() {
           );
         })}
       </nav>
+      <div className="mx-auto max-w-[var(--page-max-width)] py-2 text-[12px] text-steel" role="status">
+        {demo ? "Modo demo · datos simulados" : loading ? "Conectando con el agente…" :
+          connectionError ? `Llamadas: ${connectionError}` : "Datos del backend · solo lectura · llamadas cada 3 s"}
+        {!demo && clinicError ? <p role="alert">Clínica: {clinicError}</p> : null}
+      </div>
     </header>
   );
 }

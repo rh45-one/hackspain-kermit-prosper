@@ -12,12 +12,19 @@ submits exact booking actions to the Prosper platform.
 | `docs/` | Shared team context: Prosper challenge notes, call contract, clinic and scoring docs, reflow interface. |
 | `evaluator/` | Standalone local evaluator/tester/benchmark: scenario corpus, local clinic + submission receiver, deterministic comparator, harness caller, test double and HTML reports. Owns `pyproject.toml` and `uv.lock`. |
 | `openspec/` | OpenSpec changes and specs for this repository. |
-| `frontend/` | Staff FrontDesk (Next.js): live calls, patients, calendar, agent settings. Mock-first. |
+| `frontend/` | Staff FrontDesk (Next.js): calls, patients and calendar from the backend; explicit offline demo mode. |
+| `integration/` | Cross-package contract tests and the local stack runbook. |
 | `LICENSE`, `README.md`, `pytest.ini`, `.gitignore` | Repository-level context and root tooling. |
 
-There is no Python project at the repository root. Every runtime command is
-executed against `backend/`, either with `--project backend` from the root or
-after `cd backend`.
+There is no Python project at the repository root. Use `--project backend`
+or `--project evaluator` for the corresponding runtime.
+
+## Integrated stack
+
+See [the integration runbook](integration/README.md) for running the local clinic,
+the combined voice/ops backend and FrontDesk together. `make check` runs both
+Python suites, cross-package contracts, lint, frontend type generation/typecheck
+and the production frontend build. It needs no provider credentials.
 
 ## Backend quickstart
 
@@ -98,14 +105,16 @@ and report output.
 
 ## Frontend
 
-Staff FrontDesk (Next.js App Router) lives in `frontend/`. It is mock-first:
-live call cards, patient directory, Europe/Madrid calendar and agent settings
-run without the voice server. FastAPI `/ops` remains the JSON/HTML fallback.
+Staff FrontDesk reads calls, diagnostics, patients and appointments through
+the combined `agent.serve` backend. FastAPI `/ops` remains the HTML fallback.
 
 ```sh
 cd frontend
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000 — it redirects to `/calls`.
+Open http://localhost:3000 — it redirects to `/calls`. Set
+`FRONTDESK_DEMO=true` for the original mock UI without a backend. Live mode
+is read-only; settings and manual takeover are available only in the demo.

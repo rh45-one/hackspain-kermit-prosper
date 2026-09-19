@@ -126,9 +126,14 @@ class Submitter:
         *,
         deadline: float | None = None,
     ) -> dict[str, Any] | None:
-        """Backwards-compatible wrapper returning the accepted body, if any."""
+        """Return the accepted body or raise when the action was not accepted."""
         outcome = await self.submit(action, call_id, deadline=deadline)
-        return outcome.body if outcome.accepted else None
+        if not outcome.accepted:
+            raise RuntimeError(
+                f"submission {outcome.route}: {outcome.status} "
+                f"(HTTP {outcome.http_status})"
+            )
+        return outcome.body
 
     # ---- transport -------------------------------------------------------
     async def _post(

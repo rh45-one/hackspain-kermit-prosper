@@ -4,9 +4,9 @@ import { FrontdeskProvider } from "@/components/frontdesk-provider";
 import { ObservatoryChrome } from "@/components/layout/observatory-chrome";
 import { MotionObserver } from "@/components/motion/motion-observer";
 
-export function AppFrame({ children }: { children: React.ReactNode }) {
+export function AppFrame({ children, demo }: { children: React.ReactNode; demo: boolean }) {
   return (
-    <FrontdeskProvider>
+    <FrontdeskProvider demo={demo}>
       <div className="min-h-full bg-background">
         <MotionObserver />
         <ObservatoryChrome />

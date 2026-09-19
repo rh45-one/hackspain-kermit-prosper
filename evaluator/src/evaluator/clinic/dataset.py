@@ -301,6 +301,26 @@ class Dataset:
         closures = {date.fromisoformat(d) for d in self.calendar.get("closure_days", [])}
         patient = self.patients_by_id.get(patient_id) if patient_id else None
         effective_insurers = insurers or ([patient["insurer"]] if patient else [])
+        if appointment_type_id is None:
+            provider = self.providers_by_id.get(provider_id) if provider_id else None
+            specialty = specialty_id or (provider["specialty_id"] if provider else None)
+            if specialty not in self.specialties_by_id:
+                raise ValueError("a known provider_id or specialty_id is required")
+            visited = bool(patient.get("has_visited_before")) if patient else True
+            requirements = {"any", "none", "visited before" if visited else "new patients only"}
+            candidates = [
+                item["id"] for item in self.appointment_types
+                if item.get("specialty_id") == specialty
+                and item["id"] not in {"first_visit", "review"}
+                and item.get("new_patient_requirement", "any") in requirements
+            ]
+            if len(candidates) > 1:
+                raise ValueError("dataset has ambiguous appointment types for this patient")
+            appointment_type_id = candidates[0] if candidates else (
+                "review" if visited else "first_visit"
+            )
+        if appointment_type_id not in self.types_by_id:
+            raise ValueError("unknown appointment_type_id")
 
         slots: list[dict[str, Any]] = []
         blocked: list[dict[str, Any]] = []

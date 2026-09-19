@@ -20,7 +20,7 @@ import { isValidTunnelUrl } from "@/lib/dni";
 import type { AgentSettings, KnowledgeKind, VoicePipeline } from "@/lib/types";
 
 export function AgentSettingsForm() {
-  const { settings, saveSettings, addKnowledgeSource } = useFrontdesk();
+  const { settings, saveSettings, addKnowledgeSource, demo } = useFrontdesk();
   const [draft, setDraft] = useState<AgentSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +45,23 @@ export function AgentSettingsForm() {
   ]);
 
   const tunnelOk = !draft.tunnelUrl.trim() || isValidTunnelUrl(draft.tunnelUrl);
+
+  if (!demo) {
+    return (
+      <div>
+        <PageHeader kicker="Configuración" title="Agente integrado">
+          La configuración del agente se lee del entorno del backend al arrancar.
+        </PageHeader>
+        <section className="surface rounded-[18px] p-[var(--card-padding)] text-steel">
+          <p>Configura VOICE_ENGINE=cascade o gemini_live y las claves de los proveedores en backend/.env.</p>
+          <p className="mt-4">El frontend consulta el servidor definido por AGENT_HTTP_BASE_URL.
+            Las credenciales de Prosper permanecen en el backend.</p>
+          <p className="mt-4">El control manual de llamadas, la edición del prompt y la carga de
+            conocimiento aún no tienen API. Están disponibles solo como simulación con FRONTDESK_DEMO=true.</p>
+        </section>
+      </div>
+    );
+  }
 
   function persist(next: AgentSettings) {
     const result = saveSettings(next);

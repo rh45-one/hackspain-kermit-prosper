@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Inter_Tight } from "next/font/google";
+import { connection } from "next/server";
 
 import { AppFrame } from "@/components/layout/app-frame";
 import "./globals.css";
@@ -21,14 +22,15 @@ export const metadata: Metadata = {
     "Panel de control del agente de IA para recepción de Clínica Arenal.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  await connection();
   return (
     <html
       lang="es"
       className={`${inter.variable} ${interTight.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background font-sans text-graphite">
-        <AppFrame>{children}</AppFrame>
+        <AppFrame demo={process.env.FRONTDESK_DEMO === "true"}>{children}</AppFrame>
       </body>
     </html>
   );

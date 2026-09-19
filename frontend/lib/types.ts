@@ -54,7 +54,7 @@ export type LiveCall = {
   callId: string;
   socketId: string;
   virtualPhone: string;
-  status: "active" | "ended";
+  status: "active" | "ended" | "unknown";
   turn: TurnState;
   startedAt: string;
   transcript: TranscriptLine[];
@@ -63,6 +63,12 @@ export type LiveCall = {
   outcome?: ReceptionOutcome;
   action?: ActionVerb;
   reason?: OutcomeReason;
+  diagnostic?: {
+    empty_action_reason?: string | null;
+    submissions_succeeded?: number;
+    submissions_failed?: number;
+    fallback_action_added?: boolean;
+  } | null;
 };
 
 export type Patient = {

@@ -34,9 +34,11 @@ function TurnMark({ turn }: { turn: TurnState }) {
 function CallCard({
   call,
   onHandover,
+  demo,
 }: {
   call: LiveCall;
   onHandover: (callId: string) => void;
+  demo: boolean;
 }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -68,8 +70,12 @@ function CallCard({
         </div>
         {ended ? (
           <span className="shrink-0 font-heading text-[13px] text-ember-orange">
-            DIVERTED
+            {demo ? "DIVERTED" : "FINALIZADA"}
           </span>
+        ) : call.status === "unknown" ? (
+          <span className="text-[13px] text-quiet">SIN CIERRE REGISTRADO</span>
+        ) : !demo ? (
+          <span className="text-[13px] text-quiet">ABIERTA EN EL REGISTRO</span>
         ) : (
           <TurnMark turn={call.turn} />
         )}
@@ -122,13 +128,20 @@ function CallCard({
         </div>
       </dl>
       <div className="mt-6">
+        {!demo && call.diagnostic ? (
+          <p className="mb-3 text-[13px] text-steel">
+            Envíos aceptados: {call.diagnostic.submissions_succeeded ?? 0}.
+            {" "}Fallidos: {call.diagnostic.submissions_failed ?? 0}.
+            {call.diagnostic.empty_action_reason ? ` Diagnóstico: ${call.diagnostic.empty_action_reason}.` : ""}
+          </p>
+        ) : null}
         <Button
           variant={ended ? "outline" : "default"}
-          disabled={ended}
+          disabled={ended || !demo}
           onClick={() => onHandover(call.callId)}
         >
           {ended ? <PhoneOff /> : <Hand />}
-          {ended ? "Control tomado" : "Tomar el control"}
+          {!demo ? "Control manual no disponible" : ended ? "Control tomado" : "Tomar el control"}
         </Button>
       </div>
     </article>
@@ -148,14 +161,15 @@ function EmptySlot({ index }: { index: number }) {
 }
 
 export function CallMonitor() {
-  const { calls, takeControl, activeCount } = useFrontdesk();
-  const slots = Array.from({ length: CALL_CAPACITY }, (_, index) => calls[index]);
+  const { calls, takeControl, activeCount, demo } = useFrontdesk();
+  const slots = Array.from({ length: demo ? CALL_CAPACITY : Math.max(calls.length, 1) }, (_, index) => calls[index]);
 
   return (
     <div>
       <PageHeader kicker="Observatorio en vivo" title="Monitor de llamadas">
-        Hasta diez sockets concurrentes. Transcripción y entidades en vivo,
-        datos simulados. {activeCount} activas ahora.
+        {demo ? "Transcripción y entidades simuladas." :
+          "Últimos 30 registros de llamadas: transcripciones y diagnóstico de envíos."}
+        {" "}{activeCount} abiertas con actividad reciente.
       </PageHeader>
       <div className="mb-[var(--section-gap)]">
         <ObservatoryCharts />
@@ -183,7 +197,7 @@ export function CallMonitor() {
       >
         {slots.map((call, index) =>
           call ? (
-            <CallCard key={call.callId} call={call} onHandover={takeControl} />
+            <CallCard key={call.callId} call={call} onHandover={takeControl} demo={demo} />
           ) : (
             <EmptySlot key={`empty-${index}`} index={index} />
           ),

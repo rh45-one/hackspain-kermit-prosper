@@ -36,7 +36,7 @@ import { formatMadrid } from "@/lib/timezone";
 import type { Patient } from "@/lib/types";
 
 export function PatientDirectory() {
-  const { patients, appointments } = useFrontdesk();
+  const { patients, appointments, demo } = useFrontdesk();
   const [nameQuery, setNameQuery] = useState("");
   const [idQuery, setIdQuery] = useState("");
   const [selected, setSelected] = useState<Patient | null>(null);
@@ -74,8 +74,8 @@ export function PatientDirectory() {
   return (
     <div>
       <PageHeader kicker="Directorio" title="Pacientes">
-        Simula GET /api/v1/directory. El DNI/NIE valida la letra de control
-        antes de consultar.
+        {demo ? "Directorio simulado." : "Directorio de la clínica configurada en el backend."}
+        {" "}Filtra los resultados por nombre o DNI/NIE; actualización cada minuto.
       </PageHeader>
 
       <section
@@ -236,7 +236,7 @@ export function PatientDirectory() {
                 </h3>
                 <div className="space-y-4">
                   {history.length === 0 ? (
-                    <p className="text-steel">Sin citas en mock.</p>
+                    <p className="text-steel">Sin citas registradas.</p>
                   ) : (
                     history.map((item) => {
                       const outcome = outcomeFromAction(item.action);
