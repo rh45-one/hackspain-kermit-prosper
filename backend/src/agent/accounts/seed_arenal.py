@@ -253,8 +253,27 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
 
 
 
-def seed(path: str, org_id: str = DEFAULT_ORG_ID) -> tuple[int, int]:
-    """Write the team and the rota. Idempotent: run it twice, same result."""
+def seed(path: str, org_id: str = DEFAULT_ORG_ID, *, prune: bool = True) -> tuple[int, int, int]:
+    """Write the team and the rota. Idempotent, and **authoritative**.
+
+    `prune` is the part that took two production bugs to learn. An upsert-only
+    seed adds and never removes, so a row this file used to declare survives
+    forever in a database nobody looks at:
+
+    * `sara-buendia` was renamed to `manager` and the old slug stayed, so the
+      graph drew two Coordinaciones.
+    * `medical_emergency -> gines-martinez` was deleted from `ROUTES` and the
+      row stayed, so the clinic went on answering a heart attack with the head
+      of **gynaecology** — after the fix, and on the deployed host, with every
+      test green. The table said one thing and the volume said another.
+
+    So anything this file no longer declares is removed. That is only safe
+    because this seed owns this organisation end to end; pass `prune=False`
+    for an organisation a human curates through the panel, where the seed is
+    a starting point rather than the truth.
+
+    Returns (people, routes, removed).
+    """
     db.migrate(path)
     shop = Store(path)
     for person in TEAM:
@@ -268,28 +287,45 @@ def seed(path: str, org_id: str = DEFAULT_ORG_ID) -> tuple[int, int]:
                 languages=tuple(person.get("languages", ())),
                 provider_id=person.get("provider_id"),
                 phone=person.get("phone", ""),
-                opening=person.get("opening", ""),
                 covers_for=person.get("covers_for", ""),
+                opening=person.get("opening", ""),
                 may_ask=tuple(x for x in [person.get("may_ask", "")] if x),
                 must_not_ask=tuple(x for x in [person.get("must_not_ask", "")] if x),
             ),
         )
     for reason, slug, urgency in ROUTES:
         shop.upsert_route(org_id, Route(reason=reason, person_slug=slug, urgency=urgency))
-    return len(TEAM), len(ROUTES)
+
+    removed = 0
+    if prune:
+        declared_people = {person["slug"] for person in TEAM}
+        for existing in shop.list_people(org_id):
+            if existing.slug not in declared_people and shop.delete_person(org_id, existing.slug):
+                removed += 1
+        declared_routes = {reason for reason, _slug, _urgency in ROUTES}
+        for route in shop.list_routes(org_id):
+            if route.reason not in declared_routes and shop.delete_route(org_id, route.reason):
+                removed += 1
+    return len(TEAM), len(ROUTES), removed
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default=None, help="path to platform.db")
     parser.add_argument("--org", default=DEFAULT_ORG_ID)
+    parser.add_argument(
+        "--keep-undeclared",
+        action="store_true",
+        help="leave rows this file no longer declares (default: remove them)",
+    )
     args = parser.parse_args()
 
     from agent.config import settings
 
     path = args.db or str(Path(settings().data_dir) / "platform.db")
-    people, routes = seed(path, args.org)
-    print(f"seeded {people} people and {routes} routes into {path}")
+    people, routes, removed = seed(path, args.org, prune=not args.keep_undeclared)
+    note = f", removed {removed} no longer declared" if removed else ""
+    print(f"seeded {people} people and {routes} routes into {path}{note}")
 
 
 if __name__ == "__main__":

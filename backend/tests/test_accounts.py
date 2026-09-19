@@ -371,3 +371,45 @@ def test_broken_configuration_still_raises_out_of_the_client_builder(tmp_path):
 
     with pytest.raises(AttributeError):
         deps.try_clinic_client(object())
+
+
+def test_the_seed_removes_what_it_no_longer_declares(tmp_path, monkeypatch):
+    """An upsert-only seed leaves ghosts, and a ghost answered a heart attack.
+
+    `medical_emergency -> gines-martinez` was deleted from the seed's table and
+    the row stayed in the volume, so the deployed clinic went on routing a
+    heart attack to the head of gynaecology with every test green. The table
+    and the database disagreed and only the database was being read.
+    """
+    from agent.accounts import seed_arenal
+    from agent.accounts.store import Person, Route, Store
+
+    path = str(tmp_path / "platform.db")
+    seed_arenal.seed(path)
+    shop = Store(path)
+    shop.upsert_person(DEFAULT_ORG_ID, Person(slug="fantasma", name="Fantasma", role="?"))
+    shop.upsert_route(
+        DEFAULT_ORG_ID,
+        Route(reason="medical_emergency", person_slug="fantasma", urgency="now"),
+    )
+
+    _people, _routes, removed = seed_arenal.seed(path)
+
+    assert removed == 2
+    assert all(p.slug != "fantasma" for p in shop.list_people(DEFAULT_ORG_ID))
+    assert all(r.reason != "medical_emergency" for r in shop.list_routes(DEFAULT_ORG_ID))
+
+
+def test_keeping_undeclared_rows_is_possible_for_a_curated_org(tmp_path):
+    """An organisation a human edits through the panel is not seed-owned."""
+    from agent.accounts import seed_arenal
+    from agent.accounts.store import Person, Store
+
+    path = str(tmp_path / "platform.db")
+    seed_arenal.seed(path)
+    Store(path).upsert_person(DEFAULT_ORG_ID, Person(slug="contratada", name="Nueva", role="?"))
+
+    _people, _routes, removed = seed_arenal.seed(path, prune=False)
+
+    assert removed == 0
+    assert any(p.slug == "contratada" for p in Store(path).list_people(DEFAULT_ORG_ID))
