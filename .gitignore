@@ -36,3 +36,5 @@ backend/data/reflow/*
 .DS_Store
 .idea/
 .vscode/
+# Local Pi runtime state
+.atl/

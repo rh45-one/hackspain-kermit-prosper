@@ -1,0 +1,138 @@
+# Perfiles de agente del laboratorio.
+#
+# Un perfil es una DECLARACIÓN, no un proceso: dice qué motor se prueba, con
+# qué endpoints se habla con él, qué evidencia puede dar y qué variables de
+# entorno llevan sus credenciales — por NOMBRE, nunca por valor. Los valores
+# viven en el entorno de quien arranca el agente, no acá y no en el repo.
+#
+# Este archivo es la copia editable del catálogo que trae el evaluador
+# (`evaluator.profiles.ProfileCatalog.builtin()`); un test comprueba que ambos
+# declaren lo mismo. `evaluator.profiles.catalog` es la referencia en código.
+#
+# Contrato congelado del backend contra el que están fijados (ver
+# `odd/tasks/evaluator-laboratorio.md`):
+#   - arranque:  uv run --project backend python -m agent.serve
+#   - motor:     VOICE_ENGINE ∈ {cascade, gemini_live}, default cascade
+#   - puertos:   VOICE_WS_PORT / PORT (dedicado del laboratorio) y OPS_HTTP_PORT
+#   - readiness: GET /healthz        voz: ws://host:port/ws
+#   - texto:     POST {text_url}/turns, solo si TURNS_ADAPTER es verdadero
+#   - audit:     <DATA_DIR>/calls/<call_id>.jsonl
+#
+# Reglas que la guarda del laboratorio hace cumplir (P0.2):
+#   - el puerto 7860 es la instancia de PRODUCCIÓN con llamadas puntuadas: acá
+#     no se usa nunca, ni como destino ni para arrancar nada;
+#   - ningún destino oficial (prosper / hackspain / ngrok / remoto);
+#   - el laboratorio no arranca nada en un puerto ya ocupado.
+#
+# `start_command` es material del servidor: lo declara quien escribe este
+# archivo en esta máquina y NUNCA llega desde el cuerpo de una petición. Hoy va
+# en null a propósito: el agente lo arranca su responsable, fuera del banco
+# (ver README, «Evaluar el agente real»). Si se pone, la forma es:
+#   start_command: uv run --project backend python -m agent.serve
+# (el runner lo ejecuta con cwd en el directorio de este archivo, así que el
+# comando tiene que ser correcto desde acá).
+
+profiles:
+  - id: cascade
+    engine: cascade
+    version: lab-1
+    endpoints:
+      ws_url: ws://127.0.0.1:17860/ws
+      # El adaptador de texto vive en el mismo proceso que el socket de voz
+      # (`voice/server.py` lo monta), así que comparten host y puerto.
+      text_url: http://127.0.0.1:17860
+      usage_url: null
+    capabilities:
+      text: true
+      voice: true
+      # El banco graba lo que pasa por SU socket; el agente no escribe WAV
+      # (`add_wav_header=False`), por eso no es `server_recording`.
+      audio_capture: true
+      audio_source: client_capture
+      transcript: true
+      # El contrato congelado no expone consumo: declararlo presente inventaría
+      # un coste. El coste queda desconocido, nunca cero.
+      usage_telemetry: false
+      expected_outcome: true
+    providers:
+      name: deepgram + helmcode + elevenlabs
+      stack:
+        - deepgram
+        - helmcode
+        - elevenlabs
+      docs: backend/README.md
+      notes: motor por defecto del backend y rollback permanente
+    # Referencias por nombre: los valores los pone el entorno del servidor.
+    credentials:
+      agent_api_key: PROSPER_API_KEY
+      stt_api_key: DEEPGRAM_API_KEY
+      tts_api_key: ELEVENLABS_API_KEY
+      brain_api_key: HELMCODE_API_KEY
+    launch_env:
+      VOICE_WS_HOST: 127.0.0.1
+      VOICE_WS_PORT: "17860"
+      PORT: "17860"
+      OPS_HTTP_PORT: "17861"
+      TURNS_ADAPTER: "1"
+      PROSPER_API_BASE_URL: http://127.0.0.1:18090
+      DATA_DIR: evaluator/experiments/results/agent-data
+      VOICE_ENGINE: cascade
+    laboratory:
+      voice_port: 17860
+      clinic_url: http://127.0.0.1:18090
+      submit_key: pk-local-eval
+      data_dir: evaluator/experiments/results/agent-data
+      scenario: null
+      agent_audit_dir: evaluator/experiments/results/agent-data
+      tts: espeak-ng
+      stt: null
+      launch_hint: uv run --project backend python -m agent.serve, desde la raíz del repo y con este entorno
+    start_command: null
+    notes: "sin endpoints de consumo en el contrato congelado: el coste queda desconocido, nunca cero"
+
+  - id: gemini_live
+    engine: gemini_live
+    version: lab-1
+    endpoints:
+      ws_url: ws://127.0.0.1:17860/ws
+      text_url: http://127.0.0.1:17860
+      usage_url: null
+    capabilities:
+      text: true
+      voice: true
+      audio_capture: true
+      audio_source: client_capture
+      transcript: true
+      usage_telemetry: false
+      expected_outcome: true
+    providers:
+      name: gemini live
+      stack:
+        - gemini
+        - helmcode
+      docs: backend/README.md
+      notes: modelo de audio a audio; la clave vive en GEMINI_API_KEY
+    credentials:
+      agent_api_key: PROSPER_API_KEY
+      gemini_api_key: GEMINI_API_KEY
+    launch_env:
+      VOICE_WS_HOST: 127.0.0.1
+      VOICE_WS_PORT: "17860"
+      PORT: "17860"
+      OPS_HTTP_PORT: "17861"
+      TURNS_ADAPTER: "1"
+      PROSPER_API_BASE_URL: http://127.0.0.1:18090
+      DATA_DIR: evaluator/experiments/results/agent-data
+      VOICE_ENGINE: gemini_live
+    laboratory:
+      voice_port: 17860
+      clinic_url: http://127.0.0.1:18090
+      submit_key: pk-local-eval
+      data_dir: evaluator/experiments/results/agent-data
+      scenario: null
+      agent_audit_dir: evaluator/experiments/results/agent-data
+      tts: espeak-ng
+      stt: null
+      launch_hint: uv run --project backend python -m agent.serve, desde la raíz del repo y con este entorno
+    start_command: null
+    notes: "la voz la sintetiza el propio modelo: no hay STT/TTS separados que declarar"

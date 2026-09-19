@@ -35,9 +35,29 @@ from evaluator.harness.stt import NullTranscriber, Transcriber, transcriber_from
 from evaluator.harness.tts import provider_available, synthesize
 from evaluator.harness.wsclient import CallSession, silence
 from evaluator.models import Scenario
+from evaluator.profiles import AgentProfile
 
 DEFAULT_SAVE_ROOT = Path("evaluator/experiments/results")
 SUBMISSION_WAIT_S = 12.0
+
+# Fields a chat request is allowed to override once the server resolved a
+# profile. Everything else — the socket URL, the clinic, the key, the scenario
+# path, the audit directory — comes from the profile and cannot be influenced
+# from outside this process. See `evaluator.profiles.requests`.
+PROFILE_OVERRIDE_FIELDS = (
+    "call_id",
+    "from_number",
+    "tts",
+    "lang",
+    "stt_provider",
+    "greet_first",
+    "reply_idle_ms",
+    "reply_max_ms",
+    "reply_start_ms",
+    "greeting_wait_ms",
+    "turn_tail_ms",
+    "submission_wait_s",
+)
 
 
 @dataclass
@@ -60,6 +80,41 @@ class ChatOptions:
     turn_tail_ms: float = 600.0
     greeting_wait_ms: float = 20000.0
     greet_first: bool = True
+    # Which declared profile produced these options (`None` for the CLI's
+    # hand-typed flags). Display only; the rig never resolves a URL from it.
+    profile_id: str | None = None
+
+    @classmethod
+    def from_profile(cls, profile: AgentProfile, **overrides: object) -> ChatOptions:
+        """Resolve a server-declared profile into session options.
+
+        This is the only mapping from a profile to a live session, and it reads
+        the destination, the clinic, the submit key, the scenario and the audit
+        directory from the profile. `overrides` may only carry the fields in
+        `PROFILE_OVERRIDE_FIELDS`; anything else raises, so a caller cannot
+        reach a destination through this door.
+        """
+        unknown = sorted(set(overrides) - set(PROFILE_OVERRIDE_FIELDS))
+        if unknown:
+            raise ValueError(f"opciones no permitidas desde una petición: {unknown}")
+        laboratory = profile.laboratory
+        named: dict[str, object] = {
+            "ws_url": profile.endpoints.ws_url or cls.ws_url,
+            "clinic_url": laboratory.clinic_url,
+            "api_key": laboratory.submit_key,
+            "tts": laboratory.tts,
+            "stt_provider": laboratory.stt,
+            "scenario": laboratory.scenario,
+            "agent_audit_dir": Path(laboratory.agent_audit_dir)
+            if laboratory.agent_audit_dir
+            else None,
+            "profile_id": profile.id,
+        }
+        for name in PROFILE_OVERRIDE_FIELDS:
+            value = overrides.get(name)
+            if value is not None:
+                named[name] = value
+        return cls(**named)
 
 
 def _out(message: str = "") -> None:
@@ -160,6 +215,7 @@ async def run_chat(options: ChatOptions) -> int:
         options.ws_url, options.call_id, from_number=options.from_number
     )
     _out(f"llamada  {options.call_id}")
+    _out(f"perfil   {options.profile_id or '(flags del CLI)'}")
     _out(f"agente   {options.ws_url}")
     _out(f"clínica  {options.clinic_url}")
     _out(f"voz      {options.tts} ({options.lang})   STT: {transcriber.name}")

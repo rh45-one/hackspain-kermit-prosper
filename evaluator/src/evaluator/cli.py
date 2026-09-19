@@ -87,6 +87,12 @@ def main() -> None:
     p.add_argument("--web", default="evaluator/web")
 
     p = sub.add_parser("chat", help="manual tester: type to a live agent and read its replies")
+    p.add_argument(
+        "--profile",
+        default=None,
+        help="perfil del catálogo del servidor (cascade | gemini_live | ...); reemplaza "
+        "los flags de destino, clínica, escenario y auditoría",
+    )
     p.add_argument("--ws-url", default="ws://127.0.0.1:17860/ws", help="agent websocket")
     p.add_argument("--clinic-url", default="http://127.0.0.1:18090", help="local clinic")
     p.add_argument("--api-key", default="pk-local-eval")
@@ -236,26 +242,59 @@ def main() -> None:
 
         from evaluator.tester import ChatOptions, run_chat
 
-        options = ChatOptions(
-            ws_url=args.ws_url,
-            clinic_url=args.clinic_url,
-            api_key=args.api_key,
-            from_number=args.from_number,
-            tts=args.tts,
-            lang=args.lang,
-            stt_provider=args.stt,
-            scenario=args.scenario,
-            save_dir=args.save_dir,
-            agent_audit_dir=args.agent_audit_dir,
-            reply_idle_ms=args.reply_idle_ms,
-            reply_max_ms=args.reply_max_ms,
-            reply_start_ms=args.reply_start_ms,
-            greeting_wait_ms=args.greeting_wait_ms,
-            turn_tail_ms=args.turn_tail_ms,
-            greet_first=not args.no_greeting,
-        )
-        if args.call_id:
-            options.call_id = args.call_id
+        if args.profile:
+            # The CLI is a human at a shell, but the destination still comes
+            # from the declared catalog; the guard applies here too.
+            from evaluator.profiles import (
+                LaboratoryRefusal,
+                ProfileCatalog,
+                ProfileNotFound,
+                assert_laboratory_profile,
+            )
+
+            try:
+                profile = ProfileCatalog.builtin().get(args.profile)
+                assert_laboratory_profile(profile)
+            except (ProfileNotFound, LaboratoryRefusal) as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                sys.exit(2)
+            options = ChatOptions.from_profile(
+                profile,
+                call_id=args.call_id,
+                from_number=args.from_number,
+                tts=args.tts,
+                lang=args.lang,
+                stt_provider=args.stt,
+                reply_idle_ms=args.reply_idle_ms,
+                reply_max_ms=args.reply_max_ms,
+                reply_start_ms=args.reply_start_ms,
+                greeting_wait_ms=args.greeting_wait_ms,
+                turn_tail_ms=args.turn_tail_ms,
+                greet_first=not args.no_greeting,
+            )
+        else:
+            options = ChatOptions(
+                ws_url=args.ws_url,
+                clinic_url=args.clinic_url,
+                api_key=args.api_key,
+                from_number=args.from_number,
+                tts=args.tts,
+                lang=args.lang,
+                stt_provider=args.stt,
+                scenario=args.scenario,
+                save_dir=args.save_dir,
+                agent_audit_dir=args.agent_audit_dir,
+                reply_idle_ms=args.reply_idle_ms,
+                reply_max_ms=args.reply_max_ms,
+                reply_start_ms=args.reply_start_ms,
+                greeting_wait_ms=args.greeting_wait_ms,
+                turn_tail_ms=args.turn_tail_ms,
+                greet_first=not args.no_greeting,
+            )
+            if args.call_id:
+                options.call_id = args.call_id
+        if args.save_dir:
+            options.save_dir = args.save_dir
         sys.exit(asyncio.run(run_chat(options)))
 
 

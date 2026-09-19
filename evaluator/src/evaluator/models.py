@@ -6,13 +6,40 @@ readback shape) or flat (the submit body shape); both canonicalize flat.
 
 Scenario schema follows the evaluator plan §8: `caller` (persona, facts,
 behavior), `oracle` (accepted outcomes + extra checks) and `limits`.
+
+The call/evidence schema (`CaseResult`, `TranscriptEvent`, `EvidenceAvailability`)
+carries an explicit `schema_version`. Nothing in this file may require a manual
+migration to read an older artifact: the reader infers the missing pieces and
+never turns "nobody measured it" into a zero.
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Version of the call/evidence artifact schema (`cases.jsonl`) and of the
+# transcript/evidence sub-schemas. Bump it when a written field changes shape;
+# a reader must keep loading older numbers, so this is informative, never a gate.
+SCHEMA_VERSION = 2
+# Artifacts written before the field existed. Version 1 is `CaseResult` on
+# pydantic defaults: no origin, no evidence availability, no transcript events.
+LEGACY_SCHEMA_VERSION = 1
+
+# Who produced a call. `real` is a call the backend actually served (read back
+# from its audit), `simulated` is a scripted experiment case, `manual` is a
+# person on the console, `unknown` is a legacy artifact that never said.
+CallOrigin = Literal["real", "simulated", "manual", "unknown"]
+
+# Evidence availability is a three-state fact per item, never a boolean and
+# never a zero: `unknown` means nobody measured it, `absent` means the source
+# says it does not exist (a real call with no recording), `present` means it is
+# in this artifact. `False`/`0` would be a claim we cannot support.
+EvidenceState = Literal["present", "absent", "unknown"]
+
+TranscriptRole = Literal["caller", "agent", "system", "unknown"]
 
 VERBS = ("REGISTER", "BOOK", "RESCHEDULE", "CANCEL", "NO_ACTION", "ESCALATE")
 
@@ -301,7 +328,145 @@ class FieldDiff(BaseModel):
     got: Any = None
 
 
+class TranscriptEvent(BaseModel):
+    """One ordered transcript record, exactly as the source recorded it.
+
+    A backend audit, a text adapter and a person typing all produce ordered
+    fragments, not tidy turns. `fragment=True` says the source gave a piece and
+    the evaluator refused to invent a turn boundary around it: turn detection
+    is the agent's job and a guessed boundary would be a fabricated fact.
+    `timestamp` is whatever the source stamped (ISO-8601 for the backend audit);
+    `offset_s` is seconds from the start of the call when that is derivable.
+    """
+
+    role: TranscriptRole = "unknown"
+    text: str = ""
+    timestamp: str | None = None
+    offset_s: float | None = None
+    fragment: bool = False
+    source: str | None = None  # agent_audit | text_adapter | manual | legacy_transcript
+
+
+class EvidenceAvailability(BaseModel):
+    """Which evidence this call actually carries, item by item.
+
+    Every item is `present` / `absent` / `unknown`; a missing recording is
+    `absent` (the source has none) or `unknown` (nobody looked), and never a
+    silent zero. Consumers show the coverage instead of assuming it.
+    """
+
+    audio: EvidenceState = "unknown"
+    transcript: EvidenceState = "unknown"
+    cost: EvidenceState = "unknown"
+    outcome: EvidenceState = "unknown"
+
+    def as_dict(self) -> dict[str, EvidenceState]:
+        return {
+            "audio": self.audio,
+            "transcript": self.transcript,
+            "cost": self.cost,
+            "outcome": self.outcome,
+        }
+
+
+# Tokens picked from the observer run builder (`observer/run.py`, frozen for P0):
+# a real call always lands under `.../obs-<id>` and always says so in its notes.
+# They are only consulted when a legacy artifact carries no `origin` at all.
+_LEGACY_REAL_MARKERS = ("/obs-", "llamada real observada del audit")
+_LEGACY_ROLE_PREFIXES: dict[str, TranscriptRole] = {
+    "caller": "caller",
+    "agente": "agent",
+    "agent": "agent",
+    "assistant": "agent",
+    "system": "system",
+}
+
+
+def _legacy_origin(data: dict[str, Any]) -> CallOrigin:
+    """Guess the origin of an artifact written before `origin` existed.
+
+    Only two outcomes are possible and both are conservative: a call whose
+    identifiers match the observer's real-call shape is `real`, everything else
+    is `simulated` (the scripted runner). Nothing is invented as `manual`.
+    """
+    notes = data.get("notes")
+    if isinstance(notes, str):
+        notes = [notes]
+    note_text = " ".join(str(n) for n in notes) if isinstance(notes, list) else ""
+    haystack = f"{data.get('case_id') or ''} {note_text}"
+    return "real" if any(marker in haystack for marker in _LEGACY_REAL_MARKERS) else "simulated"
+
+
+def _legacy_transcript_events(lines: Any) -> list[dict[str, Any]]:
+    """Turn old `transcript` display lines into ordered, unflagged-turn events.
+
+    The legacy field is a list of `"<who>: <what>"` strings, one per recorded
+    fragment. Each line becomes one event with `fragment=True` and no timestamp:
+    the reader recovers the order the artifact had, and claims nothing more.
+    """
+    if not isinstance(lines, list):
+        return []
+    events: list[dict[str, Any]] = []
+    for line in lines:
+        if not isinstance(line, str) or not line.strip():
+            continue
+        label, separator, rest = line.partition(": ")
+        role: TranscriptRole = "unknown"
+        text = line.strip()
+        if separator and label.strip().lower() in _LEGACY_ROLE_PREFIXES:
+            role = _LEGACY_ROLE_PREFIXES[label.strip().lower()]
+            text = rest.strip()
+        events.append(
+            {
+                "role": role,
+                "text": text,
+                "fragment": True,
+                "source": "legacy_transcript",
+            }
+        )
+    return events
+
+
+def _legacy_evidence(data: dict[str, Any]) -> dict[str, EvidenceState]:
+    """Availability of a legacy artifact, read from what it does carry.
+
+    `absent` is only claimed where the artifact itself says the evidence does
+    not exist; where it is merely missing, the answer is `unknown`.
+    """
+    audio = data.get("audio")
+    transcript = data.get("transcript")
+    events = data.get("transcript_events")
+    verdict = data.get("verdict")
+    return {
+        "audio": "present" if audio else "unknown",
+        "transcript": "present" if (transcript or events) else "unknown",
+        "cost": "present" if data.get("cost") is not None else "unknown",
+        "outcome": "absent" if verdict == "invalid_evaluation" else "present",
+    }
+
+
 class CaseResult(BaseModel):
+    """One evaluated call, with an explicit version, origin and evidence map.
+
+    Reading is tolerant by design: an artifact written by an earlier run loads
+    with no manual migration (missing `schema_version`, `origin`, `evidence` and
+    `transcript_events` are inferred), and unknown extra fields are ignored.
+    """
+
+    # The version of the object in hand: a freshly written case declares the
+    # current version, while `model_validate_json` records what a file says.
+    schema_version: int = SCHEMA_VERSION
+    # `real` / `simulated` / `manual`; a legacy artifact that never said falls
+    # back to the inference in `_legacy_origin`, never to a fabricated value.
+    origin: CallOrigin = "simulated"
+    candidate_version: str | None = None
+    run_id: str | None = None  # link back to the run that produced this case
+    started_at: str | None = None
+    ended_at: str | None = None
+    evidence: EvidenceAvailability = Field(default_factory=EvidenceAvailability)
+    # Ordered fragments with role and timestamp. `transcript` (below) stays for
+    # the per-speaker rendering old consumers read; it is not a turn model.
+    transcript_events: list[TranscriptEvent] = Field(default_factory=list)
     case_id: str  # run-local unique id
     call_id: str
     scenario_id: str
@@ -343,9 +508,58 @@ class CaseResult(BaseModel):
     duration_s: float = 0.0
     errors: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerant_reader(cls, data: Any) -> Any:
+        """Read artifacts from earlier runs without a migration step.
+
+        Only the *shape* is repaired here: a case that never declared an origin,
+        an evidence map or ordered transcript events gets them inferred from what
+        it does carry, and the inferences are marked as such (`fragment=True`,
+        `source="legacy_transcript"`). The version is handled by
+        `model_validate_json` below, which is the door every artifact on disk
+        comes through.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        if not data.get("origin"):
+            data["origin"] = _legacy_origin(data)
+        if not data.get("transcript_events"):
+            data["transcript_events"] = _legacy_transcript_events(data.get("transcript"))
+        if not data.get("evidence"):
+            data["evidence"] = _legacy_evidence(data)
+        return data
+
+    @classmethod
+    def model_validate_json(cls, json_data: Any, **kwargs: Any) -> CaseResult:
+        """Read one JSONL line, recording the version the artifact declares.
+
+        This is where "no manual migration" happens: a line written before the
+        field existed is read as `LEGACY_SCHEMA_VERSION` rather than relabelled
+        as the current version, so a consumer can tell an upgraded artifact from
+        one that always declared its evidence map. An object built in Python (any
+        writer calling `CaseResult(...)`) declares the current version instead.
+        """
+        if isinstance(json_data, (str, bytes, bytearray)):
+            try:
+                parsed = json.loads(json_data)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                if "schema_version" not in parsed:
+                    parsed["schema_version"] = LEGACY_SCHEMA_VERSION
+                return cls.model_validate(parsed, **kwargs)
+        return super().model_validate_json(json_data, **kwargs)
+
     @property
     def passed(self) -> bool:
         return self.verdict == "pass"
+
+    @property
+    def ordered_transcript(self) -> list[TranscriptEvent]:
+        """The transcript as recorded order, never re-grouped into turns."""
+        return list(self.transcript_events)
 
 
 class CandidateConfig(BaseModel):

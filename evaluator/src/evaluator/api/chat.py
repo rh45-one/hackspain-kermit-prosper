@@ -5,10 +5,18 @@ call instead - the same `CallSession`, the same clinic window and the same
 submit receiver the experiments use - so a person poking at the agent from a
 browser is exercising the rig, not a simulation of it.
 
+The session is opened by **profile id**. The destination, the clinic, the key,
+the scored scenario and the audit directory come from the server's declared
+profile; the request body may tune timing and providers and nothing else (see
+`evaluator.profiles.requests`). A browser used to be able to name a WebSocket
+URL, a clinic URL, a scenario path and an audit directory; that door is closed.
+
 What the session shows is what a run would measure: the caller's audio the rig
 actually sent, the agent's audio it actually got, the latency to its first
 reply, the submissions the receiver accepted, and the audit cross-check that
-says whether the agent heard the caller at all.
+says whether the agent heard the caller at all. On close it reports the same
+evidence availability the call schema uses: present / absent / unknown, never a
+silent zero.
 """
 from __future__ import annotations
 
@@ -18,6 +26,7 @@ import os
 import shutil
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +44,14 @@ from evaluator.harness.audio import ulaw_to_wav
 from evaluator.harness.stt import Transcriber, transcriber_from_env
 from evaluator.harness.tts import provider_available, synthesize
 from evaluator.harness.wsclient import CallSession, silence
-from evaluator.models import Scenario
+from evaluator.models import EvidenceState, Scenario
+from evaluator.profiles import (
+    LaboratoryRefusal,
+    ProfileCatalog,
+    ProfileNotFound,
+    assert_laboratory_profile,
+    request_refusals,
+)
 from evaluator.tester import ChatOptions as TesterOptions
 from evaluator.tester import close_call_window, open_call_window, wait_for_actions
 
@@ -43,6 +59,11 @@ from evaluator.tester import close_call_window, open_call_window, wait_for_actio
 # must not fill memory, and 60 s is far more than any single turn.
 MAX_MIC_SECONDS = 60.0
 FRAME_BYTES = 160  # 20 ms of 8 kHz µ-law, the contract's frame size
+
+
+def _present(value: Any) -> EvidenceState:
+    """Availability of one evidence item, from what the session really has."""
+    return "present" if value else "absent"
 
 
 @dataclass
@@ -74,6 +95,7 @@ class ChatSession:
     transcriber: Transcriber
     turns: list[ChatTurn] = field(default_factory=list)
     closed: bool = False
+    started_at: str = ""
 
     async def _transcribe(self, audio: bytes) -> str:
         if not audio:
@@ -181,6 +203,22 @@ class ChatSession:
         diagnosis = diagnose_caller_audio(caller_seconds, audit)
         payload: dict[str, Any] = {
             "call_id": self.options.call_id,
+            # A console session is a manual call: the same call/evidence schema
+            # the runner and the observer write, with the manual origin so the
+            # historical view can tell the three apart.
+            "origin": "manual",
+            "started_at": self.started_at,
+            "ended_at": datetime.now(UTC).isoformat(),
+            "evidence": {
+                "audio": _present(any(turn.wav for turn in self.turns)),
+                "transcript": _present(
+                    any(turn.text.strip() for turn in self.turns)
+                    or (audit.available and bool(audit.caller_chars))
+                ),
+                # The chat path never calls a usage endpoint: unknown, not zero.
+                "cost": "unknown",
+                "outcome": _present(bool(self.options.scenario)),
+            },
             "frames_sent": evidence.frames_sent,
             "frames_received": evidence.frames_received,
             "caller_seconds": round(caller_seconds, 2),
@@ -221,10 +259,18 @@ def _audit_for(options: TesterOptions) -> AgentAudit:
 
 
 class ChatSessionManager:
-    """In-memory sessions, one per browser tab; audio outlives them on disk."""
+    """In-memory sessions, one per browser tab; audio outlives them on disk.
 
-    def __init__(self, session_root: Path | str) -> None:
+    Holds the profile catalog the server declared. A session is opened by
+    profile id: the manager resolves the destination, the clinic, the key and
+    the paths itself, so nothing a browser sends can select them.
+    """
+
+    def __init__(
+        self, session_root: Path | str, catalog: ProfileCatalog | None = None
+    ) -> None:
         self.root = Path(session_root)
+        self.catalog = catalog or ProfileCatalog.builtin()
         self._sessions: dict[str, ChatSession] = {}
 
     async def create(self, options: TesterOptions) -> ChatSession:
@@ -247,6 +293,7 @@ class ChatSessionManager:
             directory=directory,
             session=session,
             transcriber=transcriber_from_env(_stt_env(options.stt_provider)),
+            started_at=datetime.now(UTC).isoformat(),
         )
         self._sessions[session_id] = manager_session
         return manager_session
@@ -287,21 +334,54 @@ def create_chat_router(manager: ChatSessionManager) -> APIRouter:
 
     @router.post("")
     async def open_session(body: dict[str, Any]) -> dict[str, Any]:
-        options = TesterOptions(
-            ws_url=body.get("ws_url") or TesterOptions.ws_url,
-            clinic_url=body.get("clinic_url") or TesterOptions.clinic_url,
-            api_key=body.get("api_key") or TesterOptions.api_key,
-            tts=body.get("tts") or "espeak-ng",
-            lang=body.get("lang") or "es",
+        """Open a live session against a profile the *server* declared.
+
+        The body names a `profile_id` and may tune timing and providers; it can
+        never carry a destination, a path, a command or an environment. The
+        profile is resolved here, checked against the laboratory guard, and only
+        then turned into session options.
+        """
+        refusals = request_refusals(body)
+        if refusals:
+            raise HTTPException(400, "; ".join(refusals))
+        profile_id = str(body.get("profile_id") or "").strip()
+        if not profile_id:
+            raise HTTPException(
+                400, "falta profile_id: la sesión se pide con un perfil del catálogo del servidor"
+            )
+        try:
+            profile = manager.catalog.get(profile_id)
+        except ProfileNotFound as exc:
+            raise HTTPException(404, str(exc)) from None
+        try:
+            # Destination guard only: a live session talks to a process that
+            # must already be listening, so this path never probes port
+            # occupancy (and never touches 7860).
+            assert_laboratory_profile(profile)
+        except LaboratoryRefusal as exc:
+            raise HTTPException(400, str(exc)) from None
+        options = TesterOptions.from_profile(
+            profile,
+            call_id=body.get("call_id"),
+            from_number=body.get("from_number"),
+            tts=body.get("tts"),
+            lang=body.get("lang"),
             stt_provider=body.get("stt") or None,
-            scenario=body.get("scenario") or None,
-            agent_audit_dir=body.get("agent_audit_dir") or None,
+            greet_first=body.get("greet_first"),
+            reply_idle_ms=body.get("reply_idle_ms"),
+            reply_max_ms=body.get("reply_max_ms"),
+            reply_start_ms=body.get("reply_start_ms"),
+            greeting_wait_ms=body.get("greeting_wait_ms"),
+            turn_tail_ms=body.get("turn_tail_ms"),
+            submission_wait_s=body.get("submission_wait_s"),
         )
         session = await manager.create(options)
         greeting = await session.greet()
         return {
             "session_id": session.id,
             "call_id": session.options.call_id,
+            "profile_id": profile.id,
+            "engine": profile.engine,
             "stt": session.transcriber.name,
             "greeting": greeting.as_dict() if greeting else None,
         }
