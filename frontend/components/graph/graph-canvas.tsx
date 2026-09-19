@@ -104,10 +104,103 @@ export function GraphCanvas({
     return () => observer.disconnect();
   }, [fitScale]);
 
-  const zoom = useCallback((delta: number) => {
+  const clamp = (value: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
+
+  /**
+   * Acercar manteniendo quieto un punto de la pantalla.
+   *
+   * Un zoom que crece desde la esquina superior izquierda se lleva lo que
+   * estabas mirando fuera del encuadre, y lo que haces a continuación es
+   * buscarlo otra vez arrastrando. Anclando al cursor —o al centro, cuando
+   * el zoom viene de un botón— lo que tienes debajo del puntero sigue
+   * debajo del puntero, que es lo que hace que un mapa se sienta como una
+   * herramienta y no como una imagen con botones.
+   *
+   * La cuenta es directa: el punto del dibujo bajo el cursor es
+   * `(scroll + puntero) / escala`, y después del cambio ha de seguir ahí.
+   */
+  const zoomAt = useCallback((next: number, clientX?: number, clientY?: number) => {
+    const box = viewport.current;
     touched.current = true;
-    setScale((current) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number((current + delta).toFixed(2)))));
+    setScale((current) => {
+      const wanted = clamp(Number(next.toFixed(3)));
+      if (!box || wanted === current) return wanted;
+      const rect = box.getBoundingClientRect();
+      const px = (clientX ?? rect.left + rect.width / 2) - rect.left;
+      const py = (clientY ?? rect.top + rect.height / 2) - rect.top;
+      const cx = (box.scrollLeft + px) / current;
+      const cy = (box.scrollTop + py) / current;
+      // Después de pintar a la escala nueva: el navegador aún no ha
+      // redimensionado el contenido en este tick.
+      requestAnimationFrame(() => {
+        box.scrollLeft = cx * wanted - px;
+        box.scrollTop = cy * wanted - py;
+      });
+      return wanted;
+    });
   }, []);
+
+  const zoom = useCallback((delta: number) => zoomAt(scale + delta), [scale, zoomAt]);
+
+  /**
+   * Rueda y pellizco.
+   *
+   * El pellizco de un trackpad llega como `wheel` con `ctrlKey`, así que el
+   * mismo manejador cubre los dos. `passive: false` porque hay que impedir
+   * que el gesto haga zoom a la página entera, y React no deja pedirlo desde
+   * `onWheel`. Sin `ctrl`/`cmd` la rueda se deja en paz: desplazar la página
+   * con la rueda es lo que espera quien está leyendo, y robárselo para hacer
+   * zoom es de las cosas que más molestan de un mapa metido en un artículo.
+   */
+  useEffect(() => {
+    const box = viewport.current;
+    if (!box) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const factor = Math.exp(-event.deltaY / 220);
+      setScale((current) => {
+        const wanted = clamp(Number((current * factor).toFixed(3)));
+        if (wanted === current) return current;
+        touched.current = true;
+        const rect = box.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        const cx = (box.scrollLeft + px) / current;
+        const cy = (box.scrollTop + py) / current;
+        requestAnimationFrame(() => {
+          box.scrollLeft = cx * wanted - px;
+          box.scrollTop = cy * wanted - py;
+        });
+        return wanted;
+      });
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+  }, []);
+
+  /** `+`, `-` y `0`, sólo cuando el puntero está sobre el mapa. */
+  const [hovering, setHovering] = useState(false);
+  useEffect(() => {
+    if (!hovering) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && /input|textarea/i.test(target.tagName)) return;
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        zoomAt(scale + STEP);
+      } else if (event.key === "-") {
+        event.preventDefault();
+        zoomAt(scale - STEP);
+      } else if (event.key === "0") {
+        event.preventDefault();
+        touched.current = false;
+        setScale(fitScale());
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hovering, scale, zoomAt, fitScale]);
 
   /**
    * Agrandar de verdad: pantalla completa.
@@ -186,7 +279,10 @@ export function GraphCanvas({
         justo la parte del dibujo que está al lado no es un control, es un
         estorbo.
       */}
-      <div className="mb-2 flex items-center justify-end gap-1">
+      <div className="mb-2 flex items-center justify-end gap-3">
+        <p className="hidden text-[11px] text-quiet sm:block">
+          Arrastra para mover · ⌘/Ctrl + rueda para acercar · doble clic para encuadrar
+        </p>
         <div className="flex items-center gap-0.5 rounded-full border border-mist bg-canvas-white/90 p-1">
           <Control label="Alejar" onClick={() => zoom(-STEP)} disabled={scale <= MIN_SCALE}>
             <Minus className="size-3.5" />
@@ -223,6 +319,13 @@ export function GraphCanvas({
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        onDoubleClick={(event) => {
+          if ((event.target as HTMLElement).closest("button, a")) return;
+          touched.current = false;
+          setScale(fitScale());
+        }}
       >
         <div
           style={{
