@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport
@@ -84,6 +84,50 @@ async def healthz() -> dict[str, str]:
 async def voice_ws(websocket: WebSocket) -> None:
     """One scored Prosper call. Everything inside is per-connection."""
     await _run_voice_socket(websocket, submit_actions=True)
+
+
+@app.get("/call/context")
+async def call_context(request: Request) -> dict[str, str]:
+    """A quién llama esta llamada y para qué, para la propia página de llamada.
+
+    Lo mismo que ya recibe el prompt, menos todo lo que no se enseña: ni
+    teléfono, ni correo, ni lo que se le puede o no se le puede pedir a esa
+    persona. Nombre, cargo, motivo y propósito — lo que hace falta para que
+    quien escanea el QR sepa qué llamada va a empezar.
+
+    Sin `X-Ops-Token` a propósito: el QR se escanea desde un móvil cualquiera
+    y la página que lo abre es pública. Por eso lo que sale de aquí es lo que
+    la propia llamada va a decir en voz alta de todas formas.
+    """
+    query = request.query_params
+    reason = (query.get("reason") or "").strip()
+    if not reason:
+        return {}
+    from agent.accounts import directory
+    from agent.clinic import graph as clinic_graph
+    from agent.ops.graph import _READABLE
+
+    brief = directory.cover_brief(
+        app_settings.org_id,
+        reason,
+        person_slug=query.get("person") or "",
+        provider_id=query.get("provider_id") or "",
+        situation=query.get("situation") or "",
+        config=app_settings,
+    )
+    escalation = clinic_graph.who_to_call(reason, app_settings.org_id)
+    return {
+        key: value
+        for key, value in {
+            "kicker": "Llamada de la clínica",
+            "who": brief.get("who", ""),
+            "role": brief.get("role", ""),
+            "reason_label": _READABLE.get(reason, reason),
+            "purpose": brief.get("situation") or brief.get("purpose", ""),
+            "urgency": escalation.urgency if escalation is not None else "",
+        }.items()
+        if value
+    }
 
 
 @app.websocket("/ws/demo")

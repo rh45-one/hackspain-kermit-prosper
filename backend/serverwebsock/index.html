@@ -37,9 +37,17 @@
     </header>
 
     <main class="call-shell">
-      <p class="kicker"><span aria-hidden="true"></span> Recepción virtual</p>
+      <p class="kicker" id="page-kicker"><span aria-hidden="true"></span> Recepción virtual</p>
       <h1 id="page-title">Habla con recepción.</h1>
-      <p class="intro">Simulación local. No se envían acciones a Prosper.</p>
+      <p class="intro" id="page-intro">Simulación local. No se envían acciones a Prosper.</p>
+      <!--
+        Cuando la llamada sale de la clínica, aquí se dice a quién se llama y
+        para qué antes de descolgar. Sin esto la página decía "Habla con
+        recepción" mientras el agente, por debajo, llamaba a un jefe de
+        servicio: quien escanea el QR no tiene forma de saber qué llamada va
+        a empezar.
+      -->
+      <p class="intro" id="call-purpose" hidden></p>
 
       <section class="call-panel" aria-labelledby="page-title">
         <div class="call-meta">

@@ -42,6 +42,7 @@ from functools import lru_cache
 from typing import Any
 
 from agent.accounts.store import Person, Route, store
+from agent.clinic.cache import _fold
 from agent.orgs import normalize_org_id
 
 # PARA QUÉ llama esta llamada.
@@ -399,7 +400,18 @@ def cover_brief(
     stands_in_for = ""
     if person is not None and getattr(person, "covers_for", ""):
         covered = person_for(org_id, person.covers_for, config)
-        stands_in_for = covered.name if covered is not None else person.covers_for
+        # Sólo cuando lo que cubre es alguien. La cadena también pasa por
+        # servicios —Urgencias, Recepción— y "sustituyes a Urgencias" no es
+        # una frase: es un nodo del grafo leído en voz alta. Un servicio se
+        # reconoce en que su nombre y su cargo son la misma palabra.
+        if covered is not None and _fold(covered.name) != _fold(covered.role):
+            stands_in_for = covered.name
+
+    # Los cuatro declarados a mano llevan su propio identificador como cargo
+    # ("emergency"), que no se le dice a nadie por teléfono.
+    role = ""
+    if person is not None and _fold(person.role) != _fold(person.slug):
+        role = person.role
 
     brief = {
         "reason": reason,
@@ -412,7 +424,7 @@ def cover_brief(
         # them. Without it the call treats a coordinator, a podiatrist and
         # the doctor on call as the same person under different names, which
         # is exactly how it sounded.
-        "role": person.role if person else "",
+        "role": role,
         "about_them": person.detail if person else "",
         "stands_in_for": stands_in_for,
         "missing": missing or stands_in_for,

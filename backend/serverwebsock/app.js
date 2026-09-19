@@ -94,11 +94,53 @@ function newId(prefix) {
  * Se reenvía la query tal cual y se deja que el servidor decida qué entiende;
  * filtrar aquí obligaría a tocar dos sitios cada vez que el informe crezca.
  */
+
 function websocketUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const query = window.location.search || "";
   return `${protocol}//${window.location.host}/ws/demo${query}`;
 }
+
+/**
+ * A quién llamas y para qué, dicho antes de descolgar.
+ *
+ * La página decía "Habla con recepción" viniera de donde viniera, así que
+ * quien escanea el QR del médico de guardia leía que iba a hablar con
+ * recepción mientras el agente, por debajo, montaba una llamada a un jefe de
+ * servicio. El contexto estaba en el enlace y en el servidor, y en la única
+ * pantalla que lo mira no estaba.
+ *
+ * Se pide al mismo host que sirve esta página. Si falla, la página se queda
+ * como estaba: una cabecera es un adorno, y un adorno no rompe una llamada.
+ */
+async function describeCall() {
+  const query = window.location.search || "";
+  if (!query.includes("reason=")) return;
+  try {
+    const response = await fetch(`/call/context${query}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const call = await response.json();
+    if (!call?.who) return;
+    const kicker = document.querySelector("#page-kicker");
+    const title = document.querySelector("#page-title");
+    const intro = document.querySelector("#page-intro");
+    const purpose = document.querySelector("#call-purpose");
+    if (kicker) kicker.textContent = call.kicker || "Llamada de la clínica";
+    if (title) title.textContent = `Llamas a ${call.who}.`;
+    if (intro) {
+      intro.textContent = [call.role, call.reason_label].filter(Boolean).join(" · ");
+    }
+    if (purpose && call.purpose) {
+      purpose.textContent = call.purpose;
+      purpose.hidden = false;
+    }
+    document.title = `Llamas a ${call.who} · Clínica Arenal`;
+  } catch {
+    /* la página se queda como estaba */
+  }
+}
+
+describeCall();
 
 function permissionError(error) {
   if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {

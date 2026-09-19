@@ -179,7 +179,19 @@ def test_somebody_elses_words_beat_the_routes_stock_sentence(accounts_db):
 def test_the_prompt_renders_the_profile(accounts_db):
     """The brief is worth nothing if it does not reach the prompt."""
     from agent.accounts.directory import cover_brief
+    from agent.accounts.store import Person, Route, Store
     from agent.voice.pipeline import system_prompt_for
+
+    # Con una persona de verdad detrás: los cuatro roles declarados llevan su
+    # propio identificador como cargo ("manager"), y eso ya no se dibuja —
+    # no es algo que se diga por teléfono.
+    shop = Store(accounts_db)
+    shop.upsert_person(
+        DEFAULT_ORG_ID, Person(slug="bea", name="Bea Lis", role="Ginecóloga Jr.")
+    )
+    shop.upsert_route(
+        DEFAULT_ORG_ID, Route(reason="provider_on_leave", person_slug="bea", urgency="today")
+    )
 
     # Built outside the class body: inside one, `cover_brief = cover_brief(...)`
     # shadows the name before the call is made and the lookup skips the
@@ -235,3 +247,36 @@ def test_the_purpose_outranks_the_tone_in_the_prompt(accounts_db):
     rendered = system_prompt_for(Ctx())
     assert "PARA QUÉ LLAMAS, y esto manda sobre todo lo anterior:" in rendered
     assert rendered.index("PARA QUÉ LLAMAS") < rendered.index("LO QUE HA PASADO")
+
+
+def test_a_service_is_not_somebody_you_stand_in_for(accounts_db):
+    """La cadena pasa por servicios, y "sustituyes a Urgencias" no es una frase.
+
+    Es un nodo del grafo leído en voz alta. Un servicio se reconoce en que su
+    nombre y su cargo son la misma palabra.
+    """
+    from agent.accounts.directory import cover_brief
+    from agent.accounts.store import Person, Store
+
+    shop = Store(accounts_db)
+    shop.upsert_person(DEFAULT_ORG_ID, Person(slug="urgencias", name="Urgencias", role="Urgencias"))
+    shop.upsert_person(
+        DEFAULT_ORG_ID,
+        Person(slug="on_call", name="Médico de guardia", role="Guardia", covers_for="urgencias"),
+    )
+
+    brief = cover_brief(DEFAULT_ORG_ID, "clinic_closed", person_slug="on_call")
+
+    assert "stands_in_for" not in brief
+    assert "missing" not in brief
+    assert brief["role"] == "Guardia"
+
+
+def test_a_declared_roles_own_id_is_never_read_out(accounts_db):
+    """El 112 llevaba "Qué hace en la clínica: emergency" en el informe."""
+    from agent.accounts.directory import cover_brief
+
+    brief = cover_brief(DEFAULT_ORG_ID, "medical_emergency")
+
+    assert brief["who"] == "112 · Emergencias"
+    assert "role" not in brief
