@@ -10,6 +10,7 @@ submits exact booking actions to the Prosper platform.
 |---|---|
 | `backend/` | The complete Python runtime: voice pipeline, clinic + scheduling core, LLM brain, ops console, ops scripts, tests and runtime data. Owns `pyproject.toml`, `uv.lock`, `Makefile` and `.env.example`. |
 | `docs/` | Shared team context: Prosper challenge notes, call contract, clinic and scoring docs, reflow interface. |
+| `evaluator/` | Standalone local evaluator/tester/benchmark: scenario corpus, local clinic + submission receiver, deterministic comparator, harness caller, test double and HTML reports. Owns `pyproject.toml` and `uv.lock`. |
 | `openspec/` | OpenSpec changes and specs for this repository. |
 | `frontend/` | **Reserved** for the operator/frontend app. Not implemented in this change. |
 | `LICENSE`, `README.md`, `pytest.ini`, `.gitignore` | Repository-level context and root tooling. |
@@ -76,6 +77,24 @@ carries the equivalent backend-relative configuration for runs inside
 
 See [`backend/README.md`](backend/README.md) for environment variables, the
 ngrok tunnel, endpoints and credentials.
+
+## Local evaluator
+
+`evaluator/` grades the agent without the remote harness: a versioned
+scenario corpus, a local clinic + submission receiver that mirrors the
+official contract, and a deterministic binary comparator. Results are
+labelled "resultado local" — they estimate, not certify, the official
+verdict.
+
+```sh
+cd evaluator
+uv sync
+uv run pytest -q
+uv run python -m evaluator.cli run --config experiments/smoke.yaml
+```
+
+See [`evaluator/README.md`](evaluator/README.md) for scenarios, candidates
+and report output.
 
 ## Frontend
 

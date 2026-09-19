@@ -1,0 +1,45 @@
+id: nsf-001
+problem_id: no_slot_free
+version: 1
+split: development
+language: es
+description: >
+  Sin hueco real: pide a la dermatóloga (PR02) esta semana o la que
+  viene; está de baja hasta el 30 de septiembre. Negociación válida o
+  ausencia de disponibilidad - no inventar un hueco.
+clock: "2026-09-18T10:00:00+02:00"
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Hola, soy Marta Ruiz Gómez. Me han dado volante para dermatología y quiero ir con la doctora Iglesias esta semana o la que viene."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    insurer: sanitas
+    wants: "cita con la doctora Iglesias (dermatología) esta semana o la que viene"
+    prefer: "esta semana o la que viene"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_rescheduling: false
+turns:
+  - text: "Hola, soy Marta Ruiz Gómez. Me han dado volante para dermatología y quiero ir con la doctora Iglesias esta semana o la que viene."
+    hold_ms: 4000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: NO_ACTION
+          reason: provider_on_leave
+    - actions:
+        - action: NO_ACTION
+          reason: no_availability
+  forbidden_actions: [BOOK]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  PR02 está de baja del 14 al 30 de septiembre: todo lo pedido cae dentro
+  de la baja. Tiene referral y Sanitas cubre dermatología, así que el
+  rechazo es por ausencia real de hueco, no por reglas. Un BOOK inventado
+  es el fallo típico.

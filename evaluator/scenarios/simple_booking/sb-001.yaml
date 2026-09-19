@@ -1,0 +1,48 @@
+id: sb-001
+problem_id: simple_booking
+version: 2
+split: development
+language: es
+description: >
+  Cita simple: paciente conocida pide la primera disponible en general.
+  El tipo lo marca el historial (ha venido antes → review), no el caller.
+clock: "2026-09-18T10:00:00+02:00"   # viernes → lo más temprano es lunes 21
+clinic_fixture: seed-v1
+caller:
+  persona: paciente_habitual
+  from_number: "+34612345678"
+  opening: "Buenos días, soy Marta Ruiz Gómez, DNI 12345678-Z. Quiero la primera cita que tengan en medicina general."
+  facts:
+    name: "Marta Ruiz Gómez"
+    patient_id: P00042
+    national_id: "12345678Z"
+    insurer: sanitas
+    has_visited_before: true
+    wants: "la primera cita disponible en medicina general"
+  behavior:
+    provide_identifier_when_asked: true
+    accept_first_offer: true
+turns:
+  - text: "Buenos días, soy Marta Ruiz Gómez, DNI 12345678-Z. Quiero la primera cita que tengan en medicina general."
+    hold_ms: 4000
+  - text: "Me da igual el doctor. Gracias."
+    hold_ms: 2000
+oracle:
+  accepted_outcomes:
+    - actions:
+        - action: BOOK
+          patient_id: P00042
+          provider_id: PR01
+          location_id: centro
+          appointment_type_id: review
+          slot: "2026-09-21T09:00:00+02:00"
+          policy_id: sanitas
+  forbidden_actions: [CANCEL, RESCHEDULE, ESCALATE]
+  require_nonempty_submission: true
+limits:
+  max_call_seconds: 180
+notes: >
+  Solo PR01 puede atender a una paciente Sanitas en general: PR05 rechaza
+  Sanitas. El primer hueco libre es lunes 21 09:00 en Centro (09:15 y 09:30
+  están ocupados por booked_slots). Reservas el mismo día (sábado 19) no
+  valen aunque hubiera hueco.
