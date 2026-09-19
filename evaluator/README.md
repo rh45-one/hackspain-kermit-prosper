@@ -667,10 +667,12 @@ uv run --project evaluator python -m evaluator.cli dev --port 8099
 Opciones: `--results` (dónde lee las corridas, por defecto
 `evaluator/experiments/results`) y `--web` (la carpeta de la consola).
 
-La API es **read-only sobre las corridas**: lee lo que una corrida ya escribió y
-no lanza corridas, no edita escenarios y no escribe en un directorio de
-resultados. Un identificador de corrida es un nombre de carpeta, nunca una ruta,
-y un archivo de evidencia tiene que resolver dentro de su corrida.
+La API conserva las corridas como evidencia inmutable y añade dos escrituras
+controladas: reconstruir un índice local de historial desde esos artefactos y
+crear trabajos desde perfiles y escenarios declarados en el servidor. Nunca
+acepta rutas, comandos, URLs ni entorno del navegador. Un identificador de
+corrida es un nombre de carpeta, nunca una ruta, y un archivo de evidencia tiene
+que resolver dentro de su corrida.
 
 | Endpoint | Devuelve |
 |---|---|
@@ -684,6 +686,14 @@ y un archivo de evidencia tiene que resolver dentro de su corrida.
 | `GET /api/runs/{id}/evidence/{stream}?case_id=` | el WAV de audio de un caso |
 | `POST /api/chat` | abre una llamada real contra el perfil indicado por `profile_id` |
 | `GET /api/runs/{id}/real-calls` | las llamadas reales que observó esa corrida (vacío si no es una corrida del observador) |
+| `POST /api/history/import` | reconstruye idempotentemente el índice local desde los runs existentes |
+| `GET /api/history/calls` | histórico filtrable y paginado de llamadas simuladas, reales y manuales; los dobles se excluyen por defecto |
+| `GET /api/history/calls/{record_id}` | evidencia y detalle de una llamada del histórico |
+| `GET /api/history/summary` | población, éxito evaluado y cobertura de audio, transcript, coste y resultado |
+| `POST /api/jobs` | crea una corrida controlada con `profile_ids`, `scenario_ids`, modalidad y repeticiones |
+| `GET /api/jobs` | trabajos persistidos y su progreso |
+| `POST /api/jobs/{id}/cancel` | solicita cancelación entre llamadas, preservando los casos ya terminados |
+| `GET /api/comparisons?run_id=` | comparación con tamaño de muestra y disponibilidad de estabilidad |
 | `POST /api/chat/{sid}/say` | dice un turno (TTS del servidor) y devuelve el audio del agente |
 | `POST /api/chat/{sid}/say-audio` | dice un turno con **audio µ-law** del micrófono del navegador |
 | `POST /api/chat/{sid}/close` | cierra, lee submissions y diagnostica |
@@ -720,8 +730,10 @@ navegador puede capturar (`isSecureContext`, `getUserMedia`,
 dijiste. El último frame se rellena con silencio µ-law (`0xff`) para no mandar
 un frame corto, y hay un tope de 60 s por subida.
 
-Límites: la API no lanza corridas ni acepta comandos; `OPS_TOKEN` no aplica acá
-porque la consola se ata a `127.0.0.1`. El navegador tampoco ve valores de
+Límites: los trabajos no arrancan procesos de agente ni aceptan comandos; hablan
+con perfiles de laboratorio ya declarados y el runner limpia únicamente los
+procesos propios. `OPS_TOKEN` no aplica acá porque la consola se ata a
+`127.0.0.1`. El navegador tampoco ve valores de
 credenciales: el manifiesto se sirve con **todos** los valores de `env`
 reemplazados por `***` —los nombres quedan, que es lo que sirve para leer una
 corrida— y los errores públicos pasan por el mismo cepillo.
