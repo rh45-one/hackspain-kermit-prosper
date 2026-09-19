@@ -280,3 +280,54 @@ def test_a_declared_roles_own_id_is_never_read_out(accounts_db):
 
     assert brief["who"] == "112 · Emergencias"
     assert "role" not in brief
+
+
+# ---- quien llama abre la llamada ------------------------------------------
+def test_an_outbound_call_does_not_answer_the_phone(accounts_db):
+    """Llamabas a Germán y Germán oía "Clínica Arenal, ¿en qué puedo ayudarle?".
+
+    El primer turno de cualquier llamada decía "el teléfono está sonando,
+    contesta nombrando la clínica": justo lo que hay que hacer cuando te
+    llaman y justo lo contrario cuando llamas tú. El informe entero estaba en
+    el prompt del sistema y el primer turno lo pisaba con el guion de
+    recepción.
+    """
+    from agent.accounts.directory import cover_brief
+    from agent.accounts.store import Person, Route, Store
+    from agent.voice.pipeline import first_turn_context
+
+    shop = Store(accounts_db)
+    shop.upsert_person(
+        DEFAULT_ORG_ID,
+        Person(
+            slug="german",
+            name="Germán Padua",
+            role="Ginecólogo Jr.",
+            opening="Trátale de tú.",
+        ),
+    )
+    shop.upsert_route(
+        DEFAULT_ORG_ID, Route(reason="provider_on_leave", person_slug="german", urgency="today")
+    )
+    brief = cover_brief(DEFAULT_ORG_ID, "provider_on_leave")
+
+    opening = first_turn_context(type("C", (), {"cover_brief": brief, "phone_hint_match": None})())
+
+    assert "Estás llamando tú" in opening
+    assert "Germán Padua" in opening
+    assert "en qué puedo ayudarle" in opening  # sólo para prohibirlo
+    assert "No digas 'en qué puedo ayudarle'" in opening
+    # Y lo que quien lleva la clínica dejó escrito para esa persona.
+    assert "Trátale de tú." in opening
+
+
+def test_an_inbound_call_still_answers_the_phone():
+    """Sin informe no se toca nada: la llamada puntuable abre como siempre."""
+    from agent.voice.pipeline import first_turn_context, phone_hint_greeting
+
+    class Ctx:
+        cover_brief = None
+        phone_hint_match = None
+
+    assert first_turn_context(Ctx()) == phone_hint_greeting(Ctx())
+    assert "The phone is ringing" in first_turn_context(Ctx())

@@ -47,6 +47,8 @@ __all__ = [
     "SUPPORTED_ENGINES",
     "TELEPHONY_SAMPLE_RATE",
     "build_worker",
+    "first_turn_context",
+    "outbound_opening",
     "phone_hint_greeting",
     "resolve_voice_engine",
     "transport_params",
@@ -121,6 +123,46 @@ def phone_hint_greeting(ctx: Any) -> str:
         f"The phone is ringing. {opening} If a chart hint was provided, greet them "
         f"personally without revealing any detail they have not confirmed."
     )
+
+
+def outbound_opening(ctx: Any) -> str:
+    """El primer turno cuando la clínica es quien llama.
+
+    Esto faltaba, y era todo el problema. El primer turno de cualquier
+    llamada decía "el teléfono está sonando, contesta nombrando la clínica y
+    pregunta en qué puedes ayudar" — que es exactamente lo que hay que hacer
+    cuando te llaman, y exactamente lo contrario cuando llamas tú. Así que
+    llamabas a Germán y Germán descolgaba para oír "Clínica Arenal, ¿en qué
+    puedo ayudarle?". El informe entero estaba en el prompt del sistema, con
+    su nombre, su cargo y quién falta, y el primer turno lo pisaba con el
+    guion de recepción.
+
+    Aquí no hay saludo que redactar: el informe ya dice a quién se llama,
+    qué hace, quién falta y para qué. Lo que hace falta es decir de quién es
+    el turno, y que el turno es suyo.
+    """
+    brief = getattr(ctx, "cover_brief", None) or {}
+    who = brief.get("who", "")
+    named = f" Se llama {who}." if who else ""
+    opening = brief.get("opening", "")
+    how = f" Quien lleva la clínica dejó escrito esto sobre cómo abrir con esta persona: {opening}" if opening else ""
+    return (
+        "Estás llamando tú. Acaban de descolgar y no han dicho nada todavía: "
+        "el primer turno es el tuyo y tienes que abrirlo tú."
+        f"{named} Empieza por su nombre, di de dónde llamas, cuenta en una "
+        "frase qué ha pasado y di qué necesitas — todo seguido, sin preguntar "
+        "quién es ni pedirle ningún dato: ya sabes a quién has llamado."
+        f"{how}"
+        " No digas 'en qué puedo ayudarle': eso lo dice quien contesta, no "
+        "quien llama. Después calla y escucha."
+    )
+
+
+def first_turn_context(ctx: Any) -> str:
+    """El primer turno, del lado que toque."""
+    if getattr(ctx, "cover_brief", None):
+        return outbound_opening(ctx)
+    return phone_hint_greeting(ctx)
 
 
 def _noise_filter(settings: Any) -> Any:
@@ -356,12 +398,20 @@ def build_worker(
         # Caller-id hint: bounded wait for the harness `start` event, then a
         # private directory search. Never authenticates anyone; the hint only
         # personalises the greeting and never enters the confirmation registry.
-        await toolbox.prepare_phone_hint()
-        ctx.audit("greeting_prepared", {"hint_used": ctx.phone_hint_match is not None})
+        # En una llamada saliente el identificador de quien llama es el de la
+        # propia clínica: buscarlo en el fichero de pacientes no puede acertar
+        # y gasta el principio de la llamada.
+        outbound = bool(getattr(ctx, "cover_brief", None))
+        if not outbound:
+            await toolbox.prepare_phone_hint()
+        ctx.audit(
+            "greeting_prepared",
+            {"hint_used": ctx.phone_hint_match is not None, "outbound": outbound},
+        )
         if context is not None:
             # Developer role on purpose: adapters keep it a user turn (the
             # spoken greeting) without touching the init system instruction.
-            context.add_message({"role": "developer", "content": phone_hint_greeting(ctx)})
+            context.add_message({"role": "developer", "content": first_turn_context(ctx)})
             await worker.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_client_disconnected")
