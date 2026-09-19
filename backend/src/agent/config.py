@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     voice_ws_host: str = "0.0.0.0"
     voice_ws_port: int = 7860
     ops_http_port: int = 7861
+    # Shared secret for the ops console. Unset, the console answers only to
+    # loopback — so a deployed host serves nothing until this is set on
+    # purpose. See agent/ops/console.py.
+    ops_token: str = ""
 
     # Behaviour
     caller_tz: str = "Europe/Madrid"
