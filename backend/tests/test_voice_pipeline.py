@@ -64,7 +64,12 @@ def test_hint_greeting_uses_only_the_given_name():
     # slow and easily misheard, and the record is already open from the
     # caller id — asking for it again spends a turn of a three-minute call.
     assert "date of birth" in message
-    assert "a full name over a telephone is slow" in message
+    assert "a long name over a telephone is slow" in message
+    # A given name and one surname is what the directory searches on, so the
+    # greeting must not send a caller back for a second surname they may never
+    # have said. Ginés hit exactly that: he gave a good name and was asked for
+    # a "nombre completo" again.
+    assert "name and one surname" in message
     # The opening greets and listens; it does not interrogate before it knows
     # what the caller wants, and the caller may be ringing about someone else.
     assert "let them say what they want first" in message
