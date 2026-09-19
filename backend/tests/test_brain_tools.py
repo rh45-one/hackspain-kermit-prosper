@@ -1419,6 +1419,13 @@ def test_a_lookup_that_found_nobody_rules_out_asking_again():
     note = _lookup_note([], "77992528B")
     assert "again returns the same nothing" in note
     assert "patient_not_found" in note
+    # And the order: say you looked before you ask for anything else. A
+    # receptionist who goes quiet and asks again sounds like they did not
+    # hear; one who says "he mirado y no me sale nadie" sounds like they
+    # did the work.
+    assert "SAY THAT FIRST" in note
+    # The next question is about the datum, not a repeat of the request.
+    assert "registered with" in note
 
 
 def test_too_many_matches_asks_for_what_separates_them():

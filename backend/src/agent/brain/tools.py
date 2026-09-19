@@ -76,20 +76,34 @@ def _lookup_note(summary: list[dict[str, Any]], national_id: str | None) -> str:
     Repeating a question the answer to which cannot change is the one failure
     a caller reads as broken. So the tool result says which of the three
     situations this is, and each note rules out the move that would loop.
+
+    On an empty result the order matters more than the words: **say you
+    looked and found nothing before asking for anything**. A receptionist who
+    goes quiet and asks again sounds like they did not hear; one who says "he
+    mirado y no me sale nadie con ese DNI, ¿es el que tiene usted aquí?"
+    sounds like they did the work — and the question they ask next is the one
+    worth asking, because the likely fault is in the datum, not in the
+    dictation of it.
     """
     count = len(summary)
     if count == 0:
         if national_id:
             return (
-                "No patient in this clinic's register has that document number. Asking for "
-                "it again returns the same nothing — either it belongs to somebody else or "
-                "this person is not registered here. Say so, ask ONCE for the full name and "
-                "date of birth, and if those find nobody either, end with patient_not_found."
+                "You searched and the register has nobody with that document number. "
+                "SAY THAT FIRST, plainly and without alarm — you have looked, and there "
+                "is no record. THEN, in the same breath, question the premise rather than "
+                "repeating the request: ask whether that is the document they are "
+                "registered with here, or whether they might be registered under "
+                "another one. Only if they confirm it is right, ask ONCE for the full "
+                "name and date of birth. Asking for the same document again returns the "
+                "same nothing. If nothing finds them, end with patient_not_found."
             )
         return (
-            "Nobody in the register matches that. Asking for the same name again returns "
-            "the same nothing. Say you cannot find them, ask ONCE for the exact document "
-            "number or the date of birth, and end with patient_not_found if neither helps."
+            "You searched and nobody in the register matches. SAY THAT FIRST — you have "
+            "looked and found no record — and then ask whether they are registered at "
+            "this clinic at all, or under a different name. Only then ask ONCE for the "
+            "document number or date of birth. Repeating the same question returns the "
+            "same nothing. If nothing finds them, end with patient_not_found."
         )
     if count == 1:
         return "One person. Confirm them with confirm_patient before doing anything else."
