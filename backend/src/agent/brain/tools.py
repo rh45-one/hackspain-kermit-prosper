@@ -1011,6 +1011,37 @@ class ToolBox:
                 return (loc.latitude, loc.longitude)
         return None
 
+    def _billing_plan(
+        self, slot: dict[str, Any], named: str | None, patient: dict[str, Any]
+    ) -> str | None:
+        """Which plan this booking is billed against.
+
+        Every slot arrives carrying `payable_with`: the plans that actually pay
+        for it. Defaulting to the plan on the record ignores that, and problem
+        17 is built to catch exactly this — the plan on file is the one that
+        does NOT cover what the caller wants, they hold a second one they will
+        not volunteer, and "the right slot against the wrong plan fails".
+
+        A plan the model names wins: it heard the caller. Otherwise the record's
+        plan is used when the slot says it pays, which is the control case that
+        problem 17 includes on purpose to catch an agent that has learned to
+        invent a second plan. Only when the record's plan cannot pay and exactly
+        one other can is that one chosen — a single possibility is not a guess.
+        """
+        if named:
+            return _plan_id(self.cache, named)
+        on_file = _plan_id(self.cache, patient.get("insurer"))
+        payable = [str(p) for p in (slot.get("payable_with") or [])]
+        if not payable or (on_file and on_file in payable):
+            return on_file
+        if len(payable) == 1:
+            self.ctx.audit(
+                "billed_to_the_plan_that_pays",
+                {"on_file": on_file, "chosen": payable[0]},
+            )
+            return payable[0]
+        return on_file
+
     async def book_appointment(
         self,
         params: FunctionCallParams,
@@ -1039,7 +1070,7 @@ class ToolBox:
             "location_id": slot.get("location_id"),
             "appointment_type_id": slot.get("appointment_type_id"),
             "slot": slot.get("start_time"),
-            "policy_id": _plan_id(self.cache, policy_id or patient.get("insurer")),
+            "policy_id": self._billing_plan(slot, policy_id, patient),
         }
         self.ctx.queued_actions.append(action)
         self.ctx.audit("action_queued", action)
