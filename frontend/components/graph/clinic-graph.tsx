@@ -210,7 +210,7 @@ export function ClinicGraphBoard({
         <Stat
           value={`${counts.urgency.now} · ${counts.urgency.today} · ${counts.urgency.queue}`}
           label="Ahora · Hoy · En cola"
-          note={`${counts.roles} personas declaradas para escucharlas`}
+          note={`${counts.roles} personas en la plantilla`}
         />
       </div>
 

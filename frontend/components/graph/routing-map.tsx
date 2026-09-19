@@ -91,7 +91,11 @@ export function RoutingMap({ layout, filtered, active, lit, onHover, onSelect }:
         x={layout.roles[0]?.x ?? 0}
         w={layout.roles[0]?.w ?? 286}
         title="Quién responde"
-        note={plural(layout.roles.length, "persona declarada", "personas declaradas")}
+        // Los dos números, porque el de arriba solo mentía por omisión: once
+        // reciben rutas y el resto entra cuando una de esas once no puede, y
+        // decir once a secas hacía que faltaran treinta y dos personas que
+        // estaban dibujadas ahí al lado.
+        note={`${layout.roles.length + layout.chain.length} personas · ${layout.roles.length} reciben rutas`}
         align="right"
       />
 
