@@ -15,6 +15,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from agent.config import Settings, settings
 from agent.logging import setup_logging
+from agent.ops import turns as text_turns
 from agent.voice.context import CallContext
 from agent.voice.flush import flush_call
 from agent.voice.pipeline import build_worker, transport_params
@@ -50,6 +51,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Prosper voice agent", lifespan=lifespan)
 call_client_dir = Path(__file__).resolve().parents[3] / "serverwebsock"
 app.mount("/call", StaticFiles(directory=call_client_dir, html=True), name="call")
+
+# Local test surface, off unless TURNS_ADAPTER is set: the text adapter the
+# evaluator bench drives (POST /turns). The process answering scored calls
+# must not serve test routes, so this is a no-op there. agent.serve imports
+# this same app, so it needs no wiring of its own.
+text_turns.mount_if_enabled(app, app_settings)
 
 
 @app.get("/healthz")
