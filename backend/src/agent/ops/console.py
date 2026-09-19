@@ -179,6 +179,7 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
 # The product view lives in its own module: same data, different audience, and
 # it must not grow inside this debugging console. `live` reaches back for
 # `require_ops_access` lazily, so this import is one-way and order-independent.
+from agent.ops.agent_config import router as agent_config_router
 from agent.ops.frontdesk import router as frontdesk_router
 from agent.ops.graph import router as graph_router
 from agent.ops.live import router as live_router
@@ -193,3 +194,7 @@ app.include_router(frontdesk_router)
 # The clinic as a drawing: who exists, who covers what, and who hears about
 # each of the eighteen ways a call can end. No patient data passes through it.
 app.include_router(graph_router)
+# What the agent is actually running. The settings screen used to be a
+# paragraph telling you to edit a file, and it named an engine that cannot
+# start, so it was documentation that was also wrong.
+app.include_router(agent_config_router)
