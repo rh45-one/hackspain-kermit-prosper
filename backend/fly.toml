@@ -1,10 +1,15 @@
-# fly.toml — Prosper voice agent. One machine, Madrid, always on.
+# fly.toml — Prosper voice agent. One machine, Paris, always on.
+#
+# Paris, not Madrid: `mad` is not a Fly region at all. The original file
+# picked it for being next to the event and the region simply does not
+# exist — `flyctl platform regions` lists ams, cdg, fra and lhr for western
+# Europe. `cdg` is the nearest of the four to Madrid.
 #
 # Always on is deliberate: a scale-to-zero cold start on this image is several
 # seconds of import time, and the first inbound call of the demo would be the
 # one that pays it.
 app = "prosper-clinicreflow"
-primary_region = "mad"
+primary_region = "cdg"
 
 [build]
   dockerfile = "Dockerfile"
@@ -14,6 +19,16 @@ primary_region = "mad"
   PORT = "8080"
   LOG_LEVEL = "INFO"
   CALLER_TZ = "Europe/Madrid"
+  PROSPER_API_BASE_URL = "https://hackspain.getprosperapp.com"
+  # Not a default worth inheriting: the engine falls back to cascade, and
+  # cascade cannot run here — its Helmcode key is a placeholder and the API
+  # answers 401. A deploy that quietly picked it would answer every call with
+  # silence.
+  VOICE_ENGINE = "gemini_live"
+  GEMINI_LIVE_MODEL = "gemini-3.8-live"
+  GEMINI_VOICE_ID = "Charon"
+  TYPESAFE_BASE_URL = "https://api.typesafe.ai"
+  JEV_MODEL = "jev-1.13.0"
 
 [[mounts]]
   source = "prosper_data"
