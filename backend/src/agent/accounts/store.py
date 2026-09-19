@@ -176,6 +176,9 @@ class Person:
     # Whose absence this person covers. The dependency the clinic runs on and
     # the one thing no catalogue has ever known.
     covers_for: str = ""
+    # La voz de Gemini con la que la clínica llama a esta persona. Vacío usa
+    # la del despliegue, que es como se comportaba antes de existir.
+    voice: str = ""
     active: bool = True
     source: str = "configured"
 
@@ -241,6 +244,7 @@ def _person_row(row: sqlite3.Row) -> Person:
         may_ask=_split(row["may_ask"]),
         must_not_ask=_split(row["must_not_ask"]),
         covers_for=_optional(row, "covers_for"),
+        voice=_optional(row, "voice"),
         active=bool(row["active"]),
     )
 
@@ -371,16 +375,16 @@ class Store:
             db.execute(
                 """INSERT INTO people (id, org_id, slug, name, role, detail, languages,
                                        provider_id, phone, email, opening, may_ask,
-                                       must_not_ask, covers_for, active, created_at,
-                                       updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       must_not_ask, covers_for, voice, active,
+                                       created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(org_id, slug) DO UPDATE SET
                        name = excluded.name, role = excluded.role,
                        detail = excluded.detail, languages = excluded.languages,
                        provider_id = excluded.provider_id, phone = excluded.phone,
                        email = excluded.email, opening = excluded.opening,
                        may_ask = excluded.may_ask, must_not_ask = excluded.must_not_ask,
-                       covers_for = excluded.covers_for,
+                       covers_for = excluded.covers_for, voice = excluded.voice,
                        active = excluded.active, updated_at = excluded.updated_at""",
                 (
                     uuid.uuid4().hex,
@@ -397,6 +401,7 @@ class Store:
                     "\n".join(person.may_ask),
                     "\n".join(person.must_not_ask),
                     person.covers_for.strip(),
+                    person.voice.strip(),
                     1 if person.active else 0,
                     stamp,
                     stamp,

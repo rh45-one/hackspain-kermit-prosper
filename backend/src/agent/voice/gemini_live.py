@@ -231,8 +231,37 @@ def _gemini_api_key(settings: Any) -> str:
     return str(key or "")
 
 
-def _gemini_voice_id(settings: Any) -> str:
-    """Resolve the Gemini voice, falling back to the service default."""
+# Las voces que publica Gemini Live, con una palabra de cómo suena cada una.
+#
+# La lista vive aquí y no en el panel porque es una propiedad del modelo, no
+# una preferencia de una pantalla: el día que Google añada una, se añade en el
+# sitio donde ya está pinchado el modelo y aparece en el selector sola.
+GEMINI_VOICES: tuple[tuple[str, str], ...] = (
+    ("Charon", "Grave y tranquila. La de recepción."),
+    ("Puck", "Ágil y despierta."),
+    ("Kore", "Clara y neutra."),
+    ("Fenrir", "Rotunda, con peso."),
+    ("Aoede", "Cálida y suave."),
+    ("Leda", "Joven y cercana."),
+    ("Orus", "Seca y directa."),
+    ("Zephyr", "Ligera y rápida."),
+)
+
+_VOICE_IDS = frozenset(name for name, _ in GEMINI_VOICES)
+
+
+def _gemini_voice_id(settings: Any, override: str = "") -> str:
+    """La voz de esta llamada: la de la persona, si la tiene; si no, la del
+    despliegue.
+
+    El `override` se valida contra la lista publicada en vez de mandarse tal
+    cual: un nombre inventado en una fila de la base tiraría el servicio al
+    abrir el socket, y eso convierte un error de configuración en una llamada
+    que no suena. Con una voz desconocida se usa la de siempre.
+    """
+    wanted = (override or "").strip()
+    if wanted in _VOICE_IDS:
+        return wanted
     return str(getattr(settings, "gemini_voice_id", "") or "Charon")
 
 
@@ -258,6 +287,7 @@ def create_gemini_live_service(
     *,
     service_cls: Any = None,
     system_instruction: str | None = None,
+    voice: str = "",
 ) -> Any | None:
     """Build one Gemini Live service for ONE socket. Never shared.
 
@@ -347,7 +377,7 @@ def create_gemini_live_service(
         settings=service_cls.Settings(
             model=GEMINI_LIVE_MODEL,
             modalities=audio_modality,
-            voice=_gemini_voice_id(settings),
+            voice=_gemini_voice_id(settings, voice),
             # None clears pipecat's en-US default and leaves the choice to
             # the model; a value pins both language and accent.
             language=_gemini_language(settings),

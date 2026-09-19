@@ -68,6 +68,9 @@ class PersonView(BaseModel):
     opening: str = ""
     may_ask: list[str] = Field(default_factory=list)
     must_not_ask: list[str] = Field(default_factory=list)
+    # Con qué voz llama la clínica a ESTA persona. Vacío usa la del
+    # despliegue, que es como se comportaba todo antes de existir el campo.
+    voice: str = ""
     active: bool = True
     # "configured" or "default". A panel showing the difference is a panel
     # that cannot pretend somebody set this up.
@@ -85,6 +88,7 @@ class PersonWrite(BaseModel):
     opening: str = Field(default="", max_length=600)
     may_ask: list[str] = Field(default_factory=list)
     must_not_ask: list[str] = Field(default_factory=list)
+    voice: str = Field(default="", max_length=40)
     active: bool = True
 
 
@@ -131,6 +135,7 @@ def _person_view(person: Person) -> PersonView:
         opening=person.opening,
         may_ask=list(person.may_ask),
         must_not_ask=list(person.must_not_ask),
+        voice=person.voice,
         active=person.active,
         source=person.source,
     )
@@ -192,6 +197,7 @@ async def put_person(request: Request, org_id: str, slug: str, body: PersonWrite
                 opening=body.opening,
                 may_ask=tuple(item.strip() for item in body.may_ask if item.strip()),
                 must_not_ask=tuple(item.strip() for item in body.must_not_ask if item.strip()),
+                voice=body.voice.strip(),
                 active=body.active,
             ),
         )
@@ -266,6 +272,19 @@ async def delete_route(request: Request, org_id: str, reason: str) -> RouteView:
 
 
 # ---- the call profile, as the call would use it ---------------------------
+@router.get("/{org_id}/voices", dependencies=[Depends(_access)])
+async def voices(org_id: str) -> dict[str, list[dict[str, str]]]:
+    """Las voces que publica el motor, para el selector.
+
+    Servidas desde aquí en vez de escritas en el panel: son una propiedad del
+    modelo que este proceso tiene pinchado, no una preferencia de una
+    pantalla. El día que cambie el modelo, el selector cambia solo.
+    """
+    from agent.voice.gemini_live import GEMINI_VOICES
+
+    return {"voices": [{"id": name, "detail": detail} for name, detail in GEMINI_VOICES]}
+
+
 @router.get("/{org_id}/people/{slug}/call-profile", dependencies=[Depends(_access)])
 async def call_profile(
     request: Request, org_id: str, slug: str, reason: str = "", gap: str = ""

@@ -28,9 +28,29 @@ export type Person = {
   opening: string;
   may_ask: string[];
   must_not_ask: string[];
+  /** La voz con la que la clínica llama a ESTA persona. Vacío: la del despliegue. */
+  voice: string;
   active: boolean;
   source: Source;
 };
+
+/**
+ * Las voces de Gemini, con una palabra de cómo suena cada una.
+ *
+ * El agente las sirve en `/voices` y ésta es la copia que dibuja el selector
+ * cuando esa lectura todavía no ha vuelto: una lista vacía durante medio
+ * segundo se lee como "no hay voces", que es peor que enseñar las de siempre.
+ */
+export const VOICES: { id: string; detail: string }[] = [
+  { id: "Charon", detail: "Grave y tranquila. La de recepción." },
+  { id: "Puck", detail: "Ágil y despierta." },
+  { id: "Kore", detail: "Clara y neutra." },
+  { id: "Fenrir", detail: "Rotunda, con peso." },
+  { id: "Aoede", detail: "Cálida y suave." },
+  { id: "Leda", detail: "Joven y cercana." },
+  { id: "Orus", detail: "Seca y directa." },
+  { id: "Zephyr", detail: "Ligera y rápida." },
+];
 
 export type RouteRow = {
   reason: string;
@@ -246,6 +266,7 @@ export function emptyDraft(): PersonDraft {
     opening: "",
     may_ask: [],
     must_not_ask: [],
+    voice: "",
     active: true,
   };
 }
@@ -263,6 +284,7 @@ export function personBody(draft: PersonDraft) {
     opening: draft.opening.trim(),
     may_ask: draft.may_ask.map((item) => item.trim()).filter(Boolean),
     must_not_ask: draft.must_not_ask.map((item) => item.trim()).filter(Boolean),
+    voice: draft.voice.trim(),
     active: draft.active,
   };
 }

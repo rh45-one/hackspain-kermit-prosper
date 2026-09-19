@@ -439,6 +439,10 @@ def cover_brief(
         "urgency_said": _URGENCY_SAID.get(urgency or (route.urgency if route else ""), ""),
         "gap": gap,
         "speaks": said(languages_of(person, org_id, config)),
+        # No se lee en voz alta: la usa el motor para elegir con qué voz
+        # habla. Va en el informe porque el informe es lo que viaja de la
+        # ficha de una persona hasta la llamada.
+        "voice": (person.voice if person else "") or "",
         "opening": person.opening if person else "",
         "may_ask": "; ".join(person.may_ask) if person else "",
         "must_not_ask": "; ".join(person.must_not_ask) if person else "",

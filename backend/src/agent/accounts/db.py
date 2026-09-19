@@ -60,7 +60,7 @@ from agent.orgs import DEFAULT_ORG_ID
 
 # Bumped by appending to _MIGRATIONS. Never by editing one in place: the
 # volume already holds a database that has run the old ones.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
     (
@@ -229,6 +229,21 @@ _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
             )
             """,
             "CREATE INDEX IF NOT EXISTS idx_incidents_org ON incidents(org_id, status, created_at)",
+        ),
+    ),
+    (
+        5,
+        (
+            # La voz con la que la clínica llama a ESTA persona.
+            #
+            # Hasta ahora había una voz para todo el despliegue, en
+            # `GEMINI_VOICE_ID`. Cuarenta y dos personas y una sola voz es un
+            # único agente disfrazado de cuarenta y dos; la voz es lo primero
+            # que reconoce quien descuelga, antes que el nombre.
+            #
+            # Vacío significa "la del despliegue", que es como se comportaba
+            # antes de existir esta columna.
+            "ALTER TABLE people ADD COLUMN voice TEXT NOT NULL DEFAULT ''",
         ),
     ),
 ]
