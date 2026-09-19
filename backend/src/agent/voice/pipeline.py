@@ -98,8 +98,11 @@ def phone_hint_greeting(ctx: Any) -> str:
     # long greeting buys nothing and collides with their opening words — and
     # it spends the call's ~36 s budget before anything useful happens.
     opening = (
-        "Answer with one short sentence: name the clinic, good morning, and ask "
-        "how you can help. Nothing else — let them say what they want first."
+        "Answer with one short BILINGUAL line: name the clinic and greet in "
+        "Spanish, then offer help in English — 'Clínica Arenal, buenos días. "
+        "Good morning, how can I help you?'. Nothing else — let them say what "
+        "they want first. Greeting in Spanish alone makes you answer a caller "
+        "who says 'hello' in Spanish anyway, and they hang up."
     )
     if given_name:
         return (
