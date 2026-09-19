@@ -51,18 +51,30 @@ uv run --project evaluator --locked pytest -c evaluator/pyproject.toml evaluator
 uv run --project evaluator --locked ruff check evaluator/src evaluator/tests
 ```
 
-Para comprobar de forma opcional el contrato con el agente del mismo checkout:
+El contrato de submission se verifica en dos mitades.
+
+La mitad **siempre activa** es `tests/test_submit_vocabulary.py`: fija las rutas,
+los campos obligatorios y el vocabulario cerrado de `models.py` contra el
+receptor local, y reproduce el resultado esperado de los 21 escenarios con un
+cuerpo construido por el propio evaluador. No importa nada de `backend/`, así
+que corre siempre y no puede omitirse: una deriva del vocabulario falla en voz
+alta.
+
+La mitad **opt-in** es `tests/test_agent_main_contract.py`:
 
 ```sh
 PYTHONPATH=backend/src uv run --project evaluator --locked pytest \
     -c evaluator/pyproject.toml evaluator/tests/test_agent_main_contract.py -q
 ```
 
-Esta comprobación usa el cliente HTTP y el constructor de payloads del agente
-contra una aplicación ASGI en memoria. No arranca el backend, no carga sus
-credenciales ni conecta con Prosper. Sin `PYTHONPATH`, estos tests se omiten y
-el evaluador sigue funcionando de forma independiente. No sustituye una prueba
-de conversación real ni certifica la equivalencia con el evaluador oficial.
+Usa el cliente HTTP y el constructor de payloads del agente contra una
+aplicación ASGI en memoria. No arranca el backend, no carga sus credenciales ni
+conecta con Prosper. Sin `PYTHONPATH` el archivo se omite con un motivo
+explícito (`-rs` lo muestra); si la fuente del agente está en el path pero no se
+puede importar —por ejemplo, por una dependencia ausente en este entorno— la
+colección **falla** en lugar de dar un skip verde, para que un entorno roto no
+se confunda con cobertura. No sustituye una prueba de conversación real ni
+certifica la equivalencia con el evaluador oficial.
 
 `smoke.yaml` usa exclusivamente la clínica simulada y tres dobles locales:
 acierto, registro incorrecto y ausencia de registro. No necesita credenciales
@@ -207,6 +219,26 @@ uv run --project evaluator python -m evaluator.cli diff A B --json
 
 Reporta nuevos aciertos/fallos, cambios de veredicto, cambios de categoría
 de fallo, casos solo presentes en un run y deltas de latencia/coste.
+
+**Alternativas dentro de un mismo run (side-by-side).** Un experimento ya corre
+cada candidato sobre cada escenario, así que comparar alternativas es renderizar
+esa corrida, no ejecutar otra:
+
+```sh
+uv run --project evaluator python -m evaluator.cli compare results/<run>         # tabla
+uv run --project evaluator python -m evaluator.cli compare results/<run> --json  # resumen
+```
+
+Las filas son (escenario, repetición) y las columnas, los candidatos; las filas
+marcadas con `*` son los desacuerdos, que es donde dos alternativas contestan
+distinto la misma llamada. Dos decisiones del runner sostienen esa comparación:
+
+- **intercalado**: el candidato varía más rápido dentro de cada escenario, así
+  que un backend que deriva durante la corrida no favorece al que va último;
+- **espera de readiness**: un candidato lanzado con `start_command` se sondea
+  hasta que responde (`ready_url`; por defecto `http://host:port/healthz`
+  derivado de `ws_url`, con `ready_timeout_s`, 30 s). Si nunca levanta, sus casos
+  quedan en `invalid_evaluation` con la causa: no se puntúan contra el modelo.
 
 ## Contrato con el responsable del agente
 
