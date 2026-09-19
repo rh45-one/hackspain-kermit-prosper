@@ -506,7 +506,7 @@ class ToolBox:
             provider_name: Doctor requested by name, if any.
             location_name: Site requested, if any ('Centro', 'Norte', 'Sur').
             part_of_day: 'morning' or 'afternoon', if the caller said one.
-            language: Language the caller needs the doctor to speak, if said.
+            language: The language the caller is SPEAKING, whenever that is not English, or one they explicitly ask the doctor to speak. Pass 'español' for a Spanish call and 'català' for a Catalan one. Spanish costs nothing — every doctor here speaks it — but only four of the twelve speak Catalan, so in a Catalan call this parameter IS the booking: leave it out and you will offer a doctor the caller cannot talk to. Leave it out for an English call unless they ask, or you will hide four doctors who may hold the earliest slot.
             insurer: An insurance plan the caller names that is NOT the one on their record. Leave it out and the search prices against the plan on file; a second plan exists nowhere in the data and only the caller can reveal it, so pass it here the moment they mention one.
         """
         if self.client is None:

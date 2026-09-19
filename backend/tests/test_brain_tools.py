@@ -1150,3 +1150,25 @@ async def test_no_slots_with_a_restriction_is_not_an_empty_diary(box, ctx):
     assert why["reason_to_submit"] == "location_not_covered"
     assert why["reason_to_submit"] in deps.CLOSED_REASONS
     assert "diary is not full" in why["not_no_availability"]
+
+
+async def test_a_catalan_call_only_offers_doctors_who_speak_it(box, ctx):
+    """Four of the twelve speak Catalan, and it is where the constraint bites."""
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="tomorrow", specialty_name="General practice", language="català"
+    )
+    offered = {s["provider_id"] for s in params.result.get("slots", [])}
+    speakers = {p.id for p in box.cache.providers_speaking("català")}
+    assert offered <= speakers
+
+
+async def test_spanish_hides_nobody(box, ctx):
+    """Every doctor speaks it, so the filter must be a no-op, not a narrowing."""
+    plain = await confirm_marta(box)
+    await box.find_availability(plain, when_phrase="tomorrow", specialty_name="General practice")
+    with_es = FakeParams()
+    await box.find_availability(
+        with_es, when_phrase="tomorrow", specialty_name="General practice", language="español"
+    )
+    assert with_es.result.get("total_free") == plain.result.get("total_free")
