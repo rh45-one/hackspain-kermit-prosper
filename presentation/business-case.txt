@@ -53,3 +53,9 @@ Pronto opera bajo un modelo **B2B SaaS + Usage-Based Pricing**:
 
 * **SaaS Fee Mensual (Licencia de Plataforma):** 299€ - 499€/mes por clínica para acceder al "Centro de Mando" (el frontend que tú has construido), gestión del directorio médico y analíticas.
 * **Pay-per-Resolution (Uso):** 0,50€ por llamada Inbound gestionada con éxito (cita agendada/resuelta) y 2,00€ por cada paciente reprogramado con éxito en campañas Outbound (cobramos una prima porque estamos salvando ingresos directos).
+
+JUSTIFICACIÓN DE ESTIMACIONES:
+
+Coste operativo por llamada (4€ - 8€): Proviene de los informes anuales de métricas de Contact Centers (como los Talkdesk Healthcare Reports o estudios del ICMI). En el sector BPO (Business Process Outsourcing), no se calcula solo el salario por hora del recepcionista, sino el Fully Loaded Cost (coste total absorbido): salario bruto, cotizaciones, software, infraestructura telefónica y, sobre todo, el impacto de los "tiempos muertos" entre llamadas.
+Pérdida por hueco vacío (100€ - 200€): Se sustenta en los estudios de impacto financiero del No-Show Rate (tasa de ausentismo) publicados por entidades como la MGMA (Medical Group Management Association) y revistas científicas como BMC Health Services Research. En el sistema privado español, este es el ticket medio real de una consulta de especialista o prueba diagnóstica de aseguradoras como DKV o Sanitas. Un médico parado durante un turno supone un coste fijo de infraestructura que la clínica pierde de forma irrecuperable.
+Tasa de abandono (15%): Los reportes anuales de Experiencia del Paciente (PX) de plataformas como Zendesk revelan que la tolerancia de espera telefónica ha caído drásticamente. A partir de los 3 a 5 minutos en cola (el estándar a primera hora en muchas clínicas), el Call Abandonment Rate escala rápidamente superando el 15%, lo que se traduce en pacientes que cuelgan y acuden a otra clínica.
