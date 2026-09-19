@@ -88,3 +88,17 @@ class TestMixWithNoise:
     def test_empty_noise_is_noop(self):
         speech = _speech()
         assert mix_with_noise(speech, []) == speech
+
+
+class TestUlawSeconds:
+    def test_a_frame_is_twenty_milliseconds(self):
+        from evaluator.harness.audio import ulaw_seconds
+
+        assert ulaw_seconds(160) == 0.02
+        assert ulaw_seconds(8000) == 1.0
+        assert ulaw_seconds(0) == 0.0
+
+    def test_it_uses_the_wire_sample_rate(self):
+        from evaluator.harness.audio import ulaw_seconds
+
+        assert ulaw_seconds(16000) == 2.0

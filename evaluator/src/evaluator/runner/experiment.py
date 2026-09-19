@@ -33,7 +33,13 @@ from evaluator.clinic.dataset import Dataset
 from evaluator.clinic.server import create_app as create_clinic_app
 from evaluator.compare import categorize, compare, transcript_leaks
 from evaluator.harness import tts as tts_mod
-from evaluator.harness.audio import mix_with_noise, pcm_to_ulaw, synth_noise, ulaw_to_wav
+from evaluator.harness.audio import (
+    mix_with_noise,
+    pcm_to_ulaw,
+    synth_noise,
+    ulaw_seconds,
+    ulaw_to_wav,
+)
 from evaluator.harness.double_agent import create_app as create_double_app
 from evaluator.harness.wsclient import PlayTurn, dial, load_audio, silence
 from evaluator.models import (
@@ -386,6 +392,10 @@ async def _run_case(
     notes: list[str] = []
     audio: dict[str, str] = {}
     ev = None  # set on the WS paths (double + external)
+    frames_sent: int | None = None
+    frames_received: int | None = None
+    caller_audio_s: float | None = None
+    agent_audio_s: float | None = None
     rig_errors: list[str] = []
     started = time.monotonic()
     harness_failed = open_resp.status_code != 200
@@ -455,6 +465,14 @@ async def _run_case(
                 latencies = [x for x in ev.turn_latencies_ms if x is not None]
                 first_audio_ms = ev.first_audio_ms
                 interrupts = ev.interrupts
+                # Audio volume and frame counters: the evidence trail alone
+                # could not answer "how many seconds did each side send?"
+                # without opening a WAV, so the harness measures it here.
+                # µ-law 8 kHz mono is one byte per sample.
+                frames_sent = ev.frames_sent
+                frames_received = ev.frames_received
+                caller_audio_s = ulaw_seconds(len(ev.caller_audio))
+                agent_audio_s = ulaw_seconds(len(ev.agent_audio))
     finally:
         await http.post(f"/eval/calls/{call_id}/close")
         record_resp = await _drain_record(http, call_id, submit_drain_s)
@@ -538,6 +556,10 @@ async def _run_case(
         cost=cost,
         usage=usage,
         audio=audio,
+        frames_sent=frames_sent,
+        frames_received=frames_received,
+        caller_audio_s=caller_audio_s,
+        agent_audio_s=agent_audio_s,
         interrupts=interrupts,
         checks_not_run=checks_not_run,
         notes=notes,
@@ -835,6 +857,11 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
         (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
         with open(out_dir / "cases.jsonl", "w", encoding="utf-8") as fh:
             fh.writelines(r.model_dump_json() + "\n" for r in results)
+        # Same aggregates the console and `cli metrics` show, in machine form:
+        # an A/B decision should not require re-parsing cases.jsonl.
+        from evaluator.report.metrics import write_metrics
+
+        write_metrics(out_dir, results)
     finally:
         for p in procs:
             p.terminate()

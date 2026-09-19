@@ -324,3 +324,96 @@ class TestReportEvidence:
         assert "~3.000" in page  # real clinic size, next to the fixture's 6
         # The unevaluated check is printed, and in Spanish.
         assert "comprobación de privacidad" in page
+
+
+class TestVariantMatrix:
+    """One candidate block, several environments: the matrix expands, not the config."""
+
+    def test_variants_become_their_own_candidates_with_merged_env(self):
+        from evaluator.models import CandidateConfig, expand_candidates
+
+        base = CandidateConfig(
+            name="agent",
+            ws_url="ws://127.0.0.1:17860/ws",
+            env={"PROSPER_API_BASE_URL": "http://127.0.0.1:18090", "SHARED": "yes"},
+            variants={"a": {"PROMPT": "v1"}, "b": {"PROMPT": "v2", "SHARED": "no"}},
+        )
+        expanded = expand_candidates([base])
+        assert [c.name for c in expanded] == ["agent-a", "agent-b"]
+        assert expanded[0].env["PROMPT"] == "v1"
+        assert expanded[0].env["SHARED"] == "yes"  # base env survives
+        assert expanded[1].env["SHARED"] == "no"  # the variant wins
+        assert all(c.variants == {} for c in expanded)  # no re-expansion
+        assert all(c.ws_url == base.ws_url for c in expanded)
+
+    def test_a_candidate_without_variants_passes_through(self):
+        from evaluator.models import CandidateConfig, expand_candidates
+
+        plain = CandidateConfig(name="solo", kind="double", port=18770)
+        assert expand_candidates([plain]) == [plain]
+
+    def test_duplicate_names_are_refused(self):
+        from evaluator.models import CandidateConfig, expand_candidates
+
+        candidates = [
+            CandidateConfig(name="agent", variants={"a": {"X": "1"}}),
+            CandidateConfig(name="agent-a"),
+        ]
+        with pytest.raises(ValueError, match="duplicados"):
+            expand_candidates(candidates)
+
+    def test_config_load_expands_the_matrix(self, tmp_path):
+        config = tmp_path / "matrix.yaml"
+        config.write_text(
+            """
+name: matrix
+clinic_dataset: ../data/clinic_dataset.json
+candidates:
+  - name: agent
+    ws_url: ws://127.0.0.1:17860/ws
+    env:
+      PROSPER_API_BASE_URL: http://127.0.0.1:18090
+    variants:
+      sin-memoria:
+        PROMPT_VARIANT: none
+      con-memoria:
+        PROMPT_VARIANT: history
+scenarios:
+  - mini.yaml
+""",
+            encoding="utf-8",
+        )
+        loaded = ExperimentConfig.load(str(config))
+        assert [c.name for c in loaded.candidates] == ["agent-sin-memoria", "agent-con-memoria"]
+        assert loaded.candidates[1].env == {
+            "PROSPER_API_BASE_URL": "http://127.0.0.1:18090",
+            "PROMPT_VARIANT": "history",
+        }
+
+    def test_the_run_manifest_carries_no_variant_matrix(self, tmp_path):
+        """The manifest describes what ran, so `variants` must already be flat.
+
+        A reader of `manifest.json` sees one row per configuration that
+        actually executed; a nested template would let a report show a
+        candidate that never ran.
+        """
+        config = tmp_path / "matrix.yaml"
+        config.write_text(
+            """
+name: matrix
+clinic_dataset: ../data/clinic_dataset.json
+candidates:
+  - name: agent
+    ws_url: ws://127.0.0.1:17860/ws
+    variants:
+      a: {PROMPT_VARIANT: none}
+scenarios:
+  - mini.yaml
+""",
+            encoding="utf-8",
+        )
+        loaded = ExperimentConfig.load(str(config))
+        dumped = [c.model_dump(exclude={"start_command"}) for c in loaded.candidates]
+        assert dumped == [
+            {**dumped[0], "name": "agent-a", "env": {"PROMPT_VARIANT": "none"}, "variants": {}}
+        ]

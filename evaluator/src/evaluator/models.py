@@ -323,6 +323,13 @@ class CaseResult(BaseModel):
     cost: float | None = None  # None = unknown, never zero (plan §13)
     usage: dict[str, Any] = Field(default_factory=dict)  # provider usage, if exposed
     audio: dict[str, str] = Field(default_factory=dict)  # {"agent": path, "caller": path}
+    # Wire counters and audio volume, when the harness measured them. None on
+    # paths that never opened a socket (text adapter) and on old runs, so the
+    # console reads `n/d` instead of a zero nobody measured.
+    frames_sent: int | None = None
+    frames_received: int | None = None
+    caller_audio_s: float | None = None
+    agent_audio_s: float | None = None
     interrupts: list[dict[str, Any]] = Field(default_factory=list)  # barge-in events
     # Oracle checks the rig could not evaluate on this path (e.g. leak_check
     # needs a transcript, and the voice path has no STT). Never silently
@@ -365,6 +372,43 @@ class CandidateConfig(BaseModel):
     mode: Literal["correct", "mutate", "silent"] = "correct"  # double only
     port: int | None = None  # double only
     version: str = "unknown"
+    # Declarative environment matrix: one entry per variant, `suffix -> env
+    # overrides`. The runner expands each variant into its own candidate named
+    # `<name>-<suffix>`, so an A/B of two environment settings is a config
+    # change, not a hand-written duplicate of the whole candidate block.
+    variants: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+def expand_candidates(candidates: list[CandidateConfig]) -> list[CandidateConfig]:
+    """Expand `variants` into one candidate per environment variant.
+
+    A candidate without variants passes through untouched. The variant name is
+    `<name>-<suffix>` and its env is the base env overridden by the variant's
+    keys - so an experiment can declare one agent and a matrix of settings
+    instead of hand-copying near-identical blocks. Duplicate resulting names
+    are an error: two candidates that cannot be told apart in a report are
+    worse than a config that refuses to load.
+    """
+    out: list[CandidateConfig] = []
+    for candidate in candidates:
+        if not candidate.variants:
+            out.append(candidate)
+            continue
+        for suffix, overrides in candidate.variants.items():
+            out.append(
+                candidate.model_copy(
+                    update={
+                        "name": f"{candidate.name}-{suffix}",
+                        "env": {**candidate.env, **overrides},
+                        "variants": {},
+                    }
+                )
+            )
+    names = [candidate.name for candidate in out]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(f"candidatos duplicados tras expandir variantes: {duplicates}")
+    return out
 
 
 class SwitchboardConfig(BaseModel):
@@ -394,6 +438,12 @@ class ExperimentConfig(BaseModel):
     submit_drain_s: float = 2.0
     candidates: list[CandidateConfig]
     scenarios: list[str]  # paths or globs, relative to the config file
+
+    @model_validator(mode="after")
+    def _expand_variants(self) -> ExperimentConfig:
+        """Every consumer sees the expanded matrix, never the template."""
+        self.candidates = expand_candidates(self.candidates)
+        return self
 
     @classmethod
     def load(cls, path: str) -> ExperimentConfig:

@@ -173,3 +173,91 @@ class TestSummarize:
         summary = summarize([])
         assert summary["candidates"] == {}
         assert summary["total"]["pass_rate"]["value"] == NA
+
+
+class TestErrorsByType:
+    def test_each_error_is_bucketed_by_the_layer_that_produced_it(self):
+        cases = [
+            _case(errors=["turn 1: TTS failed: FileNotFoundError: espeak-ng"]),
+            _case(errors=["ConnectionClosed: received 1006", "clinic refused call open: HTTP 500"]),
+            _case(errors=["caller-side max_call_s reached"]),
+        ]
+        bucket = candidate_metrics(cases)["errors_by_type"]
+        assert bucket["counts"] == {"clinic": 1, "timeout": 1, "transport": 1, "tts": 1}
+        assert bucket["numerator"] == 4  # every error is counted
+        assert bucket["denominator"] == 3  # over the cases of the run
+        assert bucket["cases_with_errors"] == 3
+
+    def test_an_unrecognised_message_stays_other_instead_of_being_guessed(self):
+        bucket = candidate_metrics([_case(errors=["algo rarísimo pasó"])])["errors_by_type"]
+        assert bucket["counts"] == {"other": 1}
+
+    def test_no_errors_reads_nd_not_zero(self):
+        bucket = candidate_metrics([_case()])["errors_by_type"]
+        assert bucket["value"] == NA
+        assert bucket["numerator"] == 0
+        assert bucket["counts"] == {}
+
+
+class TestAudio:
+    def test_totals_declare_how_many_cases_reported_audio(self):
+        cases = [
+            _case(),
+            _case(repetition=1),
+        ]
+        cases[0].caller_audio_s, cases[0].agent_audio_s = 12.5, 20.0
+        cases[1].caller_audio_s, cases[1].agent_audio_s = 7.5, 20.0
+        metrics = candidate_metrics(cases)
+        assert metrics["audio_caller_s"]["value"] == "20.0 s"
+        assert metrics["audio_caller_s"]["denominator"] == 2
+        assert metrics["audio_agent_s"]["value"] == "40.0 s"
+        assert metrics["audio_ratio"]["value"] == "0.50"
+
+    def test_audio_without_measurements_is_nd(self):
+        metrics = candidate_metrics([_case()])
+        assert metrics["audio_caller_s"]["value"] == NA
+        assert metrics["audio_ratio"]["value"] == NA
+
+    def test_ratio_is_nd_when_the_agent_sent_nothing(self):
+        case = _case()
+        case.caller_audio_s, case.agent_audio_s = 5.0, 0.0
+        assert candidate_metrics([case])["audio_ratio"]["value"] == NA
+
+
+class TestInterrupts:
+    def test_barge_ins_are_counted_with_their_denominator(self):
+        interrupted = _case()
+        interrupted.interrupts = [{"turn": 1, "at_ms": 100}]
+        cases = [interrupted, _case(repetition=1)]
+        metrics = candidate_metrics(cases)
+        assert metrics["interrupts_total"]["value"] == "1"
+        assert metrics["calls_with_interrupts"]["value"] == "50% (1/2)"
+
+
+class TestArtifacts:
+    def test_write_metrics_round_trips_the_summary(self, tmp_path):
+        import json
+
+        from evaluator.report.metrics import write_metrics
+
+        case = _case(verdict="pass", repetition=0)
+        path = write_metrics(tmp_path, [case])
+        assert path.name == "metrics.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["candidates"]["a"]["pass_rate"]["value"] == "100% (1/1)"
+        assert data["total"]["cases"]["value"] == "1"
+
+    def test_format_metrics_shows_value_plus_ratio(self):
+        from evaluator.report.metrics import format_metrics
+
+        text = format_metrics(summarize([_case(verdict="pass"), _case(verdict="fail")]))
+        assert "[a]" in text
+        assert "aciertos" in text
+        assert "50% (1/2)" in text
+
+    def test_format_metrics_reports_registered_errors(self):
+        from evaluator.report.metrics import format_metrics
+
+        text = format_metrics(summarize([_case(errors=["boom"])]))
+        assert "errores registrados:" in text
+        assert "- boom" in text

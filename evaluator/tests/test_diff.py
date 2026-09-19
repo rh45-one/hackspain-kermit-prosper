@@ -132,3 +132,82 @@ class TestFormat:
 
         with pytest.raises(FileNotFoundError):
             diff_runs(tmp_path / "nope", tmp_path)
+
+
+class TestMetricDeltas:
+    def test_deltas_are_reported_with_both_sides(self, tmp_path):
+        a = _write_run(tmp_path, "a", [_case(verdict="pass"), _case(scenario_id="s2", verdict="fail")])
+        b = _write_run(tmp_path, "b", [_case(verdict="pass"), _case(scenario_id="s2", verdict="pass")])
+        metrics = diff_runs(a, b).metrics
+        assert metrics["pass_rate"]["delta"] == 1
+        assert metrics["model_failures"]["delta"] == -1
+        assert metrics["pass_rate"]["a_text"] == "50% (1/2)"
+        assert metrics["pass_rate"]["b_text"] == "100% (2/2)"
+
+    def test_a_missing_measurement_is_nd_not_zero(self, tmp_path):
+        a = _write_run(tmp_path, "a", [_case()])
+        b = _write_run(tmp_path, "b", [_case()])
+        row = diff_runs(a, b).metrics["audio_caller_s"]
+        assert row["delta"] is None
+        assert row["a_text"] == "n/d" and row["b_text"] == "n/d"
+
+    def test_text_output_lists_metric_rows(self, tmp_path):
+        a = _write_run(tmp_path, "a", [_case(cost=0.01)])
+        b = _write_run(tmp_path, "b", [_case(cost=0.03)])
+        text = format_diff(diff_runs(a, b))
+        assert "métricas:" in text
+        assert "coste total" in text
+        assert "+0.02" in text
+
+
+class TestCandidatePairing:
+    """Cross-run, cross-candidate pairing: B of run Y against A of run X."""
+
+    def test_pairs_two_different_candidates(self, tmp_path):
+        a = _write_run(tmp_path, "a", [
+            _case(candidate="old", scenario_id="s1", verdict="fail", failure_signal="record_mismatch"),
+            _case(candidate="old", scenario_id="s2", verdict="pass"),
+        ])
+        b = _write_run(tmp_path, "b", [
+            _case(candidate="new", scenario_id="s1", verdict="pass"),
+            _case(candidate="new", scenario_id="s2", verdict="pass"),
+        ])
+        result = diff_runs(a, b, candidate_a="old", candidate_b="new")
+        s = result.summary()
+        assert s["candidate_a"] == "old" and s["candidate_b"] == "new"
+        assert s["cases_compared"] == 2
+        assert s["newly_passing"] == 1
+        assert s["passes_a"] == 1 and s["passes_b"] == 2
+        assert result.by_kind("newly_passing")[0].key[0] == "old→new"
+
+    def test_it_refuses_to_guess_between_several_candidates(self, tmp_path):
+        import pytest
+
+        a = _write_run(tmp_path, "a", [_case(candidate="x"), _case(candidate="y")])
+        b = _write_run(tmp_path, "b", [_case(candidate="z")])
+        with pytest.raises(ValueError, match="varios candidatos"):
+            diff_runs(a, b, candidate_a=None, candidate_b="z")
+
+    def test_an_unknown_candidate_names_what_is_available(self, tmp_path):
+        import pytest
+
+        a = _write_run(tmp_path, "a", [_case(candidate="x")])
+        b = _write_run(tmp_path, "b", [_case(candidate="x")])
+        with pytest.raises(ValueError, match="no está en los casos"):
+            diff_runs(a, b, candidate_a="nope", candidate_b="x")
+
+    def test_a_single_candidate_per_run_needs_no_flags(self, tmp_path):
+        a = _write_run(tmp_path, "a", [_case(candidate="old", verdict="fail")])
+        b = _write_run(tmp_path, "b", [_case(candidate="new", verdict="pass")])
+        # Only one candidate each: pairing is unambiguous.
+        assert diff_runs(a, b, candidate_a="old", candidate_b="new").summary()["newly_passing"] == 1
+
+    def test_unpaired_candidates_do_not_leak_into_the_diff(self, tmp_path):
+        a = _write_run(tmp_path, "a", [
+            _case(candidate="old", scenario_id="s1"),
+            _case(candidate="other", scenario_id="s1"),
+        ])
+        b = _write_run(tmp_path, "b", [_case(candidate="new", scenario_id="s1")])
+        result = diff_runs(a, b, candidate_a="old", candidate_b="new")
+        assert result.summary()["cases_compared"] == 1
+        assert result.summary()["unchanged"] == 1

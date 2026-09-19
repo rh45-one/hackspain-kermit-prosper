@@ -46,6 +46,15 @@ def pcm_to_ulaw(samples: list[int]) -> bytes:
     return bytes(_encode_sample(s) for s in samples)
 
 
+def ulaw_seconds(num_bytes: int, rate: int = 8000) -> float:
+    """How many seconds of speech those µ-law bytes are (1 byte per sample).
+
+    The metric side of the evidence trail: `len(caller_audio) / 8000` is the
+    only way to answer "how long did each side talk?" without opening a WAV.
+    """
+    return round(num_bytes / rate, 2)
+
+
 def ulaw_to_wav(data: bytes, rate: int = 8000) -> bytes:
     """µ-law bytes → PCM16 WAV bytes (players + STT tools want WAV)."""
     samples = ulaw_to_pcm(data)
