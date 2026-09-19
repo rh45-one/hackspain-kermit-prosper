@@ -43,6 +43,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from loguru import logger
@@ -57,6 +58,12 @@ from agent.voice.flush import flush_call
 ENV_FLAG = "TURNS_ADAPTER"
 ENV_MODEL = "TURNS_MODEL"
 ENV_DATA_DIR = "TURNS_DATA_DIR"
+# Deliberate escape hatch for submitting somewhere that is not loopback. It
+# exists so the refusal below can be overridden on purpose, in one place, by
+# somebody who typed the words.
+ENV_SUBMIT_REMOTE = "TURNS_SUBMIT_REMOTE"
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 # The text sibling of the pinned audio host. gemini-3.8-live is audio-only,
 # so the bench CANNOT run the scored path's model; this is the closest text
@@ -86,9 +93,11 @@ IDLE_CLOSE_SECONDS = 180.0
 __all__ = [
     "DEFAULT_MODEL",
     "ENV_FLAG",
+    "ENV_SUBMIT_REMOTE",
     "TextAdapter",
     "TurnRequest",
     "adapter_enabled",
+    "may_submit",
     "mount_if_enabled",
     "router",
 ]
@@ -130,6 +139,31 @@ class _TextCall:
 def adapter_enabled(env: dict[str, str] | None = None) -> bool:
     """True when this process is allowed to expose the text adapter."""
     raw = (env or os.environ).get(ENV_FLAG, "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def submits_to_loopback(base_url: str) -> bool:
+    """True when the submission target is this machine."""
+    host = (urlparse(base_url or "").hostname or "").lower()
+    return host in _LOOPBACK_HOSTS
+
+
+def may_submit(settings: Any, env: dict[str, str] | None = None) -> bool:
+    """Whether this adapter is allowed to write to the submission API.
+
+    Being opt-in and access-gated answers *who may call*, which is a different
+    question from *where a legitimate call writes*. The natural way to start
+    this backend for a bench run is `set -a && . ./.env && set +a`, which loads
+    the real `PROSPER_API_BASE_URL` and key; forgetting to point it at the
+    local clinic would post every bench case to the live platform under
+    invented call ids. That has already happened once today, from probes.
+
+    So the default fails the way `mount_if_enabled` fails: towards doing
+    nothing. Loopback submits; anything else needs TURNS_SUBMIT_REMOTE.
+    """
+    if submits_to_loopback(getattr(settings, "prosper_api_base_url", "")):
+        return True
+    raw = (env or os.environ).get(ENV_SUBMIT_REMOTE, "")
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -207,6 +241,14 @@ class TextAdapter:
         # directory and a run would bury 60 scored calls under 63 fake ones.
         self.data_dir = data_dir or os.environ.get(ENV_DATA_DIR) or f"{settings.data_dir}/turns"
         self._client = client
+        self.submit_actions = may_submit(settings)
+        if not self.submit_actions:
+            logger.warning(
+                "text adapter will NOT submit: {} is not loopback and {} is unset. "
+                "Actions are queued and audited only.",
+                getattr(settings, "prosper_api_base_url", ""),
+                ENV_SUBMIT_REMOTE,
+            )
         self._calls: dict[str, _TextCall] = {}
         self._calls_lock = asyncio.Lock()
 
@@ -230,7 +272,13 @@ class TextAdapter:
                 call.last_seen = time.monotonic()
                 return call
             ctx = CallContext(data_dir=self.data_dir, call_id=call_id)
-            ctx.audit("text_adapter_call_open", {"model": self.model})
+            # The route-owned boundary flush_call already honours. Setting it
+            # here is what keeps a bench run off the real platform.
+            ctx.submit_actions = self.submit_actions
+            ctx.audit(
+                "text_adapter_call_open",
+                {"model": self.model, "submit_actions": self.submit_actions},
+            )
             toolbox = ToolBox(ctx, self.settings)
             # Same background reading of every finalised caller turn the
             # voice path does; it abstains by itself when Jev is absent.
@@ -277,6 +325,15 @@ class TextAdapter:
         """POST whatever the brain queued during this turn. Never waits."""
         pending = call.ctx.queued_actions[call.settled :]
         if not pending:
+            return
+        if not call.ctx.submit_actions:
+            # Same boundary flush_call checks. This path builds its own
+            # Submitter, so the check has to be repeated here or the guard
+            # only covers the end of the call and not the middle of it.
+            call.ctx.audit(
+                "flush_skipped", {"reason": "not_loopback", "actions": len(pending)}
+            )
+            call.settled = len(call.ctx.queued_actions)
             return
         if not self.settings.prosper_api_key:
             for action in pending:

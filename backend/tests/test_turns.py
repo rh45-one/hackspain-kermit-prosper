@@ -76,7 +76,9 @@ class FakeGemini:
 def make_settings(tmp_path, **overrides) -> SimpleNamespace:
     base = {
         "data_dir": str(tmp_path / "data"),
-        "prosper_api_base_url": "http://clinic.test",
+        # Loopback on purpose: it is what the bench really points at, and
+        # the adapter refuses to submit anywhere else without an explicit flag.
+        "prosper_api_base_url": "http://127.0.0.1:18090",
         "prosper_api_key": "pk-local-eval",
         "submit_window_seconds": 30,
         "gemini_api_key": "unused-the-client-is-injected",
@@ -448,3 +450,55 @@ def test_hangup_for_an_unknown_call_is_still_a_200(client):
     """Best effort on the runner's side means it must never fail loudly here."""
     http, _ = client
     assert http.post("/turns", json={"call_id": "nope", "event": "hangup"}).status_code == 200
+
+
+# ---- where a legitimate call writes --------------------------------------
+@pytest.mark.parametrize(
+    "base_url", ["http://127.0.0.1:18090", "http://localhost:18090", "http://[::1]:18090"]
+)
+def test_loopback_targets_may_submit(tmp_path, base_url):
+    assert text_turns.may_submit(make_settings(tmp_path, prosper_api_base_url=base_url), env={})
+
+
+def test_a_remote_target_refuses_to_submit_by_default(tmp_path):
+    """Opt-in and access-gated answer WHO may call, not WHERE a call writes.
+
+    `set -a && . ./.env && set +a` is the natural way to start this backend,
+    and it loads the real platform URL and key. Forgetting to repoint it would
+    post every bench case to the live platform under invented call ids.
+    """
+    settings = make_settings(tmp_path, prosper_api_base_url="https://hackspain.getprosperapp.com")
+    assert text_turns.may_submit(settings, env={}) is False
+    assert text_turns.may_submit(settings, env={text_turns.ENV_SUBMIT_REMOTE: "1"}) is True
+
+
+async def test_a_remote_target_queues_and_audits_but_never_posts(tmp_path, fake_submitter):
+    adapter = make_adapter(
+        tmp_path,
+        [
+            FakeResponse(function_calls=[FakeCall("finish_without_booking", {"reason": "out_of_scope"})]),
+            FakeResponse(text="Nada."),
+        ],
+        prosper_api_base_url="https://hackspain.getprosperapp.com",
+    )
+    assert adapter.submit_actions is False
+
+    await adapter.turn("remote-1", "Hola.")
+
+    ctx = adapter._calls["remote-1"].ctx
+    assert ctx.queued_actions == [{"route": "no-action", "reason": "out_of_scope"}]
+    assert fake_submitter.instances == []  # decided, recorded, never sent
+    await adapter.aclose()
+
+
+async def test_the_boundary_also_holds_on_hangup(tmp_path, fake_submitter):
+    """flush_call checks ctx.submit_actions; the adapter must set it."""
+    adapter = make_adapter(
+        tmp_path,
+        [FakeResponse(text="Buenos días.")],
+        prosper_api_base_url="https://hackspain.getprosperapp.com",
+    )
+    await adapter.turn("remote-2", "Hola.")
+    await adapter.close("remote-2")
+
+    assert fake_submitter.instances == []
