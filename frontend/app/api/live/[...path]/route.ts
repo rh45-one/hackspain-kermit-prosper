@@ -8,14 +8,27 @@
  *
  * Read-only by construction: only GET is exported.
  */
-const ALLOWED = new Set(["calls", "clinic"]);
+/**
+ * Los recursos que este proxy deja pasar, y nada más.
+ *
+ * `agent` faltaba, así que `/settings` pedía `/api/live/agent`, se comía un
+ * 404 de aquí mismo y enseñaba "Recurso desconocido" junto a un texto que
+ * culpaba a `AGENT_HTTP_BASE_URL` y `OPS_TOKEN` — las dos bien puestas. El
+ * panel se estaba acusando a sí mismo.
+ *
+ * La lista sigue siendo corta a propósito: esta puerta es la que guarda las
+ * transcripciones, donde el DNI y el teléfono que dicta un paciente están
+ * literales. Un `*` aquí serviría cualquier ruta futura de `/ops/api/live/`
+ * sin que nadie lo decidiera.
+ */
+const ALLOWED = new Set(["calls", "clinic", "agent"]);
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params;
-  // Only the two shapes the panel actually uses: calls, calls/<id>.
+  // Only the shapes the panel actually uses: calls, calls/<id>, clinic, agent.
   if (!path?.length || !ALLOWED.has(path[0]) || path.length > 2) {
     return Response.json({ detail: "Recurso desconocido" }, { status: 404 });
   }
