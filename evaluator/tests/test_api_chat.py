@@ -3,6 +3,12 @@
 These tests drive the real endpoints against the test double: open a session,
 say something, close it and read back what the receiver accepted. The double is
 served in-process, so nothing here needs a live agent or the network.
+
+The session is opened by **profile id** - a profile this server declares - and
+never by a URL or a path. The catalog below is what the test server declares:
+the double under test, and one agent that is not listening so the failure path
+can be exercised. Sessions are also checked against each other: two open calls
+must not consume one another's canned actions or reach one another's evidence.
 """
 from __future__ import annotations
 
@@ -16,12 +22,58 @@ from evaluator.api.app import create_app
 from evaluator.clinic.dataset import Dataset
 from evaluator.clinic.server import create_app as create_clinic_app
 from evaluator.harness.double_agent import create_app as create_double_app
+from evaluator.profiles import AgentProfile, ProfileCatalog
 from evaluator.runner.experiment import serve_in_thread
 
 DATASET = Path(__file__).resolve().parent.parent / "data" / "clinic_dataset.json"
 CLINIC_PORT = 18996
 DOUBLE_PORT = 18997
+DEAD_PORT = 18999
 CLINIC = f"http://127.0.0.1:{CLINIC_PORT}"
+
+# Profile ids the test server declares. The console picks one of these; it can
+# never name a host, a port or a path of its own.
+DOUBLE_PROFILE = "double-under-test"
+DEAD_PROFILE = "agent-not-listening"
+
+
+def _catalog() -> ProfileCatalog:
+    return ProfileCatalog(
+        [
+            AgentProfile.from_declaration(
+                {
+                    "id": DOUBLE_PROFILE,
+                    "engine": "double",
+                    "version": "test",
+                    "endpoints": {
+                        "ws_url": f"ws://127.0.0.1:{DOUBLE_PORT}/ws",
+                        "text_url": f"http://127.0.0.1:{DOUBLE_PORT}",
+                    },
+                    "capabilities": {
+                        "text": True,
+                        "voice": True,
+                        "audio_capture": True,
+                        "audio_source": "client_capture",
+                        "transcript": True,
+                        "expected_outcome": True,
+                    },
+                    "providers": {"name": "evaluator test double"},
+                    "laboratory": {"clinic_url": CLINIC, "voice_port": DOUBLE_PORT},
+                }
+            ),
+            AgentProfile.from_declaration(
+                {
+                    "id": DEAD_PROFILE,
+                    "engine": "external",
+                    "version": "test",
+                    "endpoints": {"ws_url": f"ws://127.0.0.1:{DEAD_PORT}/ws"},
+                    "capabilities": {"voice": True},
+                    "providers": {"name": "nada escuchando"},
+                    "laboratory": {"clinic_url": CLINIC, "voice_port": DEAD_PORT},
+                }
+            ),
+        ]
+    )
 
 
 @pytest.fixture
@@ -35,7 +87,9 @@ def stack(tmp_path):
     # As a context manager, TestClient keeps ONE event loop for the whole test.
     # A live session holds a websocket bound to the loop that created it, which
     # is what uvicorn does in production and what a per-request portal cannot.
-    with TestClient(create_app(results, session_root=tmp_path / "chat")) as client:
+    with TestClient(
+        create_app(results, session_root=tmp_path / "chat", profiles=_catalog())
+    ) as client:
         yield client
     double.stop()
     clinic.stop()
@@ -51,41 +105,42 @@ def primed():
     return _prime
 
 
-def _open(client) -> dict:
+def _open(client, profile_id: str = DOUBLE_PROFILE, **overrides) -> dict:
     response = client.post(
         "/api/chat",
         json={
-            "ws_url": f"ws://127.0.0.1:{DOUBLE_PORT}/ws",
-            "clinic_url": CLINIC,
+            "profile_id": profile_id,
             "stt": "none",
             "greeting_wait_ms": 3000,
             "reply_idle_ms": 300,
             "reply_start_ms": 3000,
             "submission_wait_s": 3,
+            **overrides,
         },
     )
     assert response.status_code == 200, response.text
     return response.json()
 
 
+def _book(patient_id: str) -> dict:
+    return {
+        "route": "book",
+        "fields": {
+            "patient_id": patient_id,
+            "provider_id": "PR01",
+            "location_id": "centro",
+            "appointment_type_id": "review",
+            "slot": "2026-09-21T09:00:00+02:00",
+            "policy_id": "sanitas",
+        },
+    }
+
+
 def test_a_session_greets_says_and_closes(stack, primed):
-    primed(
-        [
-            {
-                "route": "book",
-                "fields": {
-                    "patient_id": "P00042",
-                    "provider_id": "PR01",
-                    "location_id": "centro",
-                    "appointment_type_id": "review",
-                    "slot": "2026-09-21T09:00:00+02:00",
-                    "policy_id": "sanitas",
-                },
-            }
-        ]
-    )
+    primed([_book("P00042")])
     opened = _open(stack)
     assert opened["stt"] == "none"
+    assert opened["profile_id"] == DOUBLE_PROFILE
     assert opened["greeting"], "el doble saluda en cuanto abre"
 
     said = stack.post(
@@ -119,6 +174,58 @@ def test_a_session_greets_says_and_closes(stack, primed):
     assert result["diagnosis"]["blocks_model_scoring"] is False
 
 
+def test_a_closed_session_declares_its_origin_and_its_evidence(stack):
+    """A manual call uses the same call schema as the runner and the observer."""
+    opened = _open(stack)
+    stack.post(f"/api/chat/{opened['session_id']}/say", json={"text": "Hola, buenas tardes."})
+    result = stack.post(f"/api/chat/{opened['session_id']}/close").json()
+    assert result["origin"] == "manual"
+    assert result["evidence"]["audio"] == "present"
+    assert result["evidence"]["cost"] == "unknown", "sin usage_url el coste no es cero"
+    assert result["evidence"]["outcome"] == "absent", "sin escenario no hay resultado esperado"
+    assert result["started_at"] and result["ended_at"]
+
+
+def test_two_open_sessions_do_not_share_calls_actions_or_evidence(stack, primed):
+    """Session isolation: two live calls never consume each other's material.
+
+    The double hands out one canned action per socket, in order, so a session
+    that took the other session's queue would submit the wrong patient. Evidence
+    is checked the same way: one session cannot read the other's audio.
+    """
+    primed([_book("P00042")])
+    primed([_book("P00077")])
+    first = _open(stack)
+    second = _open(stack)
+    assert first["call_id"] != second["call_id"]
+    assert first["session_id"] != second["session_id"]
+
+    said = stack.post(
+        f"/api/chat/{second['session_id']}/say",
+        json={"text": "Buenas, quería una cita para el martes por la mañana."},
+    )
+    assert said.status_code == 200, said.text
+    stack.post(
+        f"/api/chat/{first['session_id']}/say",
+        json={"text": "Buenas tardes, necesito hablar con recepción."},
+    )
+
+    closed_first = stack.post(f"/api/chat/{first['session_id']}/close").json()
+    closed_second = stack.post(f"/api/chat/{second['session_id']}/close").json()
+    assert closed_first["call_id"] == first["call_id"]
+    assert closed_second["call_id"] == second["call_id"]
+    assert [action["patient_id"] for action in closed_first["submissions"]] == ["P00042"]
+    assert [action["patient_id"] for action in closed_second["submissions"]] == ["P00077"]
+
+    # Both sessions call their first caller turn the same thing, so the same
+    # name must resolve to two different recordings: the audio of each one.
+    name = said.json()["caller"]["wav"]
+    mine = stack.get(f"/api/chat/{second['session_id']}/audio/{name}")
+    theirs = stack.get(f"/api/chat/{first['session_id']}/audio/{name}")
+    assert mine.status_code == 200 and theirs.status_code == 200
+    assert mine.content != theirs.content, "las dos sesiones comparten la misma evidencia"
+
+
 def test_a_closed_session_cannot_be_used_again(stack):
     opened = _open(stack)
     assert stack.post(f"/api/chat/{opened['session_id']}/close").status_code == 200
@@ -141,18 +248,44 @@ def test_small_refusals_do_not_need_their_own_session(stack):
 
 
 def test_an_unreachable_agent_is_reported_not_hidden(stack):
-    # The clinic is up (so the call window opens) and the agent is not.
+    # The clinic is up (so the call window could open) and the agent is not.
     response = stack.post(
         "/api/chat",
-        json={
-            "ws_url": "ws://127.0.0.1:18999/ws",
-            "clinic_url": CLINIC,
-            "stt": "none",
-            "greeting_wait_ms": 500,
-        },
+        json={"profile_id": DEAD_PROFILE, "stt": "none", "greeting_wait_ms": 500},
     )
     assert response.status_code == 502
     assert "websocket" in response.json()["detail"]
+
+
+def test_the_browser_cannot_name_its_own_destination_or_path(stack):
+    """The old contract: the body chose the socket, the clinic and a server path."""
+    response = stack.post(
+        "/api/chat",
+        json={
+            "ws_url": f"ws://127.0.0.1:{DOUBLE_PORT}/ws",
+            "clinic_url": CLINIC,
+            "scenario": "evaluator/scenarios/simple_booking/sb-001.yaml",
+            "agent_audit_dir": "/tmp",
+            "stt": "none",
+        },
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    for field in ("ws_url", "clinic_url", "scenario", "agent_audit_dir"):
+        assert field in detail
+    assert "profile_id" in detail, "el error dice qué pedir en su lugar"
+
+
+def test_an_unknown_profile_is_refused_with_the_declared_ones(stack):
+    response = stack.post("/api/chat", json={"profile_id": "no-existe"})
+    assert response.status_code == 404
+    assert DOUBLE_PROFILE in response.json()["detail"]
+
+
+def test_a_session_without_a_profile_is_refused(stack):
+    response = stack.post("/api/chat", json={"stt": "none"})
+    assert response.status_code == 400
+    assert "profile_id" in response.json()["detail"]
 
 
 def test_the_console_is_served_when_a_web_dir_is_given(tmp_path):

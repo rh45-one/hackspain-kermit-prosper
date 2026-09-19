@@ -69,7 +69,10 @@ fallos de verdad. El total no es un número que se pueda leer.
 
 **Regla operativa que no se salta nadie:** el puerto **7860** atiende
 llamadas puntuadas de verdad a través del túnel de ngrok registrado en
-Prosper. No apuntes nunca el banco ahí ni arranques nada en ese puerto.
+Prosper. No apuntes nunca el banco ahí ni arranques nada en ese puerto. Desde
+P0 no hace falta recordarlo: `evaluator.profiles.guard` rechaza cualquier perfil
+que apunte al 7860, a un destino oficial o a un puerto ocupado, con el motivo
+escrito (ver «Perfiles del laboratorio»).
 
 ## Qué contiene
 
@@ -191,6 +194,77 @@ configuración externa (modelo, prompts, proveedores); compara varias con
 
 El reloj del fixture no cambia automáticamente el reloj del agente externo;
 coordina ambos antes de interpretar pruebas con fechas relativas.
+
+## Perfiles del laboratorio
+
+Un **perfil** es una declaración de con qué se habla y qué se puede esperar de
+ese agente, y vive en el servidor: el catálogo por defecto está en
+`evaluator/src/evaluator/profiles/catalog.py` y la copia editable —con el
+contrato congelado del backend comentado— en
+`evaluator/experiments/profiles.yaml`. Declara:
+
+- `id`, `engine` (`cascade` | `gemini_live` | `external` | `double`) y `version`;
+- endpoints: `ws_url` (voz), `text_url` (adaptador `/turns`) y `usage_url`;
+- capacidades: texto, voz, captura de audio y **de dónde sale** ese audio,
+transcripción, telemetría de coste y resultado esperado;
+- metadatos del proveedor (stack, documentación, notas);
+- credenciales **por nombre de variable de entorno**, nunca por valor
+(`agent_api_key: PROSPER_API_KEY`); los valores los pone el entorno del
+servidor.
+
+Un perfil incompleto o contradictorio no carga, y el error nombra **todos** los
+campos en falta en un solo mensaje: una capacidad de voz sin `endpoints.ws_url`,
+una capacidad de audio sin fuente (`audio_source`), una telemetría de coste sin
+`usage_url`, un motor desconocido, o una credencial pegada como valor en vez de
+como referencia. `start_command` es material del servidor: lo declara quien
+escribe el archivo en esta máquina y **nunca** llega desde el cuerpo de una
+petición.
+
+### Guarda del laboratorio
+
+Antes de usar un perfil, la guarda rechaza con el motivo por escrito:
+
+- **el puerto 7860**, que atiende llamadas puntuadas. El rechazo sale de una
+  constante: para hablar del 7860 el código no abre ningún socket.
+- **cualquier destino oficial o remoto** (`prosper…`, `hackspain…`, `ngrok…`,
+  cualquier host que no sea loopback o red privada).
+- **un puerto ya ocupado**, solo cuando el laboratorio *arrancaría* algo ahí.
+  Una sesión en vivo habla con un proceso que ya está escuchando, así que ese
+  camino no sondea puertos (y nunca toca el 7860).
+
+```sh
+# la lista de perfiles que declara este servidor, con su veredicto de guarda
+curl -s http://127.0.0.1:8099/api/profiles | python -m json.tool
+
+# prueba manual por perfil, sin escribir ninguna URL
+evaluator chat --profile cascade
+```
+
+### Esquema de llamada y evidencia
+
+Todo lo que el laboratorio escribe sobre una llamada (`cases.jsonl`) usa un
+mismo esquema, con `schema_version` explícito. Cada caso dice:
+
+- **origen**: `real` (llamada que el backend atendió, leída de su audit),
+  `simulated` (caso guionado del runner) o `manual` (persona en la consola);
+- candidato **y versión**, más el `run_id` y el `case_id` que lo produjeron;
+- **tiempos**: `started_at`, `ended_at`, `duration_s`;
+- **disponibilidad de evidencia** una por una — audio, transcripción, coste,
+  resultado — con tres valores: `present`, `absent`, `unknown`. Nunca un cero
+  silencioso: el coste que nadie midió es `unknown`, y una llamada real con
+  audio `absent` es una fuente sin grabación, no un silencio;
+- **transcripción como eventos ordenados** con rol, marca de tiempo y
+  `fragment`. El backend entrega fragmentos: el evaluador los conserva en orden
+  y no inventa fronteras de turno donde la fuente no las da. Los campos por
+  interlocutor que ya existían siguen funcionando.
+
+**Lectura tolerante.** Un artefacto escrito por una corrida anterior se lee sin
+migración manual: `load_cases` lo pasa por el mismo modelo, que infiere lo que
+falta y marca lo inferido (rol y fragmento a partir del transcript viejo). Una
+línea sin `schema_version` se registra como versión 1 —la de antes de que el
+campo existiera— en lugar de disfrazarse de la actual. Por eso
+`GET /api/runs/{id}` y `GET /api/runs/{id}/cases` siguen respondiendo sobre las
+corridas que ya están en `experiments/results/`.
 
 ### Las dos vías, y cuál usar
 
@@ -582,7 +656,7 @@ Cinco pestañas:
 | Métricas | el detalle por candidato: cada agregado con su numerador/denominador, el desglose de errores por tipo y la lista de errores registrados |
 | Comparar | alternativas de la misma corrida, lado a lado, y el diff entre dos corridas con pareo de candidatos |
 | Llamadas reales | el observador post-hoc: qué llamadas reales vio esta corrida, con acción enviada, identidad confirmada, veredicto de las etiquetadas y el transcript plegado |
-| Probar el agente | la llamada en vivo, tipeada o **hablada** (ver micrófono) |
+| Probar el agente | la llamada en vivo, tipeada o **hablada** (ver micrófono), contra el **perfil** que elijas del catálogo del servidor |
 
 ```sh
 uv run --project evaluator python -m evaluator.cli dev --port 8099
@@ -602,12 +676,13 @@ y un archivo de evidencia tiene que resolver dentro de su corrida.
 |---|---|
 | `GET /api/runs` | lista de corridas con conteos y si tienen informe |
 | `GET /api/runs/{id}` | manifest + métricas agregadas + resumen side-by-side |
+| `GET /api/profiles` | los perfiles que declara el servidor (id, capacidades, proveedor, veredicto de la guarda), sin valores de credenciales, rutas ni comandos |
 | `GET /api/runs/{id}/cases` | los casos completos |
 | `GET /api/runs/{id}/compare` | side-by-side por caso, con desacuerdos marcados |
 | `GET /api/diff?a=&b=` | resumen del diff entre dos corridas |
 | `GET /api/runs/{id}/report` | el `report.html` de esa corrida |
 | `GET /api/runs/{id}/evidence/{stream}?case_id=` | el WAV de audio de un caso |
-| `POST /api/chat` | abre una llamada real contra el agente |
+| `POST /api/chat` | abre una llamada real contra el perfil indicado por `profile_id` |
 | `GET /api/runs/{id}/real-calls` | las llamadas reales que observó esa corrida (vacío si no es una corrida del observador) |
 | `POST /api/chat/{sid}/say` | dice un turno (TTS del servidor) y devuelve el audio del agente |
 | `POST /api/chat/{sid}/say-audio` | dice un turno con **audio µ-law** del micrófono del navegador |
@@ -621,9 +696,17 @@ La pestaña de chat usa el mismo `CallSession`, la misma clínica local y el mis
 receptor que las corridas automáticas: lo que se ve ahí es lo que un experimento
 mediría. Al cerrar muestra frames por dirección, segundos de voz del caller,
 caracteres de transcript que el agente registró, submissions aceptadas y
-rechazadas, y —con `--agent-audit-dir`— el diagnóstico de si el agente escuchó
-al caller. Sin ruta de auditoría el diagnóstico dice `unavailable`, nunca culpa
-al modelo.
+rechazadas, y —con auditoría configurada en el perfil— el diagnóstico de si el
+agente escuchó al caller. Sin ruta de auditoría el diagnóstico dice
+`unavailable`, nunca culpa al modelo.
+
+**La sesión se pide por perfil, no por URL.** El cuerpo de `POST /api/chat`
+lleva un `profile_id` del catálogo del servidor, el TTS/STT y tiempos; cualquier
+campo que elija destino, ruta, comando o entorno (`ws_url`, `clinic_url`,
+`scenario`, `agent_audit_dir`, `start_command`, `env`, …) se **rechaza por
+nombre**, y un campo inventado también. El destino, la clínica, la clave, el
+escenario y el directorio de auditoría los resuelve el servidor desde el perfil.
+El rechazo nombra el campo y nunca repite el valor que venía en él.
 
 **Micrófono (push-to-talk).** El botón «Hablar» captura del micrófono con un
 `AudioWorklet` que codifica µ-law a 8 kHz en frames de 160 bytes (20 ms), el
@@ -638,7 +721,10 @@ dijiste. El último frame se rellena con silencio µ-law (`0xff`) para no mandar
 un frame corto, y hay un tope de 60 s por subida.
 
 Límites: la API no lanza corridas ni acepta comandos; `OPS_TOKEN` no aplica acá
-porque la consola se ata a `127.0.0.1`.
+porque la consola se ata a `127.0.0.1`. El navegador tampoco ve valores de
+credenciales: el manifiesto se sirve con **todos** los valores de `env`
+reemplazados por `***` —los nombres quedan, que es lo que sirve para leer una
+corrida— y los errores públicos pasan por el mismo cepillo.
 
 ## Estado y límites conocidos
 

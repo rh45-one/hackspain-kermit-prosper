@@ -465,6 +465,43 @@ async function loadRealCalls() {
 
 // ---- chat ------------------------------------------------------------------
 
+// The server declares the profiles; the browser only picks one. The list comes
+// from /api/profiles, which never carries a credential value, a filesystem path
+// or a command line.
+let profiles = [];
+
+function profileHint() {
+  const profile = profiles.find((entry) => entry.id === $("profile").value);
+  if (!profile) {
+    $("profile-hint").textContent =
+      "No hay perfiles declarados en el servidor: nada que probar sin destino ni ruta inventados.";
+    return;
+  }
+  const capabilities = Object.entries(profile.capabilities || {})
+    .filter(([, value]) => value === true)
+    .map(([name]) => name)
+    .join(", ");
+  const refused = (profile.refusals || []).length;
+  $("profile-hint").innerHTML =
+    `<b>${esc(profile.id)}</b> · motor ${esc(profile.engine)} (${esc(profile.version)}) · ` +
+    `${esc(profile.providers?.name || "proveedor sin declarar")} · capacidades: ${esc(capabilities)}` +
+    (refused
+      ? ` · <span class="bad">rechazado por la guarda del laboratorio: ${esc(
+          profile.refusals.join("; "),
+        )}</span>`
+      : "");
+}
+
+async function loadProfiles() {
+  profiles = await api("/api/profiles");
+  $("profile").innerHTML = profiles
+    .map((entry) => `<option value="${esc(entry.id)}">${esc(entry.id)} · ${esc(entry.engine)}</option>`)
+    .join("");
+  profileHint();
+}
+
+$("profile").addEventListener("change", profileHint);
+
 function chatLog(entry) {
   const box = $("chat-log");
   const line = document.createElement("div");
@@ -489,18 +526,17 @@ $("chat-open").addEventListener("click", async () => {
     const opened = await api("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // A profile id and nothing else: the server resolves the destination,
+      // the clinic, the scenario and the audit directory.
       body: JSON.stringify({
-        ws_url: $("ws").value,
-        clinic_url: $("clinic").value,
+        profile_id: $("profile").value,
         tts: $("tts").value,
         stt: $("stt").value,
-        scenario: $("scenario").value || null,
-        agent_audit_dir: $("audit").value || null,
       }),
     });
     chatSession = opened.session_id;
     $("chat-log").innerHTML = "";
-    $("chat-state").textContent = `${opened.call_id} · STT ${opened.stt}`;
+    $("chat-state").textContent = `${opened.profile_id} · ${opened.call_id} · STT ${opened.stt}`;
     if (opened.greeting) chatLog(opened.greeting);
     $("chat-form").hidden = false;
     $("chat-close").disabled = false;
@@ -707,4 +743,5 @@ function createMic() {
 
 mic = createMic();
 
+loadProfiles().catch(fail);
 loadRuns().catch(fail);
