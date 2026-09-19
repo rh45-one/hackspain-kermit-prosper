@@ -21,7 +21,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from agent.accounts import directory
 from agent.brain import deps
+from agent.orgs import DEFAULT_ORG_ID
 
 # Where a human sits when the catalogue cannot answer. These four are the only
 # invented nodes in the graph; everything else is computed. Keep it that way:
@@ -135,8 +137,17 @@ def _specialties(cache: Any) -> list[Node]:
     ]
 
 
-def _roles() -> list[Node]:
-    return [Node(id=rid, kind="role", label=label, detail=detail) for rid, label, detail in _ROLES]
+def _roles(org_id: str) -> list[Node]:
+    """The people who answer, from this organisation's directory.
+
+    `_ROLES` below is still the only place the four defaults are written down;
+    the directory reads them and lets a clinic replace any of them by name. A
+    fifth role added there appears here the same day.
+    """
+    return [
+        Node(id=rid, kind="role", label=label, detail=detail)
+        for rid, label, detail in directory.escalation_targets(org_id)
+    ]
 
 
 def _edges(cache: Any) -> list[Edge]:
@@ -159,14 +170,15 @@ def _key(name: str) -> str:
     return _fold(name)
 
 
-def build(cache: Any) -> dict[str, Any]:
+def build(cache: Any, org_id: str = "") -> dict[str, Any]:
     """The whole clinic as nodes, edges and escalation routes.
 
     Returns plain data, ready to draw. A cold cache yields the roles and the
     escalation map and nothing else, which is honest: those are the parts that
     do not depend on the catalogue being reachable.
     """
-    nodes = _roles()
+    org_id = org_id or DEFAULT_ORG_ID
+    nodes = _roles(org_id)
     edges: list[Edge] = []
     if cache is not None and getattr(cache, "warmed", False):
         nodes = _providers(cache) + _sites(cache) + _specialties(cache) + nodes
@@ -174,7 +186,9 @@ def build(cache: Any) -> dict[str, Any]:
 
     escalations = [
         Escalation(reason=reason, target=target, urgency=urgency, detail=detail)
-        for reason, (target, urgency, detail) in sorted(_ESCALATION.items())
+        for reason, (target, urgency, detail) in sorted(
+            directory.escalation_routes(org_id).items()
+        )
     ]
     edges = edges + [
         Edge(f"reason:{e.reason}", e.target, "escalates_to", e.detail) for e in escalations
@@ -187,9 +201,9 @@ def build(cache: Any) -> dict[str, Any]:
     }
 
 
-def who_to_call(reason: str) -> Escalation | None:
+def who_to_call(reason: str, org_id: str = "") -> Escalation | None:
     """Who hears about this ending, or None when the reason is not one of ours."""
-    route = _ESCALATION.get(reason)
+    route = directory.escalation_route(org_id or DEFAULT_ORG_ID, reason)
     if route is None:
         return None
     target, urgency, detail = route
@@ -203,7 +217,9 @@ def missing_reasons() -> frozenset[str]:
     the challenge should fail the build loudly, not take the process down on a
     live call.
     """
-    return frozenset(deps.CLOSED_REASONS) - frozenset(_ESCALATION)
+    return frozenset(deps.CLOSED_REASONS) - frozenset(
+        directory.escalation_routes(DEFAULT_ORG_ID)
+    )
 
 
 __all__ = ["URGENCY", "Edge", "Escalation", "Node", "build", "missing_reasons", "who_to_call"]

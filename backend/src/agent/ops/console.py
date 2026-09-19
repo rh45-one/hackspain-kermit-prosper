@@ -278,6 +278,7 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
 # `require_ops_access` lazily, so this import is one-way and order-independent.
 from agent.ops.agent_config import router as agent_config_router
 from agent.ops.auth import router as auth_router
+from agent.ops.directory import router as directory_router
 from agent.ops.frontdesk import router as frontdesk_router
 from agent.ops.graph import router as graph_router
 from agent.ops.live import router as live_router
@@ -301,3 +302,8 @@ app.include_router(agent_config_router)
 # or nobody could ever reach it. Every route on it that does anything checks
 # a session for itself.
 app.include_router(auth_router)
+# The clinic's own people and routes: the four hand-written roles in
+# `clinic/graph.py` and the eighteen escalations, as data the panel can edit.
+# Members read, admins write; staff contact details are behind that membership
+# check and not merely behind the ops door.
+app.include_router(directory_router)

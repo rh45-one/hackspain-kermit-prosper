@@ -410,7 +410,12 @@ class CredentialRequest(BaseModel):
     prosper_api_key: str = Field(min_length=8)
 
 
-def _require_credential_role(request: Request, org_id: str) -> tuple[Store, str, Principal]:
+def require_member(request: Request, org_id: str) -> tuple[Store, str, Principal]:
+    """A signed-in member of this organisation. Reads live behind this.
+
+    Not being a member and the organisation not existing are the same 403,
+    because they are the same answer to somebody trying org ids.
+    """
     person = require_person(request)
     platform = _store()
     if platform is None:
@@ -419,12 +424,21 @@ def _require_credential_role(request: Request, org_id: str) -> tuple[Store, str,
         wanted = normalize_org_id(org_id)
     except InvalidOrgId as exc:
         raise HTTPException(400, "organización no válida") from exc
-    role = platform.role_in(person.user_id, wanted)
-    if role is None:
+    if platform.role_in(person.user_id, wanted) is None:
         raise HTTPException(403, "no perteneces a esa organización")
-    if role not in CREDENTIAL_ROLES:
+    return platform, wanted, person
+
+
+def require_admin(request: Request, org_id: str) -> tuple[Store, str, Principal]:
+    """A member who may also write: owner or admin. Every write goes through here."""
+    platform, wanted, person = require_member(request, org_id)
+    if platform.role_in(person.user_id, wanted) not in CREDENTIAL_ROLES:
         raise HTTPException(403, "hace falta ser admin de la organización")
     return platform, wanted, person
+
+
+def _require_credential_role(request: Request, org_id: str) -> tuple[Store, str, Principal]:
+    return require_admin(request, org_id)
 
 
 @router.get("/ops/api/orgs/{org_id}/credential")
@@ -497,6 +511,8 @@ __all__ = [
     "people_are_provisioned",
     "principal_of",
     "request_org_id",
+    "require_admin",
+    "require_member",
     "require_person",
     "router",
     "session_of",

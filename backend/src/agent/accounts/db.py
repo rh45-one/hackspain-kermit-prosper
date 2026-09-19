@@ -60,7 +60,7 @@ from agent.orgs import DEFAULT_ORG_ID
 
 # Bumped by appending to _MIGRATIONS. Never by editing one in place: the
 # volume already holds a database that has run the old ones.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
     (
@@ -115,6 +115,65 @@ _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
             """,
             "CREATE INDEX IF NOT EXISTS idx_memberships_org ON memberships(org_id)",
             "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)",
+        ),
+    ),
+    (
+        2,
+        (
+            # The four human nodes `clinic/graph.py` has had to declare by
+            # hand, turned into data per organisation. A hospital has twenty
+            # and a consulting room has two, and neither should edit code.
+            #
+            # `slug` is the id the graph draws and the routes point at. A row
+            # whose slug is one of the four default role ids REPLACES that
+            # default; any default nobody has taken stays. That is what stops
+            # configuring one role from silently deleting the other three.
+            """
+            CREATE TABLE IF NOT EXISTS people (
+                id           TEXT PRIMARY KEY,
+                org_id       TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                slug         TEXT NOT NULL,
+                name         TEXT NOT NULL,
+                role         TEXT NOT NULL,
+                detail       TEXT NOT NULL DEFAULT '',
+                -- Catalogue language codes, in the catalogue's own order.
+                -- Empty means "ask the catalogue", which is how a doctor keeps
+                -- behaving exactly as they did before this table existed.
+                languages    TEXT NOT NULL DEFAULT '',
+                -- The catalogue provider this person is, when they are one at
+                -- all. NULL for a receptionist, a manager, or 112.
+                provider_id  TEXT,
+                -- How to reach them. Staff contact details, shown to members
+                -- of their own organisation and never put in a model prompt.
+                phone        TEXT NOT NULL DEFAULT '',
+                email        TEXT NOT NULL DEFAULT '',
+                -- The call profile: what Ginés asked for. What the agent says
+                -- when this person picks up, and what it may and may not ask
+                -- of them. Per person, not per deployment.
+                opening      TEXT NOT NULL DEFAULT '',
+                may_ask      TEXT NOT NULL DEFAULT '',
+                must_not_ask TEXT NOT NULL DEFAULT '',
+                active       INTEGER NOT NULL DEFAULT 1,
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL,
+                UNIQUE (org_id, slug)
+            )
+            """,
+            # One of the eighteen endings, and who hears about it here. A
+            # reason with no row falls back to the hand-written route, so an
+            # organisation that configures nothing still has somebody to call.
+            """
+            CREATE TABLE IF NOT EXISTS routes (
+                org_id      TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                reason      TEXT NOT NULL,
+                person_slug TEXT NOT NULL,
+                urgency     TEXT NOT NULL,
+                detail      TEXT NOT NULL DEFAULT '',
+                updated_at  TEXT NOT NULL,
+                PRIMARY KEY (org_id, reason)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_people_org ON people(org_id)",
         ),
     ),
 ]

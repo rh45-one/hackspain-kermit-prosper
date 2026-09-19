@@ -172,6 +172,12 @@ def system_prompt_for(ctx: CallContext) -> str:
         ("Urgencia", "urgency"),
         ("Hueco a cubrir", "gap"),
         ("Habla", "speaks"),
+        # Written per person by whoever runs the clinic, not by this file.
+        # Somebody who knows Dra. Ortiz knows how to open a call with her;
+        # nothing in a catalogue does.
+        ("Cómo abrir", "opening"),
+        ("Puedes preguntarle", "may_ask"),
+        ("No le preguntes", "must_not_ask"),
     ):
         value = brief.get(key)
         if value:
