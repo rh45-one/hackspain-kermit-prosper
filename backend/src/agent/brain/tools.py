@@ -63,6 +63,43 @@ def _build_jev_client(settings: Any) -> Any | None:
         return None
 
 
+def _lookup_note(summary: list[dict[str, Any]], national_id: str | None) -> str:
+    """What the count means, and what asking again would and would not fix.
+
+    `{"matches": [], "count": 0}` is silent data. A model that reads it knows
+    the search failed and nothing about why, so the cheapest next move looks
+    like asking the same question again — which is what happened on a live
+    call: the caller dictated a document number, the register had no such
+    person, and the agent asked for the name four more times without ever
+    saying it had not found anybody.
+
+    Repeating a question the answer to which cannot change is the one failure
+    a caller reads as broken. So the tool result says which of the three
+    situations this is, and each note rules out the move that would loop.
+    """
+    count = len(summary)
+    if count == 0:
+        if national_id:
+            return (
+                "No patient in this clinic's register has that document number. Asking for "
+                "it again returns the same nothing — either it belongs to somebody else or "
+                "this person is not registered here. Say so, ask ONCE for the full name and "
+                "date of birth, and if those find nobody either, end with patient_not_found."
+            )
+        return (
+            "Nobody in the register matches that. Asking for the same name again returns "
+            "the same nothing. Say you cannot find them, ask ONCE for the exact document "
+            "number or the date of birth, and end with patient_not_found if neither helps."
+        )
+    if count == 1:
+        return "One person. Confirm them with confirm_patient before doing anything else."
+    missing = "date of birth" if not any(m.get("date_of_birth") for m in summary) else "date of birth or document number"
+    return (
+        f"{count} people match, so what you have does not identify anybody. Ask for the "
+        f"{missing} — NOT for the name again, which you already have."
+    )
+
+
 def _scrub_known_names(text: str, ctx: Any) -> str:
     """Replace locally known patient names with the redaction marker.
 
@@ -389,16 +426,27 @@ class ToolBox:
         if self.client is None:
             await params.result_callback({"error": "clinic layer unavailable"})
             return
-        kwargs: dict[str, Any] = {"name": name}
+        kwargs: dict[str, Any] = {}
+        # A document number identifies one person on its own, and a caller who
+        # gives one often will not give a name — "yo mismo" is a name to a
+        # human and nothing to a directory. Sending an empty name with it is
+        # a 422; sending the id alone is the search that was meant.
+        if str(name).strip():
+            kwargs["name"] = name
         if national_id:
             kwargs["national_id"] = national_id
         if date_of_birth:
             kwargs["date_of_birth"] = date_of_birth
+        if not kwargs:
+            await params.result_callback(
+                {"error": "Ask the caller for a full name, a document number or a date of birth."}
+            )
+            return
 
         # The directory refuses a bare given name, and that refusal costs a
         # turn. It is answerable here: a first name alone is simply not enough
         # to find anybody, and the caller is the one who has to fill the gap.
-        if len(str(name).split()) < 2 and not national_id and not date_of_birth:
+        if str(name).strip() and len(str(name).split()) < 2 and not national_id and not date_of_birth:
             await params.result_callback(
                 {
                     "error": (
@@ -453,7 +501,9 @@ class ToolBox:
                 ),
             },
         )
-        await params.result_callback({"matches": summary, "count": len(summary)})
+        await params.result_callback(
+            {"matches": summary, "count": len(summary), "note": _lookup_note(summary, national_id)}
+        )
 
     async def confirm_patient(self, params: FunctionCallParams, patient_id: str) -> None:
         """Confirm the caller's identity against a patient found by lookup_patient.

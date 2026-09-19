@@ -1403,3 +1403,34 @@ async def test_a_booking_bothers_nobody(box, ctx):
         await box.book_appointment(FakeParams(), slot_token=token)
 
     assert not audited(ctx, "needs_a_human")
+
+
+# ---- what a failed lookup tells the model ---------------------------------
+def test_a_lookup_that_found_nobody_rules_out_asking_again():
+    """Silent data made the agent repeat a question four times on a live call.
+
+    The caller dictated a document number, the register had no such person,
+    the tool returned `{"matches": [], "count": 0}` — and the cheapest next
+    move for a model reading that is to ask the same thing again. It asked for
+    the name four more times and never said it had not found anybody.
+    """
+    from agent.brain.tools import _lookup_note
+
+    note = _lookup_note([], "77992528B")
+    assert "again returns the same nothing" in note
+    assert "patient_not_found" in note
+
+
+def test_too_many_matches_asks_for_what_separates_them():
+    """Never the name: with ten matches the name is the field they share."""
+    from agent.brain.tools import _lookup_note
+
+    note = _lookup_note([{"date_of_birth": "1990-01-01"}] * 10, None)
+    assert "10 people match" in note
+    assert "NOT for the name again" in note
+
+
+def test_one_match_is_sent_to_confirmation():
+    from agent.brain.tools import _lookup_note
+
+    assert "confirm_patient" in _lookup_note([{"patient_id": "P1"}], None)
