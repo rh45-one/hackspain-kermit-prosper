@@ -113,6 +113,8 @@ async def demo_voice_ws(websocket: WebSocket) -> None:
             gap=query.get("gap") or "",
             provider_id=query.get("provider_id") or "",
             person_slug=query.get("person") or "",
+            missing=query.get("missing") or "",
+            situation=query.get("situation") or "",
             config=app_settings,
         )
         # What shift is actually uncovered, and whether the colleague we are

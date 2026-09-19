@@ -168,8 +168,16 @@ def system_prompt_for(ctx: CallContext) -> str:
     lines = [prompts.COVER_PROMPT, "", "LO QUE HA PASADO, para esta llamada:"]
     for label, key in (
         ("A quién llama", "who"),
+        # Quién es esa persona. Sin esto la llamada trataba igual a una
+        # coordinadora, a un podólogo y al médico de guardia: tres nombres y
+        # la misma conversación, que es como sonaba.
+        ("Qué hace en la clínica", "role"),
+        ("Lo que sabemos de él o de ella", "about_them"),
+        ("Le llamas porque sustituye a", "stands_in_for"),
+        ("Quién falta", "missing"),
+        ("La situación, en concreto", "situation"),
         ("Qué ha pasado", "because"),
-        ("Urgencia", "urgency"),
+        ("Urgencia", "urgency_said"),
         ("Hueco a cubrir", "gap"),
         ("OJO, ya trabaja entonces", "already_working"),
         ("Habla", "speaks"),

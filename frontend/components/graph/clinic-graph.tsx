@@ -66,11 +66,36 @@ function SectionTitle({
   );
 }
 
+/**
+ * La dirección de la llamada, con el motivo dentro.
+ *
+ * El QR abría `/call/` a secas, así que la llamada que salía del grafo era
+ * una llamada de recepcionista cualquiera: el agente descolgaba sin saber a
+ * quién llamaba ni por qué. El contexto estaba en la pantalla y se quedaba
+ * en la pantalla.
+ *
+ * Con `reason` y `person` el servidor resuelve el informe entero desde el
+ * directorio de la clínica — qué hace esa persona, a quién sustituye, qué
+ * puede y qué no se le puede pedir. Y `situation` lleva lo que alguien ha
+ * escrito arriba con sus palabras, que vale más que la frase de catálogo de
+ * un motivo: esa frase es cierta para todas las ausencias, y esta llamada va
+ * de una.
+ */
+function callWithContext(base: string, subject: CallSubject, situation: string): string {
+  const params = new URLSearchParams({
+    reason: subject.escalation.reason,
+    person: subject.escalation.target,
+  });
+  if (situation.trim()) params.set("situation", situation.trim());
+  return `${base}${base.includes("?") ? "&" : "?"}${params}`;
+}
+
 export function ClinicGraphBoard({
   graph,
   callUrl,
   cover,
   highlight,
+  situation = "",
 }: {
   graph: ClinicGraph;
   /** Public address of the agent's browser call page, resolved on the server. */
@@ -86,6 +111,8 @@ export function ClinicGraphBoard({
    * whoever is clicking, and a prop that kept re-pinning would fight them.
    */
   highlight?: string | null;
+  /** Lo que alguien escribió en la caja de cobertura, para que viaje a la llamada. */
+  situation?: string;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [pinned, setPinned] = useState<string | null>(highlight ?? null);
@@ -393,7 +420,7 @@ export function ClinicGraphBoard({
       {calling ? (
         <CallQrDialog
           subject={calling}
-          url={callUrl}
+          url={callWithContext(callUrl, calling, situation)}
           urgencyNote={graph.legend.urgency[calling.escalation.urgency]}
           onClose={() => setCalling(null)}
         />

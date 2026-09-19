@@ -5,6 +5,7 @@ A receptionist prompt used for this would ask a doctor for their date of birth.
 from __future__ import annotations
 
 from agent.brain import prompts
+from agent.orgs import DEFAULT_ORG_ID
 from agent.brain.tools import ToolBox
 from agent.voice.context import CallContext
 from agent.voice.pipeline import system_prompt_for
@@ -123,3 +124,73 @@ def test_a_week_the_catalogue_cannot_say_is_left_out_rather_than_invented():
 
     assert rota.gap_sentence(None, "PR02", "monday") == ""
     assert rota.gap_sentence(_cache_with_week(), "", "monday") == ""
+
+
+# ---- the brief carries WHO you are ringing, not just their name -----------
+def test_the_brief_says_what_this_person_does_and_who_is_missing(accounts_db):
+    """Three people, three different calls — or it is the same call thrice.
+
+    Without a role and a detail the prompt treated a coordinator, a podiatrist
+    and the doctor on call as the same person under different names, and it
+    sounded like it. And without "who is missing" the opening could not say
+    what had happened, which is the first thing anybody picking up asks.
+    """
+    from agent.accounts.directory import cover_brief
+    from agent.accounts.store import Person, Route, Store
+
+    shop = Store(accounts_db)
+    shop.upsert_person(DEFAULT_ORG_ID, Person(slug="ana", name="Ana Ruiz", role="Ginecóloga"))
+    shop.upsert_person(
+        DEFAULT_ORG_ID,
+        Person(
+            slug="bea",
+            name="Bea Lis",
+            role="Ginecóloga Jr.",
+            detail="Segunda de Ana.",
+            covers_for="ana",
+        ),
+    )
+    shop.upsert_route(
+        DEFAULT_ORG_ID, Route(reason="provider_on_leave", person_slug="bea", urgency="today")
+    )
+
+    brief = cover_brief(DEFAULT_ORG_ID, "provider_on_leave")
+
+    assert brief["who"] == "Bea Lis"
+    assert brief["role"] == "Ginecóloga Jr."
+    assert brief["about_them"] == "Segunda de Ana."
+    # Whom she stands in for is whom the call is about, and nobody had to say so.
+    assert brief["stands_in_for"] == "Ana Ruiz"
+    assert brief["missing"] == "Ana Ruiz"
+    # And the urgency is said, not left as an enum nobody reads aloud.
+    assert brief["urgency_said"] == "hoy, antes de que se acabe el día"
+
+
+def test_somebody_elses_words_beat_the_routes_stock_sentence(accounts_db):
+    """A route's detail is true of every absence; this call is about one."""
+    from agent.accounts.directory import cover_brief
+
+    told = "Hugo está de vacaciones y el martes hay ocho pacientes sin médico"
+    brief = cover_brief(DEFAULT_ORG_ID, "provider_on_leave", situation=told)
+
+    assert brief["situation"] == told
+
+
+def test_the_prompt_renders_the_profile(accounts_db):
+    """The brief is worth nothing if it does not reach the prompt."""
+    from agent.accounts.directory import cover_brief
+    from agent.voice.pipeline import system_prompt_for
+
+    # Built outside the class body: inside one, `cover_brief = cover_brief(...)`
+    # shadows the name before the call is made and the lookup skips the
+    # enclosing function entirely.
+    built = cover_brief(
+        DEFAULT_ORG_ID, "provider_on_leave", who="Bea Lis", situation="Ana está de baja"
+    )
+
+    class Ctx:
+        cover_brief = built
+
+    rendered = system_prompt_for(Ctx())
+    assert "Qué hace en la clínica" in rendered
+    assert "La situación, en concreto: Ana está de baja" in rendered

@@ -44,6 +44,13 @@ from typing import Any
 from agent.accounts.store import Person, Route, store
 from agent.orgs import normalize_org_id
 
+# Cuánto corre, dicho como lo diría una persona.
+_URGENCY_SAID = {
+    "now": "ahora mismo, interrumpe lo que esté haciendo",
+    "today": "hoy, antes de que se acabe el día",
+    "queue": "no corre prisa, cuando pueda",
+}
+
 # How a language code is said out loud in the brief. The three the catalogue
 # actually returns, plus the two a Spanish clinic can reasonably hire for.
 _SAID = {
@@ -269,6 +276,8 @@ def cover_brief(
     gap: str = "",
     provider_id: str = "",
     person_slug: str = "",
+    missing: str = "",
+    situation: str = "",
     config: Any | None = None,
 ) -> dict[str, str]:
     """What the clinic-rings-a-colleague call needs to know before it opens.
@@ -300,11 +309,34 @@ def cover_brief(
     if person is None and provider_id:
         person = Person(slug=provider_id, name="", role="provider", provider_id=provider_id)
 
+    # Who is not there. Either said explicitly by whoever started the call,
+    # or — when this person is somebody's substitute — the colleague they
+    # stand in for, which is the reason they are being rung at all.
+    stands_in_for = ""
+    if person is not None and getattr(person, "covers_for", ""):
+        covered = person_for(org_id, person.covers_for, config)
+        stands_in_for = covered.name if covered is not None else person.covers_for
+
     brief = {
         "reason": reason,
         "who": who or (person.name if person else "") or (route.person_slug if route else ""),
+        # What this person does, and whatever the clinic wrote down about
+        # them. Without it the call treats a coordinator, a podiatrist and
+        # the doctor on call as the same person under different names, which
+        # is exactly how it sounded.
+        "role": person.role if person else "",
+        "about_them": person.detail if person else "",
+        "stands_in_for": stands_in_for,
+        "missing": missing or stands_in_for,
+        # The story in somebody's own words, when there is one. It beats the
+        # route's stock sentence every time: the stock sentence is true of
+        # every absence, and this call is about one of them.
+        "situation": situation,
         "because": because or (route.detail if route else ""),
         "urgency": urgency or (route.urgency if route else ""),
+        # Dicho, no en clave. "Urgencia: today" en un informe que se lee en
+        # voz alta es una palabra en inglés que nadie sabe cuánto significa.
+        "urgency_said": _URGENCY_SAID.get(urgency or (route.urgency if route else ""), ""),
         "gap": gap,
         "speaks": said(languages_of(person, org_id, config)),
         "opening": person.opening if person else "",

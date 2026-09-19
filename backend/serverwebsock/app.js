@@ -78,9 +78,26 @@ function newId(prefix) {
   return `${prefix}-${randomPart}`;
 }
 
+/**
+ * El socket, con el contexto que traiga la página.
+ *
+ * `/ws/demo?reason=...` es la otra dirección de la llamada: la clínica
+ * llamando a un compañero porque se ha roto la agenda. El servidor monta el
+ * informe —a quién llama, qué hace en la clínica, quién falta, qué pasó— a
+ * partir de esos parámetros.
+ *
+ * Aquí estaba la fuga: esta función devolvía `/ws/demo` pelado y tiraba la
+ * query de la página. Así que el botón de llamar del grafo, que sí ponía el
+ * motivo en la URL, abría una llamada de recepcionista normal — y el agente
+ * saludaba sin tener ni idea de por qué estaba llamando.
+ *
+ * Se reenvía la query tal cual y se deja que el servidor decida qué entiende;
+ * filtrar aquí obligaría a tocar dos sitios cada vez que el informe crezca.
+ */
 function websocketUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/ws/demo`;
+  const query = window.location.search || "";
+  return `${protocol}//${window.location.host}/ws/demo${query}`;
 }
 
 function permissionError(error) {

@@ -172,6 +172,7 @@ export default async function GrafoPage({
       callUrl={callPageUrl()}
       cover={<CoverSuggestionPanel situation={situation} cover={cover} />}
       highlight={cover?.suggested?.slug ?? null}
+      situation={situation}
     />
   );
 }
