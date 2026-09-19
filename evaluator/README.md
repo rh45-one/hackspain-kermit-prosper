@@ -252,6 +252,13 @@ Content-Type: application/json
   estado y el cuerpo, así que un agente que no lo implemente no pierde
   ningún caso por ello (devolverá 422 y no pasa nada). Debe ser idempotente.
 
+  Best-effort **no es invisible**: el resultado del `hangup` queda en
+  `notes` del caso y el informe lo imprime junto a la evidencia. `notes` es
+  diagnóstico que ningún veredicto lee. Pasó de verdad —un adaptador que
+  declaraba `text: str` devolvía 422 a todos los `hangup` y nadie lo veía—,
+  y en este proyecto una señal que se traga en silencio es exactamente cómo
+  se pierde un run.
+
 **Ventana de envío.** Igual que en la vía de voz: el receptor local acepta
 `POST /api/v1/submit/*` mientras la llamada está abierta y hasta 30 s después
 de cerrarla (410 pasado ese plazo, 404 si el `call_id` no existe, 409 si se

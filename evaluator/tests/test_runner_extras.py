@@ -269,4 +269,5 @@ class TestReportEvidence:
         assert "no es el veredicto oficial" in page.lower()
         assert "No es la clínica oficial" in page
         assert "~3.000" in page  # real clinic size, next to the fixture's 6
-        assert "leak_check" in page  # unevaluated check is printed, not hidden
+        # The unevaluated check is printed, and in Spanish.
+        assert "comprobación de privacidad" in page

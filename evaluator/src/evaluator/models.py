@@ -328,6 +328,11 @@ class CaseResult(BaseModel):
     # needs a transcript, and the voice path has no STT). Never silently
     # counted as passed.
     checks_not_run: list[str] = Field(default_factory=list)
+    # Diagnostics that never touch the verdict: things worth seeing but which
+    # are nobody's failure, like an agent that does not implement the optional
+    # hangup. Best effort has to stay best effort AND stay visible - a signal
+    # swallowed in silence is how this project loses runs.
+    notes: list[str] = Field(default_factory=list)
     duration_s: float = 0.0
     errors: list[str] = Field(default_factory=list)
 

@@ -324,7 +324,12 @@ def render_report(run_dir: str | Path) -> Path:
         if n_interrupts:
             evidence.append(f"{n_interrupts} barge-in")
         for check in c.get("checks_not_run") or []:
-            evidence.append(f'<span class="warn">{_esc(check)} sin evaluar</span>')
+            evidence.append(
+                f'<span class="warn">{_esc(CHECK_LABELS.get(check, check))} '
+                "sin hacer</span>"
+            )
+        for note in c.get("notes") or []:
+            evidence.append(f"<span class='meta'>{_esc(note)}</span>")
         label, _ = VERDICT_LABELS.get(verdict, (verdict.upper(), ""))
         signal = c.get("failure_signal")
         signal_text = (
