@@ -303,31 +303,20 @@ def create_gemini_live_service(
         logger.error("GEMINI_API_KEY not set; Gemini Live unavailable (no credentials)")
         return None
 
-    # Settings pinned for the Prosper path: the exact model id (no
-    # extended-thinking variant), audio modality only, no thinking config
-    # — and one instance per socket, created by this call.
-    #
-    # Server-side VAD is OFF and the pipeline's own Silero decides the turns.
-    #
-    # Measured, this is worth about four seconds per exchange. Gemini's own
-    # endpointing takes ~5 s of silence to close a caller turn; local VAD
-    # closes it in under one. Over the ~24 exchanges these calls run, that is
-    # the difference between finishing inside the three-minute cap and being
-    # cut off mid-booking, which is how 15 of 20 calls died.
-    #
-    # It was tried once before and reverted, because a call lost the caller's
-    # "Hello." and sat silent — with server VAD off, pipecat only forwards
-    # audio while _user_is_speaking (llm.py:1746), so a missed onset buries
-    # the turn. That risk was real and is now measured rather than feared:
-    # Silero detects this telephony path at full volume, at -12 dB and at
-    # -22 dB, for a long sentence and for a bare "Hello.". See
-    # agent.voice.pipeline for the telephony VAD parameters that go with it.
-    #
-    vad_params = GeminiVADParams(disabled=True) if GeminiVADParams is not None else None
+    # With local VAD disabled, Gemini receives continuous audio, including
+    # quiet onsets and hesitation pauses. Local mode remains an explicit rollback.
+    vad_mode = getattr(settings, "gemini_vad_mode", "server")
+    if vad_mode not in {"local", "server"}:
+        raise ValueError("gemini_vad_mode must be local or server")
+    vad_params = None
+    if GeminiVADParams is not None:
+        vad_params = GeminiVADParams(disabled=True) if vad_mode == "local" else GeminiVADParams(
+            disabled=False, prefix_padding_ms=300, silence_duration_ms=1500,
+        )
     service = service_cls(
         api_key=api_key,
         settings=service_cls.Settings(
-            model=GEMINI_LIVE_MODEL,
+            model=getattr(settings, "gemini_live_model", GEMINI_LIVE_MODEL),
             modalities=audio_modality,
             voice=_gemini_voice_id(settings),
             # None clears pipecat's en-US default and leaves the choice to
@@ -341,7 +330,7 @@ def create_gemini_live_service(
     logger.info(
         "Gemini Live service created: model={} language={} server_vad={} "
         "(per-socket instance)",
-        GEMINI_LIVE_MODEL,
+        getattr(settings, "gemini_live_model", GEMINI_LIVE_MODEL),
         _gemini_language(settings) or "elegido por el modelo",
         "off (local VAD drives turns)" if vad_params is not None and vad_params.disabled else "on",
     )

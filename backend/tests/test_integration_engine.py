@@ -194,6 +194,7 @@ async def test_local_vad_decides_the_turns_with_telephony_parameters(tmp_path):
     "Hello." goes unheard and the agent sits silent.
     """
     settings = EngineSettings(voice_engine="gemini_live", gemini_api_key="k")
+    settings.gemini_vad_mode = "local"
     build(tmp_path, "CA-vad", settings)
 
     parts = FakePipeline.built[-1]
@@ -383,3 +384,13 @@ async def test_twenty_lightweight_concurrent_sockets_on_gemini(tmp_path):
     assert len({id(w) for _, w in results}) == 20
     services = RecordedGeminiService.instances[-20:]
     assert len({id(s) for s in services}) == 20  # one service per socket
+
+
+async def test_server_turn_detection_does_not_install_competing_local_vad(tmp_path):
+    settings = EngineSettings(voice_engine='gemini_live', gemini_api_key='k')
+    settings.gemini_vad_mode = 'server'
+    build(tmp_path, 'CA-server-vad', settings)
+    parts = FakePipeline.built[-1]
+    user = next(p for p in parts if type(p).__name__ == 'LLMUserAggregator')
+    assert user._params.vad_analyzer is None
+    assert type(user._params.user_turn_strategies).__name__ == 'ExternalUserTurnStrategies'

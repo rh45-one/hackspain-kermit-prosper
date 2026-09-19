@@ -333,8 +333,10 @@ def test_factory_hands_the_turns_to_local_vad(monkeypatch):
     monkeypatch.setattr(gl, "gemini_live_available", lambda: True)
     FakeGeminiService.instances = []
 
+    config = _SettingsStub()
+    config.gemini_vad_mode = "local"
     service = create_gemini_live_service(
-        _SettingsStub(), _ToolboxStub(), service_cls=FakeGeminiService
+        config, _ToolboxStub(), service_cls=FakeGeminiService
     )
 
     vad = service.kwargs["settings"].vad
@@ -401,3 +403,37 @@ def test_factory_requires_credentials(monkeypatch):
     bare = object()
     service = create_gemini_live_service(bare, _ToolboxStub(), service_cls=FakeGeminiService)
     assert service is not None and service.kwargs["api_key"] == "env-key"
+
+
+def test_server_vad_keeps_audio_continuous_and_honors_model(monkeypatch):
+    import agent.voice.gemini_live as gl
+
+    monkeypatch.setattr(gl, 'gemini_live_available', lambda: True)
+    config = _SettingsStub()
+    config.gemini_vad_mode = 'server'
+    config.gemini_live_model = 'configured-live-model'
+    service = create_gemini_live_service(config, _ToolboxStub(), service_cls=FakeGeminiService)
+    settings = service.kwargs['settings']
+    assert settings.vad.disabled is False
+    assert settings.vad.silence_duration_ms == 1500
+    assert settings.vad.prefix_padding_ms == 300
+    assert settings.model == config.gemini_live_model
+
+
+async def test_server_vad_sends_quiet_audio_without_local_speech_signal(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from pipecat.frames.frames import InputAudioRawFrame
+    from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
+
+    sender = AsyncMock()
+    state = SimpleNamespace(
+        _audio_input_paused=False, _disconnecting=False,
+        _session=SimpleNamespace(send_realtime_input=sender),
+        _ready_for_realtime_input=True, _vad_disabled=False, _user_is_speaking=False,
+    )
+    frame = InputAudioRawFrame(audio=b'\x01\x00' * 320, sample_rate=16000, num_channels=1)
+    await GeminiLiveLLMService._send_user_audio(state, frame)
+    sender.assert_awaited_once()
+    assert sender.call_args.kwargs['audio'].data == frame.audio

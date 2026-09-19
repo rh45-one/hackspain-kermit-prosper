@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -49,6 +50,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_live_model: str = "gemini-3.8-live"
     gemini_voice_id: str = ""
+    gemini_vad_mode: Literal["local", "server"] = "server"
     # Gemini Live speech_config.language_code. Empty means "let the model
     # choose", which is the default: a pinned code is also an accent, and
     # pinning es-ES had the agent answer English callers in English with a
