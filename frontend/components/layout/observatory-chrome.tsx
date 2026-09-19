@@ -20,7 +20,7 @@ const NAV = [
   { href: "/calls", label: "Llamadas", icon: Radio, match: (path: string) => path === "/calls" || path.startsWith("/calls/") },
   {
     href: "/leaderboard",
-    label: "Arena",
+    label: "Resultados",
     icon: Trophy,
     match: (path: string) =>
       path === "/leaderboard" || path.startsWith("/leaderboard/"),
@@ -33,7 +33,9 @@ const NAV = [
       path === "/patients" ||
       path.startsWith("/patients/") ||
       path === "/calendar" ||
-      path.startsWith("/calendar/"),
+      path.startsWith("/calendar/") ||
+      path === "/directory" ||
+      path.startsWith("/directory/"),
   },
   { href: "/settings", label: "Agente", icon: SlidersHorizontal, match: (path: string) => path === "/settings" || path.startsWith("/settings/") },
 ] as const;
@@ -109,7 +111,7 @@ export function ObservatoryChrome() {
               "hidden items-center gap-2 font-heading text-[12px] leading-none text-quiet lg:flex",
               tunnelConfigured && "text-steel",
             )}
-            title={demo ? settings.tunnelUrl || "Sin túnel demo" : "Sondeo HTTP · solo lectura"}
+            title={demo ? settings.tunnelUrl || "Sin enlace de prueba" : "Consulta en tiempo real"}
           >
             <span
               className={cn(
@@ -117,10 +119,10 @@ export function ObservatoryChrome() {
                 tunnelConfigured && "bg-brass",
               )}
             />
-            {demo ? (tunnelConfigured ? "Túnel demo" : "Sin túnel demo") : "Consulta del backend"}
+            {demo ? (tunnelConfigured ? "Enlace de prueba" : "Sin enlace de prueba") : "Consulta en vivo"}
           </p>
-          <p className="hidden font-mono text-[11px] leading-none text-quiet xl:block">
-            {now || "Europe/Madrid"}
+          <p className="hidden text-[11px] leading-none text-quiet xl:block">
+            {now || "Hora Madrid"}
           </p>
           <span className="rounded-lg border border-mist bg-canvas-white px-3 py-2 font-heading text-[12px] leading-none text-graphite shadow-sm sm:px-3.5">
             <span className="mr-1.5 text-brass">●</span>
@@ -155,8 +157,8 @@ export function ObservatoryChrome() {
         })}
       </nav>
       <div className="mx-auto max-w-[var(--page-max-width)] py-2 text-[12px] text-steel" role="status">
-        {demo ? "Modo demo · datos simulados" : loading ? "Conectando con el agente…" :
-          connectionError ? `Llamadas: ${connectionError}` : "Datos del backend · solo lectura · llamadas cada 3 s"}
+        {demo ? "Modo demo · conversaciones de ejemplo" : loading ? "Conectando con el asistente…" :
+          connectionError ? `Llamadas: ${connectionError}` : "Datos actualizados cada pocos segundos · solo lectura"}
         {!demo && clinicError ? <p role="alert">Clínica: {clinicError}</p> : null}
       </div>
     </header>

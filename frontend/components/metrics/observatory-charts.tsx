@@ -4,14 +4,11 @@ import { type CSSProperties, type PointerEvent, useState } from "react";
 
 import { useFrontdesk } from "@/components/frontdesk-provider";
 import {
-  bargeInCount,
-  FLUSH_P50_SECONDS,
-  FLUSH_WITHIN_WINDOW,
   HOURLY_LOAD,
   outcomeMix,
-  refusalReasons,
 } from "@/lib/metrics";
-import { CALL_CAPACITY } from "@/lib/types";
+import { OUTCOME_STYLES } from "@/lib/outcomes";
+import { CALL_CAPACITY, type ReceptionOutcome } from "@/lib/types";
 
 const EMBER = "#e76432";
 const BRASS = "#806b36";
@@ -43,8 +40,8 @@ function LoadChart() {
   const height = 130;
   const padX = 14;
   const max = CALL_CAPACITY;
-  const sockets = HOURLY_LOAD.map((point) => point.sockets);
-  const submissions = HOURLY_LOAD.map((point) => point.submissions);
+  const liveCalls = HOURLY_LOAD.map((point) => point.sockets);
+  const closedJobs = HOURLY_LOAD.map((point) => point.submissions);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
   const selectedIndex = hoveredIndex ?? pinnedIndex;
@@ -70,14 +67,14 @@ function LoadChart() {
     selectedIndex === null ? null : HOURLY_LOAD[selectedIndex];
   const selectedX = selectedIndex === null ? 0 : xAt(selectedIndex);
   const tooltipX =
-    selectedX > innerWidth / 2 ? selectedX - 126 : selectedX + 10;
+    selectedX > innerWidth / 2 ? selectedX - 146 : selectedX + 10;
 
   return (
     <svg
       viewBox={`0 0 ${innerWidth + padX * 2} ${height + 20}`}
       className="h-auto w-full touch-pan-y overflow-visible outline-none"
       role="img"
-      aria-label="Sockets concurrentes y envíos por hora"
+      aria-label="Llamadas a la vez y gestiones cerradas por hora"
       onPointerMove={(event) => setHoveredIndex(pointFromPointer(event))}
       onPointerLeave={() => setHoveredIndex(null)}
       onPointerDown={(event) => {
@@ -98,7 +95,7 @@ function LoadChart() {
         />
       ))}
       <path
-        d={linePath(sockets, max, innerWidth, height, padX)}
+        d={linePath(liveCalls, max, innerWidth, height, padX)}
         data-chart-line="primary"
         pathLength="1"
         fill="none"
@@ -108,7 +105,7 @@ function LoadChart() {
         vectorEffect="non-scaling-stroke"
       />
       <path
-        d={linePath(submissions, max, innerWidth, height, padX)}
+        d={linePath(closedJobs, max, innerWidth, height, padX)}
         data-chart-line="secondary"
         pathLength="1"
         fill="none"
@@ -130,7 +127,7 @@ function LoadChart() {
           style={{ "--point-index": index } as CSSProperties}
           tabIndex={0}
           role="button"
-          aria-label={`${point.hour}:00, ${point.sockets} sockets, ${point.submissions} envíos`}
+          aria-label={`${point.hour}:00, ${point.sockets} llamadas a la vez, ${point.submissions} gestiones cerradas`}
           onFocus={() => setPinnedIndex(index)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -154,7 +151,7 @@ function LoadChart() {
           />
           <g transform={`translate(${tooltipX} 5)`}>
             <rect
-              width="116"
+              width="136"
               height="39"
               rx="6"
               fill="#fffefb"
@@ -166,7 +163,7 @@ function LoadChart() {
               {selected.hour}:00
             </text>
             <text x="9" y="29" fill={QUIET} fontSize="8">
-              {selected.sockets} sockets · {selected.submissions} envíos
+              {selected.sockets} a la vez · {selected.submissions} cerradas
             </text>
           </g>
         </g>
@@ -195,7 +192,12 @@ function CapacityRing({ active }: { active: number }) {
   const offset = 1 - share;
 
   return (
-    <svg viewBox="0 0 120 120" className="mx-auto size-36" role="img" aria-label="Capacidad">
+    <svg
+      viewBox="0 0 120 120"
+      className="mx-auto size-36"
+      role="img"
+      aria-label="Líneas de recepción ocupadas"
+    >
       <circle
         cx="60"
         cy="60"
@@ -229,7 +231,7 @@ function CapacityRing({ active }: { active: number }) {
         {active}/{CALL_CAPACITY}
       </text>
       <text x="60" y="74" textAnchor="middle" fill={QUIET} fontSize="9">
-        sockets
+        líneas
       </text>
     </svg>
   );
@@ -249,39 +251,41 @@ function OutcomeBars() {
     <ul className="space-y-3">
       {mix.map((row) => {
         const active = selected === row.key;
+        const label =
+          OUTCOME_STYLES[row.key as ReceptionOutcome]?.label ?? row.key;
         return (
-        <li key={row.key} data-outcome-row="">
-          <button
-            type="button"
-            aria-pressed={active}
-            onClick={() => setSelected(active ? null : row.key)}
-            className="group w-full rounded-md px-1 py-1 text-left transition-colors duration-200 hover:bg-fog focus-visible:outline-none"
-          >
-            <span className="mb-1.5 flex justify-between font-heading text-[13px] text-graphite">
-              <span>{row.key}</span>
-              <span className="text-quiet tabular-nums">
-                {row.count}
-                <span
-                  className={`ml-1.5 inline-block overflow-hidden align-bottom text-[11px] transition-[max-width,opacity] duration-200 ${
-                    active ? "max-w-12 opacity-100" : "max-w-0 opacity-0"
-                  }`}
-                >
-                  {Math.round(row.share * 100)}%
+          <li key={row.key} data-outcome-row="">
+            <button
+              type="button"
+              aria-pressed={active}
+              onClick={() => setSelected(active ? null : row.key)}
+              className="group w-full rounded-md px-1 py-1 text-left transition-colors duration-200 hover:bg-fog focus-visible:outline-none"
+            >
+              <span className="mb-1.5 flex justify-between font-heading text-[13px] text-graphite">
+                <span>{label}</span>
+                <span className="text-quiet tabular-nums">
+                  {row.count}
+                  <span
+                    className={`ml-1.5 inline-block overflow-hidden align-bottom text-[11px] transition-[max-width,opacity] duration-200 ${
+                      active ? "max-w-12 opacity-100" : "max-w-0 opacity-0"
+                    }`}
+                  >
+                    {Math.round(row.share * 100)}%
+                  </span>
                 </span>
               </span>
-            </span>
-            <span className="block h-1 overflow-hidden rounded-full bg-mist">
-              <span
-                data-outcome-fill=""
-                className="block h-full rounded-full transition-[filter] duration-200 group-hover:brightness-90"
-                style={{
-                  width: `${Math.max(row.share * 100, row.count ? 4 : 0)}%`,
-                  background: strokes[row.key],
-                }}
-              />
-            </span>
-          </button>
-        </li>
+              <span className="block h-1 overflow-hidden rounded-full bg-mist">
+                <span
+                  data-outcome-fill=""
+                  className="block h-full rounded-full transition-[filter] duration-200 group-hover:brightness-90"
+                  style={{
+                    width: `${Math.max(row.share * 100, row.count ? 4 : 0)}%`,
+                    background: strokes[row.key],
+                  }}
+                />
+              </span>
+            </button>
+          </li>
         );
       })}
     </ul>
@@ -289,22 +293,39 @@ function OutcomeBars() {
 }
 
 export function ObservatoryCharts() {
-  const { activeCount, calls, appointments, demo } = useFrontdesk();
-  const refusals = refusalReasons(appointments);
-  const barges = bargeInCount(calls);
-  const flushPct = Math.round(FLUSH_WITHIN_WINDOW * 100);
+  const { activeCount, calls, demo } = useFrontdesk();
 
   if (!demo) {
-    const summaries = calls.flatMap((call) => call.diagnostic ? [call.diagnostic] : []);
+    const summaries = calls.flatMap((call) =>
+      call.diagnostic ? [call.diagnostic] : [],
+    );
     const metrics = [
-      ["Envíos aceptados", summaries.reduce((sum, item) => sum + (item.submissions_succeeded ?? 0), 0)],
-      ["Envíos fallidos", summaries.reduce((sum, item) => sum + (item.submissions_failed ?? 0), 0)],
-      ["Llamadas con fallback", summaries.filter((item) => item.fallback_action_added).length],
+      [
+        "Gestiones enviadas bien",
+        summaries.reduce(
+          (sum, item) => sum + (item.submissions_succeeded ?? 0),
+          0,
+        ),
+      ],
+      [
+        "Gestiones con error",
+        summaries.reduce(
+          (sum, item) => sum + (item.submissions_failed ?? 0),
+          0,
+        ),
+      ],
+      [
+        "Llamadas con plan B",
+        summaries.filter((item) => item.fallback_action_added).length,
+      ],
     ];
     return (
       <dl className="grid gap-4 sm:grid-cols-3">
         {metrics.map(([label, value]) => (
-          <div key={label} className="surface rounded-[18px] p-[var(--card-padding)]">
+          <div
+            key={label}
+            className="surface rounded-[18px] p-[var(--card-padding)]"
+          >
             <dt className="text-[13px] text-quiet">{label} · últimos registros</dt>
             <dd className="mt-2 font-heading text-2xl">{value}</dd>
           </div>
@@ -320,10 +341,13 @@ export function ObservatoryCharts() {
           data-reveal=""
           className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-3"
         >
-          <p className="font-heading text-[17px] text-graphite">Carga de sockets</p>
-          <p className="mt-1 text-[12px] text-quiet">
-            Concurrentes <span className="text-ember-orange">—</span> envíos{" "}
-            <span className="text-brass">- -</span> · Europe/Madrid
+          <p className="font-heading text-[17px] text-graphite">
+            Actividad del día
+          </p>
+          <p className="mt-1 text-[13px] text-steel">
+            Cuántas personas están al teléfono a la vez{" "}
+            <span className="text-ember-orange">—</span> y cuántas gestiones
+            se cierran <span className="text-brass">- -</span> · hora de Madrid
           </p>
           <div className="mt-7">
             <LoadChart />
@@ -334,10 +358,12 @@ export function ObservatoryCharts() {
           data-delay="1"
           className="surface rounded-[18px] p-[var(--card-padding)]"
         >
-          <p className="font-heading text-[17px] text-graphite">Capacidad</p>
+          <p className="font-heading text-[17px] text-graphite">
+            Líneas ocupadas
+          </p>
           <CapacityRing active={activeCount} />
-          <p className="text-center text-[12px] text-quiet">
-            Techo 10 · el backend admite 10–20
+          <p className="text-center text-[13px] text-steel">
+            Hay sitio para {CALL_CAPACITY} llamadas a la vez
           </p>
         </article>
         <article
@@ -346,46 +372,16 @@ export function ObservatoryCharts() {
           className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-2"
         >
           <p className="font-heading text-[17px] text-graphite">
-            Resultado del agente
+            Cómo acabaron las gestiones
           </p>
-          <p className="mt-1 text-[13px] text-quiet">
-            Verbos cerrados del record.
+          <p className="mt-1 text-[13px] text-steel">
+            Lo que el asistente dejó registrado al colgar.
           </p>
           <div className="mt-7">
             <OutcomeBars />
           </div>
         </article>
       </div>
-
-      <dl
-        data-reveal=""
-        data-delay="2"
-        className="mt-4 grid grid-cols-1 overflow-hidden rounded-[14px] border border-mist bg-canvas-white text-[12px] shadow-[var(--shadow-sm)] sm:grid-cols-3"
-      >
-        <div className="p-5 sm:border-r sm:border-mist">
-          <dt className="font-heading tracking-[0.04em] text-quiet uppercase">Flush &lt; 30s</dt>
-          <dd className="mt-1.5 font-heading text-[18px] text-graphite">
-            {flushPct}%
-            <span className="ml-2 text-[13px] text-quiet">
-              p50 {FLUSH_P50_SECONDS.toFixed(1)}s
-            </span>
-          </dd>
-        </div>
-        <div className="border-t border-mist p-5 sm:border-t-0 sm:border-r">
-          <dt className="font-heading tracking-[0.04em] text-quiet uppercase">Recusas</dt>
-          <dd className="mt-1.5 text-steel">
-            {refusals.length === 0
-              ? "—"
-              : refusals.map((item) => item.label).join(" · ")}
-          </dd>
-        </div>
-        <div className="border-t border-mist p-5 sm:border-t-0">
-          <dt className="font-heading tracking-[0.04em] text-quiet uppercase">Barge-in vivo</dt>
-          <dd className="mt-1.5 font-heading text-[18px] text-ember-orange">
-            {barges}
-          </dd>
-        </div>
-      </dl>
     </div>
   );
 }

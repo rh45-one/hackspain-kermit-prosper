@@ -46,22 +46,22 @@ export const OUTCOME_STYLES: Record<
   { label: string; className: string; chip: string }
 > = {
   BOOKED: {
-    label: "BOOKED",
+    label: "Cita agendada",
     className: "border-0 bg-ivory text-brass",
     chip: "border-0 bg-ivory text-graphite",
   },
   CANCELLED: {
-    label: "CANCELLED",
+    label: "Cita cancelada",
     className: "border-0 bg-mist text-graphite",
     chip: "border-0 bg-mist text-graphite",
   },
   REFUSED: {
-    label: "REFUSED",
+    label: "No se pudo agendar",
     className: "border-0 bg-ash text-quiet",
     chip: "border-0 bg-ash text-steel",
   },
   DIVERTED: {
-    label: "DIVERTED",
+    label: "Pasada a una persona",
     className: "border-0 bg-ivory text-ember-orange",
     chip: "border-0 bg-ivory text-ember-orange",
   },

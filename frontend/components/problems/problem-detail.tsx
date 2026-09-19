@@ -29,7 +29,7 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
         className="mb-8 inline-flex items-center gap-2 font-heading text-[13px] text-steel transition-colors hover:text-graphite"
       >
         <ArrowLeft className="size-3.5" strokeWidth={1.8} />
-        Volver a Arena · Problemas
+        Volver a Resultados · Problemas
       </Link>
 
       <PageHeader kicker={`Problema ${problem.number}`} title={problem.titleEs}>
