@@ -208,6 +208,40 @@ class TestReportEvidence:
         assert 'href="evidence/x.caller.wav"' in page
         assert "barge-in" in page
 
+    def test_report_is_readable_without_the_schema(self, tmp_path):
+        """The bench is the gate now: non-authors read this page."""
+        run = tmp_path / "run"
+        run.mkdir()
+        manifest = {
+            "run_id": "r", "experiment": "e", "rules_version": "v",
+            "dataset": "d", "dataset_hash": "h", "candidates": [{"name": "A"}],
+        }
+        (run / "manifest.json").write_text(json.dumps(manifest))
+        case = {
+            "case_id": "A/np-001/r0", "call_id": "c", "scenario_id": "np-001",
+            "problem_id": "new_patient", "candidate": "A", "repetition": 0,
+            "verdict": "fail", "failure_signal": "record_mismatch",
+            "categories": ["identity_error"], "duration_s": 1.0,
+            "field_diffs": [
+                {"verb": "BOOK", "field": "policy_id",
+                 "expected": "mapfre", "got": "sanitas"}
+            ],
+            "submitted": [{"action": "BOOK", "patient_id": "P1", "provider_id": "PR1",
+                           "location_id": "centro", "appointment_type_id": "review",
+                           "slot": "2026-09-21T09:00:00+02:00", "policy_id": "sanitas"}],
+        }
+        (run / "cases.jsonl").write_text(json.dumps(case) + "\n")
+
+        from evaluator.report.render import render_report
+
+        page = render_report(run).read_text()
+        assert "INCORRECTA" in page and "record_mismatch" not in page
+        assert "identificó mal al paciente" in page  # not "identity_error"
+        assert "plan / póliza" in page  # not "policy_id"
+        assert "paciente nuevo" in page  # not just "new_patient"
+        # The shape of a real loss: almost right, and still zero points.
+        assert "1 de 6 campos mal" in page
+
     def test_report_warns_about_the_fixture(self, tmp_path):
         """A green local run is not a point: the report has to say so."""
         run = tmp_path / "run"

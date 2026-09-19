@@ -43,7 +43,7 @@ at the desk.
 ## Run
 
 ```sh
-make run                 # voice server: ws://localhost:7860/ws
+make run                 # voice server: ws://0.0.0.0:7860/ws
 make ops                 # ops console: http://localhost:7861/ops
 ```
 
@@ -59,12 +59,19 @@ clinic catalogue is warmed from the Prosper API only when `PROSPER_API_KEY` is
 set, so an offline host never touches the network. Without the key the agent
 runs in degraded/offline mode and skips the warm call.
 
+The voice server binds to every IPv4 interface by default. From another device
+on the same network, use `http://<server-lan-ip>:7860/call` and
+`ws://<server-lan-ip>:7860/ws`. Browser microphone access on a LAN IP requires
+HTTPS; use the deployed host or ngrok for an actual browser call.
+
 ### Endpoints
 
 | Endpoint | Server | Purpose |
 |---|---|---|
 | `GET /healthz` | voice server | Liveness; returns `{"status":"ok"}`. |
-| `WS /ws` | voice server | One Twilio Media Streams call per connection. |
+| `WS /ws` | voice server | One scored Twilio Media Streams call per connection. |
+| `GET /call` | voice server | Browser microphone simulator. |
+| `WS /ws/demo` | voice server | Non-submitting browser call pipeline. |
 | `GET /ops` | ops console | Live call timeline, transcripts, actions. |
 | `GET /ops/api/calls[?]` | ops console | JSON view over `data/calls/*.jsonl`. |
 | `GET /ops/api/reflow` | ops console | JSON view over the reflow queue. |
@@ -90,18 +97,38 @@ result.
 The harness dials a public `wss://` endpoint, so `localhost` is unreachable.
 
 ```sh
-echo your-name.ngrok-free.app > ops/ngrok-domain.txt   # once per static domain
-make tunnel                                            # ngrok, EU region
+make run       # keep this terminal open; starts the local upstream
 ```
 
-Then set the endpoint on the dashboard **Settings → Integration** page (the
-desk does not ask for it): the `wss://` URL **with the `/ws` path**. Claim a
-static ngrok domain and pin the EU region — audio is 20 ms frames and
-cross-continent routing adds latency to every one of them. Smoke-test the
-tunnel before a run:
+In a second terminal:
 
 ```sh
-printf 'PUBLIC_WS_URL=wss://your-name.ngrok-free.app/ws\n' >> .env
+make tunnel
+```
+
+Or use one terminal for both processes:
+
+```sh
+make public
+```
+
+`make public` reuses a healthy local voice server when one exists; otherwise it
+starts one, waits for `/healthz`, then opens ngrok. Press Ctrl-C to close the
+tunnel and any server it started itself.
+
+On an ngrok Free plan, `make tunnel` prints a temporary public HTTPS URL. Copy
+its `wss://.../ws` form into `PUBLIC_WS_URL` and the Prosper dashboard. The URL
+changes whenever the tunnel restarts. If your account has a claimed static
+domain, add it to `ops/ngrok-domain.txt`; the same target then uses that domain.
+ngrok now selects the lowest-latency region automatically. The target verifies
+the local health endpoint first, avoiding a public 502 when the backend is off.
+
+Then set the endpoint on the dashboard **Settings → Integration** page (the
+desk does not ask for it): the `wss://` URL **with the `/ws` path**. Smoke-test
+the tunnel before a run:
+
+```sh
+printf 'PUBLIC_WS_URL=wss://your-current-ngrok-host/ws\n' >> .env
 make check-ws
 ```
 
@@ -146,6 +173,16 @@ the calendar window all degrade — silently, which is the worst part.
 | `OPS_TOKEN` | `/turns` sits behind the ops access check: loopback only, or this token. A reachable `/turns` runs the real ToolBox and submits against the live Prosper API with our key. |
 
 ## Local simulator (no harness)
+
+Open `http://localhost:7860/call` after `make run`, press **Call**, and allow
+microphone access. Press the same button to hang up. The page exchanges the
+Twilio Media Streams format with the real agent pipeline, but browser demo
+calls are retained only in the local audit and never submitted to Prosper.
+
+Microphone access requires `localhost` or HTTPS. The deployed page is available
+at `https://<host>/call` and connects to same-origin `wss://<host>/ws/demo`.
+
+The scripted WAV simulator remains available:
 
 ```sh
 uv run python ops/simulate_call.py --audio tests/fixtures/hello.wav

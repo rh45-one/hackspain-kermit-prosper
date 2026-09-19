@@ -157,3 +157,11 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
             appointments.append({**appt, "decision": decision})
         out.append({**batch, "appointments": appointments})
     return out
+
+
+# The product view lives in its own module: same data, different audience, and
+# it must not grow inside this debugging console. `live` reaches back for
+# `require_ops_access` lazily, so this import is one-way and order-independent.
+from agent.ops.live import router as live_router
+
+app.include_router(live_router)

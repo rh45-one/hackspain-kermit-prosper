@@ -2,53 +2,48 @@
 
 ## Why
 
-The Prosper track scores a voice agent that answers inbound clinic calls over
-a Twilio Media Streams WebSocket and submits booking actions within 30
-seconds. The baseline — Twilio wire, clinic layer, deterministic core, guarded
-tools, recorder, ops console — is built and covered by the offline suite. This
-change reconciles the approved next step: a selectable Google Gemini 3.8 Live
-audio-to-audio host with a TypeSafe Jev structured-decision sidecar, keeping
-the Deepgram → OpenAI-compatible LLM → ElevenLabs cascade as rollback.
+The Prosper track scores an inbound clinic voice agent using Twilio Media
+Streams and requiring submissions within 30 seconds. The tested baseline
+includes the Twilio wire, clinic layer, deterministic core, guarded tools,
+recorder and ops console. The approved next step adds selectable Gemini 3.8
+Live audio with a TypeSafe Jev decision sidecar while retaining the existing
+cascade as rollback.
 
 ## What Changes
 
-- A WebSocket server over the Twilio Media Streams wire format, one fresh
-  pipeline per connection (10–20 concurrent).
-- A clinic layer caching the EHR catalogue and querying directory,
-  availability and appointments with strict identification.
-- A deterministic scheduling brain (Europe/Madrid date resolver, rules engine,
-  appointment-type selector), unchanged in authority.
-- A selectable audio host. `VOICE_ENGINE=gemini_live` routes a socket through
-  Gemini 3.8 Live (`gemini-3.8-live`), converting Twilio 8kHz µ-law to Gemini
-  16kHz PCM input and Gemini 24kHz PCM output back to µ-law with bounded
-  buffering. `VOICE_ENGINE=cascade` (default) keeps the Deepgram →
-  OpenAI-compatible LLM → ElevenLabs cascade as rollback.
-- A Jev sidecar, pinned `jev-1.13.0`, receiving only a redacted, finalized
-  transcript and state; 300ms hard timeout; abstains on low confidence or
-  failure. It never sees phone numbers, national ids, dates of birth or raw
-  records, never handles VAD or barge-in, and never authorizes a write.
-- Deterministic rules and tools stay the source of truth: Gemini function calls
-  route through the existing registry-validated `ToolBox`.
-- A submission recorder that POSTs each action to /api/v1/submit/* inside 30
-  seconds, exactly once, retrying idempotently and treating 409 as success.
-- Per-call structured audit and metrics (model, audio conversion, TTFT, tool
-  calls, Jev latency/confidence/abstention, cost).
+- Run one isolated Twilio Media Streams pipeline per socket for 10–20 calls.
+- Cache the EHR catalogue and query directory, availability and appointments
+  with strict identification.
+- Keep Europe/Madrid date resolution, rules and appointment selection fully
+  deterministic.
+- Select `gemini_live` (`gemini-3.8-live`) or default `cascade` with
+  `VOICE_ENGINE`; bridge 8kHz µ-law to Gemini PCM using bounded buffers.
+- Pin Jev `1.13.0`; expose only locally redacted finalized context, enforce a
+  300ms timeout and abstain on low confidence or failure. Jev never controls
+  turn-taking, accesses raw identifiers, or authorizes writes.
+- Route Gemini function calls through the registry-validated `ToolBox`.
+- Submit each scored action exactly once within 30 seconds, retrying
+  idempotently and treating 409 as success.
+- Serve `/call` with `/ws/demo` for same-origin microphone calls using the same
+  wire format, audio playback and no Prosper submission.
+- Record per-call model, audio, TTFT, tool, Jev and cost metrics.
 
 ## Non-goals
 
-- No ClinicReflow reflow engine here (separate change; only the tool seam).
-- No outbound calling, CRM, or auth beyond the harness header.
-- No fine-tuning; prompts remain versioned text.
+- No ClinicReflow engine, outbound calling, CRM or fine-tuning.
+- No auth beyond the harness header, and no persisted browser identity.
 
 ## Capabilities
 
 ### prosper-voice-agent
-- Answers calls per the call contract (camelCase, string-typed metadata, 8kHz µ-law).
+- Answers the camelCase, string-metadata, 8kHz µ-law call contract.
 - Runs the Gemini Live host or cascade per socket, chosen by `VOICE_ENGINE`.
-- Identifies callers, books/reschedules/cancels/registers, refuses with the closed vocabulary, escalates red flags — always submitting an action.
+- Identifies callers and books, reschedules, cancels, registers, refuses or
+  escalates through deterministic tools.
 - Handles 10+ concurrent sockets with zero shared conversation state.
+- Provides a non-submitting browser simulator for local and jury use.
 
 ## Impact
 
-- Adds the Gemini/Jev path under backend/src/agent and backend/tests.
-- Planning reconciliation only; the deterministic core is untouched.
+- Adds Gemini/Jev under `backend/src/agent` and the simulator under
+  `backend/serverwebsock`; the deterministic core remains unchanged.

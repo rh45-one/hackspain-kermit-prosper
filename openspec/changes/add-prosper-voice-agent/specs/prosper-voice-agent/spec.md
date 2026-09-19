@@ -51,10 +51,10 @@ Europe/Madrid; and SHALL never book a same-day slot.
 - **THEN** the agent submits NO_ACTION with the matching closed-vocabulary
   reason and tells the caller why.
 
-### Requirement: Submit every call's outcome inside the window
-The agent SHALL POST one submission per action to /api/v1/submit/* with the
-`call_id` from `start.callSid`, within 30 seconds of socket close, retrying
-idempotently and treating 409 as success.
+### Requirement: Submit every Prosper harness call's outcome inside the window
+For scored `/ws` calls, the agent SHALL POST one submission per action to
+/api/v1/submit/* with the `call_id` from `start.callSid`, within 30 seconds of
+socket close, retrying idempotently and treating 409 as success.
 
 #### Scenario: Correct refusal still reports
 - **WHEN** a call ends with no booking
@@ -251,3 +251,35 @@ diagnostic, and SHALL pass offline tests plus a live practice/eval gate before
 #### Scenario: Live gate not yet run
 - **WHEN** the offline suite passes but the live practice/eval gate has not run
 - **THEN** `cascade` remains the default.
+
+### Requirement: Simulate a call from a browser without submitting it
+
+The agent SHALL serve a same-origin browser client at `/call` and a dedicated
+WebSocket at `/ws/demo`. The client SHALL request microphone access only after
+the user starts a call, SHALL exchange the same Twilio Media Streams audio
+format as the Prosper harness, SHALL play agent audio, and SHALL end the call
+from the same control. Demo calls SHALL use isolated per-socket state and SHALL
+NOT POST actions to Prosper.
+
+#### Scenario: User starts and ends a browser call
+- **WHEN** the user grants microphone access and presses the call control
+- **THEN** the client opens `/ws/demo`, sends canonical `connected`, `start`
+  and 20ms 8kHz mu-law `media` events, and plays returned agent media.
+- **WHEN** the user presses the control again
+- **THEN** the client sends `stop`, closes the socket, stops every microphone
+  track and audio node, and returns to the idle state.
+
+#### Scenario: Browser call produces an action
+- **WHEN** the demo pipeline queues a booking, refusal or escalation
+- **THEN** it remains visible in the local call audit and is never submitted to
+  a Prosper `/api/v1/submit/*` route.
+
+#### Scenario: Permission or connection failure
+- **WHEN** microphone permission is denied or the WebSocket cannot connect
+- **THEN** the page reports an actionable error and releases all acquired
+  browser resources without leaving an active call.
+
+#### Scenario: Agent interruption
+- **WHEN** the server sends a Twilio `clear` event
+- **THEN** queued browser playback stops immediately so stale speech is not
+  emitted after barge-in.

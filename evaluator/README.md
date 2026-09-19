@@ -15,6 +15,54 @@ el servidor ni el túnel con el que otro compañero está ejecutando Prosper.
 > **Resultado local.** El evaluador no es el juez oficial. Hasta validar su
 > equivalencia con la plataforma, sus resultados son «resultado local».
 
+## Empieza aquí (no hace falta conocer el proyecto)
+
+Tres comandos. El primero comprueba que el banco funciona; los otros dos
+prueban el agente sin gastar ninguna llamada puntuada.
+
+```sh
+uv sync --project evaluator
+
+# 1) ¿Funciona el banco? (no toca el agente, no necesita credenciales)
+uv run --project evaluator python -m evaluator.cli run \
+    --config evaluator/experiments/smoke-text.yaml
+# Esperado: 21 correctas / 21 incorrectas / 21 incorrectas, 0 no evaluables.
+# Son tres agentes de mentira: uno acierta, uno se equivoca a propósito y
+# uno no envía nada. Si esto no sale así, el roto es el banco.
+
+# 2) El agente de verdad, por texto (rápido: segundos por caso)
+#    Necesita el backend arrancado con TURNS_ADAPTER en un puerto que NO
+#    sea el 7860, y apuntando a la clínica local. Ver «Evaluar el agente
+#    real». Descomenta `text_url` en experiments/agent-local.yaml.
+uv run --project evaluator python -m evaluator.cli run \
+    --config evaluator/experiments/agent-local.yaml
+
+# 3) Comparar dos ejecuciones
+uv run --project evaluator python -m evaluator.cli diff <run_A> <run_B>
+```
+
+Cada ejecución deja `results/<run_id>/report.html`. **Ábrelo**: la primera
+pantalla dice contra qué datos se ha corrido y cómo se lee.
+
+**Qué mide**: que el agente identifica al paciente, elige la cita correcta,
+respeta las reglas de cobertura y **envía la acción exacta que espera la
+plataforma, campo por campo**. Un campo mal y el caso es incorrecto, igual
+que en el reto: no hay puntos parciales.
+
+**Qué no mide**:
+- **No dice si vas a puntuar.** Los datos son un fixture inventado de 6
+  pacientes y 7 médicos; la clínica real tiene ~3.000 y 12. Verde aquí es
+  «la lógica aguanta», no «la respuesta es correcta».
+- **No prueba la voz de verdad.** La vía de texto se salta reconocimiento y
+  síntesis. La de voz usa `espeak-ng`, que suena a robot.
+- **No mira privacidad por la vía de voz**: sin transcripción no hay
+  comprobación de fuga, y el informe lo dice caso por caso.
+- No es el juez oficial y nadie ha validado que coincida con él.
+
+**Regla operativa que no se salta nadie:** el puerto **7860** atiende
+llamadas puntuadas de verdad a través del túnel de ngrok registrado en
+Prosper. No apuntes nunca el banco ahí ni arranques nada en ese puerto.
+
 ## Qué contiene
 
 | Pieza | Ruta | Qué hace |
@@ -207,6 +255,39 @@ grabados.
 
 **Lo que el adaptador no tiene que hacer**: ni audio, ni ngrok, ni estado
 global. Un `call_id` por conversación, aislado de los demás.
+
+### Cómo se conecta, y en qué orden
+
+El candidato necesita `text_url` apuntando al adaptador; con eso basta, y
+tiene prioridad sobre `ws_url`.
+
+**El orden de arranque importa y no es intercambiable:**
+
+1. **La clínica local primero.** El backend calienta su catálogo una sola vez,
+   en el lifespan del servidor. Si la clínica no está escuchando cuando el
+   agente arranca, la caché se queda fría y `describe_clinic`,
+   `find_nearest_site` y la ventana de calendario **degradan en silencio**:
+   no hay excepción ni log, simplemente responden peor. Es la peor forma de
+   fallar y la más fácil de atribuir al agente.
+2. **El agente después**, apuntando a esa clínica (`PROSPER_API_BASE_URL`).
+3. **Los casos al final.**
+
+Con `start_command` en el candidato, el runner espera a que el puerto acepte
+TCP antes del primer caso, pero **eso no reordena nada**: si el
+`start_command` arranca el agente antes de que exista la clínica, la caché
+sigue quedándose fría. Arranca la clínica tú.
+
+### Control de acceso
+
+`/turns` está detrás del control de acceso del ops console del backend:
+
+- Sin `OPS_TOKEN`, solo se sirve a **loopback**.
+- Con `OPS_TOKEN` puesto, hace falta la cabecera `X-Ops-Token`.
+
+El banco corre en `127.0.0.1`, así que por defecto no hay que hacer nada. Si
+alguna vez lo corres **desde otra máquina**, necesitas el token. La razón de
+que esté cerrado: un `/turns` alcanzable desde fuera ejecuta el ToolBox real
+y puede enviar acciones contra la API de Prosper con la clave del equipo.
 
 ## La vía de voz: qué mide de verdad
 

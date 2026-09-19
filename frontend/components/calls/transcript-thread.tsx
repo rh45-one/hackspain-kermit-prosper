@@ -6,7 +6,7 @@ import type { LiveCall, TranscriptLine } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function speakerLabel(role: TranscriptLine["role"]) {
-  return role === "agent" ? "Agente" : "Paciente";
+  return role === "agent" ? "Asistente de citas" : "Persona que llama";
 }
 
 export function TranscriptThread({
@@ -38,7 +38,7 @@ export function TranscriptThread({
       )}
     >
       {call.transcript.length === 0 ? (
-        <p className="text-[13px] text-quiet">Esperando audio…</p>
+        <p className="text-[13px] text-quiet">Esperando a que empiece la conversación…</p>
       ) : (
         <ol
           className={cn("flex flex-col", preview ? "space-y-2" : "space-y-3")}

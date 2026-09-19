@@ -7,6 +7,7 @@ reach tool output, and results are deterministic.
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, ClassVar
@@ -86,6 +87,19 @@ async def cache() -> CatalogueCache:
 @pytest.fixture
 def ctx(tmp_path) -> CallContext:
     return CallContext(data_dir=str(tmp_path / "data"), call_id="test-call-1")
+
+
+def audited(ctx: CallContext, event: str) -> list[dict[str, Any]]:
+    """The audit records of one kind, read back off the JSONL it writes."""
+    path = getattr(ctx, "_audit_path", None)
+    if path is None or not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        record = json.loads(line)
+        if record.get("event") == event:
+            out.append(record.get("data") or {})
+    return out
 
 
 @pytest.fixture
@@ -1292,3 +1306,38 @@ async def test_an_abstaining_jev_never_invents(box, ctx):
 
     assert not ctx.queued_actions
     assert params.result["did_you_mean"] == ["Sanitas"]  # sound-alikes still get their turn
+
+
+def test_a_spanish_address_is_not_given_spain_twice():
+    """Fold both sides or neither: `_fold_plain` turns ñ into n.
+
+    A literal "españa" compared against folded text can never match, so the
+    guard was dead and "Calle X, Madrid, España" was being sent to the
+    geocoder as "Calle X, Madrid, España, Madrid, Spain".
+    """
+    from agent.brain.tools import _fold_plain
+
+    for said in ("Calle de Madrid 54, España", "Getafe, Espana", "somewhere in Spain"):
+        folded = _fold_plain(said)
+        assert "spain" in folded or _fold_plain("España") in folded
+
+
+async def test_answering_a_question_about_the_clinic_leaves_a_trace(box, ctx):
+    """Problem 16 is scored through the booking a wrong fact produces.
+
+    This tool emitted nothing at all, so across 142 traces there was no way to
+    tell whether the model had answered from the catalogue or from memory.
+    """
+    await box.describe_clinic(FakeParams(), about="sites")
+
+    assert audited(ctx, "clinic_question")
+
+
+async def test_the_confirmed_patient_is_named_not_just_numbered(box, ctx):
+    """P00042 tells a person nothing; the challenge protects the id, not the name."""
+    await confirm_marta(box)
+
+    confirmed = audited(ctx, "identity_confirmed")[-1]
+    assert confirmed["given_name"] == "Marta"
+    assert "national_id" not in confirmed
+    assert "phone" not in confirmed

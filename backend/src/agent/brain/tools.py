@@ -108,6 +108,13 @@ def _fold_plain(text: str) -> str:
 # Refusals that are only true for the plan on file. A second plan the caller
 # holds can overturn every one of them, so none may be sent before they have
 # been asked.
+def _dump_restriction(entry: Any) -> str:
+    """The restriction name off a blocked entry, however it is typed."""
+    if isinstance(entry, dict):
+        return str(entry.get("restriction"))
+    return str(getattr(entry, "restriction", entry))
+
+
 def _restrictions(blocked: list[dict[str, Any]]) -> set[str]:
     """The distinct restriction names in a blocked list."""
     return {str(b.get("restriction")) for b in blocked}
@@ -459,7 +466,13 @@ class ToolBox:
             await params.result_callback({"error": "patient_id not among lookup results"})
             return
         self.ctx.confirmed_patient = match
-        self.ctx.audit("identity_confirmed", {"patient_id": patient_id})
+        # The given name travels with the id. An id identifies the record; the
+        # name is what tells a person watching which caller this is, and the
+        # challenge protects the id and the telephone, never the name.
+        self.ctx.audit(
+            "identity_confirmed",
+            {"patient_id": patient_id, "given_name": match.get("given_name")},
+        )
         await params.result_callback({"confirmed": True, "note": match.get("note", "")})
 
     async def list_my_appointments(self, params: FunctionCallParams, when: str = "upcoming") -> None:
@@ -639,6 +652,12 @@ class ToolBox:
                 "asked": when_phrase,
                 **{k: str(v) for k, v in kwargs.items() if k != "patient_id"},
                 "slots": len(slots),
+                # WHY there is nothing, not just that there is nothing. The API
+                # names the rule that stopped each provider and we were dropping
+                # it on the floor: a caller told "no appointments" when the
+                # truth is "your plan does not cover that site" is a different
+                # answer, and it is the one the case is scored on.
+                "blocked": sorted({str(_dump_restriction(b)) for b in result.blocked}),
             },
         )
 
@@ -833,7 +852,13 @@ class ToolBox:
 
         sections = {"sites": sites, "doctors": doctors, "specialties": specialties, "plans": plans}
         picked = {k: v() for k, v in sections.items() if k.startswith(wanted[:4] or "~")}
-        await params.result_callback(picked or {k: v() for k, v in sections.items()})
+        answer = picked or {k: v() for k, v in sections.items()}
+        # This tool emitted nothing at all, so in 142 traces there was no way
+        # to tell whether the model ever answered a question about the clinic
+        # or invented the answer — and problem 16 is scored entirely through
+        # the booking that follows a wrong fact.
+        self.ctx.audit("clinic_question", {"about": about, "answered": sorted(answer)})
+        await params.result_callback(answer)
 
     async def find_nearest_site(
         self,
@@ -892,6 +917,20 @@ class ToolBox:
                 }
             )
         servable = [r for r in ranked if r["can_serve_the_request"]]
+        # Silent until now, like describe_clinic. The site chosen IS the answer
+        # to problem 15, and a wrong one fails a case that the agent otherwise
+        # handled perfectly — with nothing in the trace to say which site it
+        # picked or how far it thought the caller was.
+        self.ctx.audit(
+            "nearest_site",
+            {
+                "asked_from": where_the_caller_is,
+                "specialty": specialty_name,
+                "chose": (servable[0] or {}).get("location_id") if servable else None,
+                "km": (servable[0] or {}).get("km_straight_line") if servable else None,
+                "closest_overall": ranked[0]["location_id"] if ranked else None,
+            },
+        )
         await params.result_callback(
             {
                 "located": where_the_caller_is,
@@ -917,7 +956,12 @@ class ToolBox:
         import httpx
 
         queries = [place]
-        if "spain" not in _fold_plain(place) and "españa" not in _fold_plain(place):
+        # Fold both sides or neither. `_fold_plain` turns the ñ into an n, so
+        # a literal "españa" written here could never match anything it
+        # produced — the guard was dead and every Spanish address got a
+        # redundant ", Madrid, Spain" bolted onto it.
+        folded_place = _fold_plain(place)
+        if "spain" not in folded_place and _fold_plain("España") not in folded_place:
             queries.append(f"{place}, Madrid, Spain")
         # A house number the map has never heard of sinks the whole query, and
         # the street alone is well inside the margin these cases are drawn
