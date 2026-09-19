@@ -23,10 +23,7 @@ const NAV = [
     label: "Arena",
     icon: Trophy,
     match: (path: string) =>
-      path === "/leaderboard" ||
-      path.startsWith("/leaderboard/") ||
-      path === "/problems" ||
-      path.startsWith("/problems/"),
+      path === "/leaderboard" || path.startsWith("/leaderboard/"),
   },
   {
     href: "/patients",

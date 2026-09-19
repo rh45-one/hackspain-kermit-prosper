@@ -1,11 +1,5 @@
-import { Suspense } from "react";
-
-import { ArenaDashboard } from "@/components/leaderboard/arena-dashboard";
+import { LeaderboardDashboard } from "@/components/leaderboard/leaderboard-dashboard";
 
 export default function LeaderboardPage() {
-  return (
-    <Suspense fallback={null}>
-      <ArenaDashboard />
-    </Suspense>
-  );
+  return <LeaderboardDashboard />;
 }

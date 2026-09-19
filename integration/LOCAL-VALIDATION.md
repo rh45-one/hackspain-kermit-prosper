@@ -16,7 +16,7 @@ Servicios locales:
 
 - `make agent-live`: backend de voz y Ops en 7860, con la clínica oficial.
 - `npm --prefix frontend run start -- --hostname 127.0.0.1`: build de FrontDesk
-  en 3000. Para desarrollo puede usarse `make frontend`.
+  en 3001. Para desarrollo puede usarse `make frontend`.
 - `ngrok http 7860`: túnel; su URL activa se puede consultar en
   `http://127.0.0.1:4040/api/tunnels`. Usar el esquema `wss://` y añadir `/ws`
   al guardar en Prosper → Settings → Integration.

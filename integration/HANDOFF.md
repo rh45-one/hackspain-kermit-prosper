@@ -42,7 +42,7 @@ con el usuario antes de aplicar cambios al runtime oficial.
 
 | Servicio | Entrada | Proceso / función |
 |---|---|---|
-| FrontDesk | http://localhost:3000/calls | Build de Next.js, `npm --prefix frontend run start -- --hostname 127.0.0.1` |
+| FrontDesk | http://localhost:3001/calls | Build de Next.js, `npm --prefix frontend run start -- --hostname 127.0.0.1` |
 | Backend integrado | http://localhost:7860/healthz | `uv run --project backend python -m agent.serve` |
 | Ops | http://localhost:7860/ops | Montado por `agent.serve` en el mismo proceso |
 | Voz local | ws://localhost:7860/ws | Un contexto por WebSocket |
@@ -200,7 +200,7 @@ Entrega un commit, las pruebas ejecutadas y las limitaciones restantes.
    credenciales locales y puertos distintos: por ejemplo 7870/8091 para registro,
    7872/8092 para voz, 7874/8093 para evaluador y 7876/3001 para FrontDesk.
 5. No publiques otro túnel ni alteres el endpoint oficial. No compitas por
-   7860/3000/4040 ni escribas en `backend/data` del checkout original.
+   7860/3001/4040 ni escribas en `backend/data` del checkout original.
 6. Entrega commit, cambios, pruebas y limitaciones. El integrador reúne cambios
    secuencialmente, ejecuta `make check` y una práctica antes del siguiente Run All.
 7. Un cambio de proveedor/modelo necesita las credenciales correspondientes y

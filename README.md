@@ -119,6 +119,6 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000 — it redirects to `/calls`. Set
+Open http://localhost:3001 — it redirects to `/calls`. Set
 `FRONTDESK_DEMO=true` for the original mock UI without a backend. Live mode
 is read-only; settings and manual takeover are available only in the demo.

@@ -3,28 +3,16 @@ import { LeaderboardTable } from "@/components/leaderboard/leaderboard-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { MOCK_EVALUATION_RESULTS } from "@/lib/mock-data";
 
-export function LeaderboardDashboard({
-  embedded = false,
-}: {
-  embedded?: boolean;
-}) {
+export function LeaderboardDashboard() {
   const results = MOCK_EVALUATION_RESULTS;
 
   return (
     <div>
-      {!embedded ? (
-        <PageHeader kicker="FrontDesk Arena" title="Leaderboard">
-          Combates de auditoría: defensores frente a escenarios de ataque
-          telefónico. Pasa el ratón por el icono de cada KPI para ver objetivo
-          operativo. Pulsa una fila para el diagnóstico del motor.
-        </PageHeader>
-      ) : (
-        <p className="mb-8 max-w-2xl text-[14px] leading-relaxed text-steel sm:mb-10">
-          Combates de auditoría: defensores frente a escenarios de ataque
-          telefónico. Pasa el ratón por el icono de cada KPI para ver el
-          objetivo. Pulsa una fila para el diagnóstico del motor.
-        </p>
-      )}
+      <PageHeader kicker="FrontDesk Arena" title="Leaderboard">
+        Combates de auditoría: defensores frente a escenarios de ataque
+        telefónico. Pasa el ratón por el icono de cada KPI para ver objetivo
+        operativo. Pulsa una fila para el diagnóstico del motor.
+      </PageHeader>
 
       <section className="mb-8 sm:mb-10" aria-label="Métricas de evaluación">
         <LeaderboardKpis results={results} />

@@ -53,7 +53,7 @@ Puertos:
 
 | Servicio | URL |
 |---|---|
-| FrontDesk | http://localhost:3000/calls |
+| FrontDesk | http://localhost:3001/calls |
 | Backend combinado | http://localhost:7860/healthz |
 | Voz | ws://localhost:7860/ws |
 | Ops | http://localhost:7860/ops |
@@ -93,7 +93,7 @@ por Git. Mantén abiertas estas terminales:
 # Terminal 1: voz y Ops; respeta VOICE_WS_PORT (7860 en la configuración local).
 make agent-live
 
-# Terminal 2: interfaz de operaciones, http://localhost:3000/calls.
+# Terminal 2: interfaz de operaciones, http://localhost:3001/calls.
 make frontend
 
 # Terminal 3, una vez instalado y autenticado ngrok:

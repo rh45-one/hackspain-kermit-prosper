@@ -8,7 +8,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000. Start `agent.serve` on port 7860 first, as
+Open http://localhost:3001. Start `agent.serve` on port 7860 first, as
 described in [the integration runbook](../integration/README.md).
 
 - `AGENT_HTTP_BASE_URL`: server-side backend URL, default `http://127.0.0.1:7860`.
