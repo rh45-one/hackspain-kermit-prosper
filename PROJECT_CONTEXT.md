@@ -229,12 +229,26 @@ curl -s -X POST -H "X-Api-Key: $PROSPER_API_KEY" \
 
 ### Despliegue
 
-Montado para **Fly.io, región `mad`**: `backend/fly.toml`, `Dockerfile`,
-`agent/serve.py`, `ops/smoke.py`. `flyctl` está instalado pero **sin login**
-(`flyctl auth login`). Existe `.github/workflows/ci.yml` con test + deploy +
-smoke + aviso de rollback, pero **está sin subir a propósito**: el token de
-GitHub no tiene permiso `workflow` y el job despliega en cada push a `main`.
-Ginés quiere un despliegue manual verificado primero.
+**Desplegado.** `https://prosper-clinicreflow.fly.dev`, región **`cdg`**
+(París). No `mad`: Madrid **no es una región de Fly**, y el fichero llevaba
+desde que se escribió apuntando a una región inexistente. Las europeas son
+`ams`, `cdg`, `fra` y `lhr`.
+
+    wss://prosper-clinicreflow.fly.dev/ws      el agente
+    https://prosper-clinicreflow.fly.dev/ops   la consola, con token
+
+Secretos en Fly: `PROSPER_API_KEY`, `GEMINI_API_KEY`, `TYPESAFE_API_KEY` y
+**`OPS_TOKEN`**. Sin ese último la consola solo responde a loopback, así que
+un host desplegado no responde a nadie — y con él, es lo único que separa las
+transcripciones de internet. `VOICE_ENGINE=gemini_live` va fijado en
+`fly.toml` a propósito: sin él cae a cascada, que no puede funcionar (su clave
+de Helmcode es un marcador y la API da 401), y el deploy arrancaría **sano y
+mudo**.
+
+El runbook completo está en `DEPLOY.md`, backend y frontend.
+
+`.github/workflows/ci.yml` sigue **sin subir a propósito**: el token de GitHub
+no tiene permiso `workflow` y ese job despliega en cada push a `main`.
 
 ### Git
 
