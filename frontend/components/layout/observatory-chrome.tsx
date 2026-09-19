@@ -7,6 +7,7 @@ import {
   ContactRound,
   Radio,
   SlidersHorizontal,
+  Share2,
   Trophy,
 } from "lucide-react";
 
@@ -37,6 +38,10 @@ const NAV = [
       path === "/directory" ||
       path.startsWith("/directory/"),
   },
+  // The clinic drawn: who covers what, and which of the eighteen endings a
+  // call can have reaches which person. It was reachable only by typing the
+  // URL, which for the screen most worth showing is the same as not existing.
+  { href: "/grafo", label: "Mapa", icon: Share2, match: (path: string) => path === "/grafo" || path.startsWith("/grafo/") },
   { href: "/settings", label: "Agente", icon: SlidersHorizontal, match: (path: string) => path === "/settings" || path.startsWith("/settings/") },
 ] as const;
 

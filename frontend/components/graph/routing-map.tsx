@@ -1,0 +1,200 @@
+"use client";
+
+import { useMemo } from "react";
+
+import { ColumnTitle, GraphCanvas } from "@/components/graph/graph-canvas";
+import {
+  plural,
+  URGENCY,
+  type Escalation,
+  type RoutingLayout,
+  type Urgency,
+} from "@/lib/graph";
+import { cn } from "@/lib/utils";
+
+type Props = {
+  layout: RoutingLayout;
+  /** True when an urgency filter is on, so an empty listener says why. */
+  filtered: boolean;
+  active: string | null;
+  lit: Set<string> | null;
+  onHover: (id: string | null) => void;
+  onSelect: (id: string) => void;
+};
+
+function breakdown(incoming: Escalation[]): string {
+  const counts: Record<Urgency, number> = { now: 0, today: 0, queue: 0 };
+  for (const escalation of incoming) counts[escalation.urgency] += 1;
+  const parts = (Object.keys(counts) as Urgency[])
+    .filter((key) => counts[key] > 0)
+    .map((key) => `${counts[key]} ${URGENCY[key].word.toLowerCase()}`);
+  return parts.join(" · ");
+}
+
+export function RoutingMap({ layout, filtered, active, lit, onHover, onSelect }: Props) {
+  const [dimEdges, litEdges] = useMemo(() => {
+    if (!lit) return [layout.edges, []];
+    const on = layout.edges.filter((e) => e.source === active || e.target === active);
+    const off = layout.edges.filter((e) => !on.includes(e));
+    return [off, on];
+  }, [layout.edges, lit, active]);
+
+  return (
+    <GraphCanvas
+      width={layout.width}
+      height={layout.height}
+      label="Las dieciocho formas de acabar sin cita y quién se entera de cada una"
+    >
+      <svg
+        className="absolute inset-0 overflow-visible"
+        width={layout.width}
+        height={layout.height}
+        viewBox={`0 0 ${layout.width} ${layout.height}`}
+        aria-hidden
+      >
+        {[dimEdges, litEdges].map((group, pass) => (
+          <g key={pass}>
+            {group.map((edge, i) => {
+              const urgency = URGENCY[edge.urgency ?? "queue"];
+              return (
+                <path
+                  key={edge.id}
+                  className={cn(
+                    "clinic-graph-fade",
+                    edge.urgency === "now" && !lit && "clinic-graph-breathe",
+                  )}
+                  d={edge.d}
+                  fill="none"
+                  stroke={urgency.ink}
+                  strokeWidth={pass === 1 ? urgency.width + 1 : urgency.width}
+                  strokeDasharray={urgency.dash}
+                  strokeOpacity={lit ? (pass === 1 ? 0.95 : 0.06) : edge.urgency === "now" ? 1 : 0.42}
+                  strokeLinecap="round"
+                  style={{
+                    animationDelay: `${140 + i * 26}ms`,
+                    transition: "stroke-opacity 200ms ease, stroke-width 200ms ease",
+                  }}
+                />
+              );
+            })}
+          </g>
+        ))}
+      </svg>
+
+      <ColumnTitle
+        x={0}
+        w={layout.reasons[0]?.w ?? 330}
+        title="Qué puede fallar"
+        note={`${plural(layout.reasons.length, "final", "finales")} sin cita`}
+      />
+      <ColumnTitle
+        x={layout.roles[0]?.x ?? 0}
+        w={layout.roles[0]?.w ?? 286}
+        title="Quién responde"
+        note={plural(layout.roles.length, "persona declarada", "personas declaradas")}
+        align="right"
+      />
+
+      {layout.reasons.map((row) => {
+        const urgency = URGENCY[row.escalation.urgency];
+        const id = row.node.id;
+        const dim = Boolean(lit) && !lit?.has(id);
+        return (
+          <button
+            key={id}
+            type="button"
+            onMouseEnter={() => onHover(id)}
+            onMouseLeave={() => onHover(null)}
+            onFocus={() => onHover(id)}
+            onBlur={() => onHover(null)}
+            onClick={() => onSelect(id)}
+            aria-pressed={active === id}
+            title={row.escalation.detail}
+            className={cn(
+              "clinic-graph-fade absolute flex cursor-pointer items-center gap-2.5 overflow-hidden rounded-[9px] border border-mist bg-canvas-white pr-3 pl-0 text-left outline-none",
+              "transition-[opacity,box-shadow,transform,border-color,top,left] duration-300 ease-out",
+              "hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-brass/40",
+              active === id && "shadow-[var(--shadow-md)]",
+              dim && "opacity-25",
+            )}
+            style={{
+              left: row.x,
+              top: row.y,
+              width: row.w,
+              height: row.h,
+              boxShadow: active === id ? `0 0 0 1.5px ${urgency.ink}, var(--shadow-md)` : undefined,
+              animationDelay: `${140 + (row.y % 900) * 0.4}ms`,
+            }}
+          >
+            <span
+              aria-hidden
+              className="h-full w-[3px] shrink-0"
+              style={{ background: urgency.ink }}
+            />
+            <span className="truncate font-heading text-[13px] leading-tight text-graphite">
+              {row.node.label}
+            </span>
+            <span
+              className="ml-auto shrink-0 rounded-[4px] px-1.5 py-px font-heading text-[9.5px] tracking-[0.06em] uppercase"
+              style={{ background: `${urgency.ink}14`, color: urgency.ink }}
+            >
+              {urgency.word}
+            </span>
+          </button>
+        );
+      })}
+
+      {layout.roles.map((seat) => {
+        const id = seat.node.id;
+        const dim = Boolean(lit) && !lit?.has(id);
+        const orphan = seat.incoming.length === 0;
+        return (
+          <button
+            key={id}
+            type="button"
+            onMouseEnter={() => onHover(id)}
+            onMouseLeave={() => onHover(null)}
+            onFocus={() => onHover(id)}
+            onBlur={() => onHover(null)}
+            onClick={() => onSelect(id)}
+            aria-pressed={active === id}
+            className={cn(
+              "clinic-graph-fade absolute flex cursor-pointer flex-col justify-center overflow-hidden rounded-[13px] border px-4 text-left outline-none",
+              "transition-[opacity,box-shadow,transform,border-color,top,left] duration-300 ease-out",
+              "hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-brass/40",
+              orphan ? "border-dashed border-mist bg-fog" : "border-mist bg-canvas-white",
+              active === id && "border-graphite/30 shadow-[var(--shadow-md)]",
+              dim && "opacity-25",
+            )}
+            style={{
+              left: seat.x,
+              top: seat.y,
+              width: seat.w,
+              height: seat.h,
+              animationDelay: `${260 + (seat.y % 900) * 0.3}ms`,
+            }}
+          >
+            <span
+              className={cn(
+                "font-heading text-[15px] leading-tight",
+                orphan ? "text-quiet" : "text-graphite",
+              )}
+            >
+              {seat.node.label}
+            </span>
+            <span className="mt-1 line-clamp-2 text-[11.5px] leading-[1.35] text-steel">
+              {seat.node.detail}
+            </span>
+            <span className="mt-1.5 font-mono text-[10.5px] tracking-[0.02em] text-quiet">
+              {orphan
+                ? filtered
+                  ? "nada con este filtro"
+                  : "no le llega ninguna razón"
+                : `${plural(seat.incoming.length, "ruta", "rutas")} · ${breakdown(seat.incoming)}`}
+            </span>
+          </button>
+        );
+      })}
+    </GraphCanvas>
+  );
+}
