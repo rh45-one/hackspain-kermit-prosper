@@ -8,15 +8,28 @@ import { ArrowRight } from "lucide-react";
 import { ProntoMark } from "@/components/brand/pronto-mark";
 import { ProntoWordmark } from "@/components/brand/pronto-wordmark";
 import { AuroraField } from "@/components/marketing/aurora-field";
-import { openDeskSession } from "@/lib/desk-session";
 import { cn } from "@/lib/utils";
 
+/**
+ * Entrar de verdad.
+ *
+ * Esto aceptaba cualquier cosa, escribía una bandera en `sessionStorage` que
+ * no lee nadie y esperaba 700 ms para parecer que hacía algo. La pantalla
+ * estaba bien y detrás no había nada, así que `/equipo` —que sí necesita una
+ * sesión— seguía sin ver al equipo por mucho que "entraras".
+ *
+ * Ahora la contraseña la comprueba el agente, que es quien tiene el hash, a
+ * través de `/api/login` en este mismo origen para que la cookie sea de
+ * primera parte. Y lo que se enseña al fallar es lo que ha pasado de verdad:
+ * la contraseña, la cuenta sin organización o el agente sin contestar son
+ * tres problemas con tres arreglos distintos.
+ */
 export function LoginPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "").trim();
@@ -27,10 +40,30 @@ export function LoginPage() {
     }
     setError("");
     setBusy(true);
-    openDeskSession();
-    window.setTimeout(() => {
-      router.push("/calls");
-    }, 700);
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const answer = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        detail?: string;
+      };
+      if (!response.ok || !answer.ok) {
+        setError(answer.detail ?? "No se ha podido iniciar sesión.");
+        setBusy(false);
+        return;
+      }
+      // `refresh()` antes de navegar: las pantallas que leen la sesión se
+      // pintan en el servidor, y sin esto la primera visita se sirve desde la
+      // caché de antes de la cookie — entras, y te sigue diciendo que no.
+      router.refresh();
+      router.push("/equipo");
+    } catch {
+      setError("No se puede hablar con el panel. Inténtalo otra vez.");
+      setBusy(false);
+    }
   };
 
   return (
@@ -57,8 +90,8 @@ export function LoginPage() {
             Entrar al panel
           </h1>
           <p className="mt-3 text-[14px] leading-relaxed text-white/55">
-            Recepción en vivo, llamadas y resultados. Cualquier correo y
-            contraseña valen en esta demostración.
+            Recepción en vivo, llamadas y resultados. Con la cuenta de tu
+            clínica.
           </p>
 
           <label className="mt-8 block font-heading text-[12px] text-white/70" htmlFor="email">
