@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { LiveAgentReport } from "@/components/settings/live-agent-report";
+
 import { useFrontdesk } from "@/components/frontdesk-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -50,15 +52,9 @@ export function AgentSettingsForm() {
     return (
       <div>
         <PageHeader kicker="Configuración" title="Agente integrado">
-          La configuración del agente se lee del entorno del backend al arrancar.
+          Esto es lo que el agente está ejecutando ahora mismo, leído del propio proceso.
         </PageHeader>
-        <section className="surface rounded-[18px] p-[var(--card-padding)] text-steel">
-          <p>Configura VOICE_ENGINE=cascade o gemini_live y las claves de los proveedores en backend/.env.</p>
-          <p className="mt-4">El frontend consulta el servidor definido por AGENT_HTTP_BASE_URL.
-            Las credenciales de Prosper permanecen en el backend.</p>
-          <p className="mt-4">El control manual de llamadas, la edición del prompt y la carga de
-            conocimiento aún no tienen API. Están disponibles solo como simulación con FRONTDESK_DEMO=true.</p>
-        </section>
+        <LiveAgentReport />
       </div>
     );
   }
