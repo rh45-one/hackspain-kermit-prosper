@@ -1,10 +1,10 @@
 import { ProntoMark } from "@/components/brand/pronto-mark";
 
 const LINES = [
-  { who: "Elena", text: "Buenos días, quiero cita con pediatría." },
-  { who: "Pronto", text: "Claro. ¿Me dice su documento, por favor?" },
-  { who: "Elena", text: "12345678Z. Para el jueves, si hay hueco." },
-  { who: "Pronto", text: "Jueves 10:30, Dra. Peral, Arenal Norte." },
+  { who: "Elena", text: "Good morning — I need a paediatrics slot." },
+  { who: "Pronto", text: "Of course. Your ID, please?" },
+  { who: "Elena", text: "12345678Z. Thursday, if there's a gap." },
+  { who: "Pronto", text: "Thursday 10:30, Dr Peral, Arenal Norte." },
 ] as const;
 
 export function CallPreview() {
@@ -23,14 +23,14 @@ export function CallPreview() {
             </span>
             <div>
               <p className="font-heading text-[13px] leading-none tracking-[-0.03em] text-canvas-white">
-                Línea 01
+                Line 01
               </p>
-              <p className="mt-1.5 text-[11px] leading-none text-white/45">Clínica Arenal · en curso</p>
+              <p className="mt-1.5 text-[11px] leading-none text-white/45">Clínica Arenal · live</p>
             </div>
           </div>
           <p className="flex items-center gap-2 font-heading text-[11px] text-[#8fd19a]">
             <span className="status-dot-online size-1.5 rounded-full" />
-            En vivo
+            Live
           </p>
         </div>
         <ul className="space-y-3">
@@ -48,8 +48,8 @@ export function CallPreview() {
           ))}
         </ul>
         <div className="mt-6 flex items-center justify-between border-t border-white/8 pt-4 text-[11px] text-white/40">
-          <span>BOOKED · pediatría</span>
-          <span>0,8 s al saludo</span>
+          <span>BOOKED · paediatrics</span>
+          <span>0.8 s to first word</span>
         </div>
       </div>
     </div>

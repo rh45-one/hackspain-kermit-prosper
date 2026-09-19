@@ -32,7 +32,7 @@ import {
 import { DEFAULT_CALL_CONTROL, type LiveCall } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const UNWIRED = "Esta acción aún no está disponible. Quedará lista cuando se conecte.";
+const UNWIRED = "This action is not available yet. It will land once the line is wired.";
 
 function StatusDot({ live }: { live: boolean }) {
   return (
@@ -148,10 +148,10 @@ export function CallManagementDialog({
   const displayName = callDisplayName(call?.entities.name);
   const duration = call ? formatElapsed(call.startedAt, nowMs) : "—";
   const controllerLabel = ended
-    ? "Conversación cerrada"
+    ? "Conversation closed"
     : held
-      ? "La lleva recepción"
-      : "La lleva el asistente de citas";
+      ? "Reception is holding it"
+      : "The booking assistant is holding it";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -183,7 +183,7 @@ export function CallManagementDialog({
                 <header className="flex shrink-0 items-start justify-between gap-4 border-b border-mist px-5 py-4 sm:px-6">
                   <div className="min-w-0">
                     <p className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-                      Conversación
+                      Conversation
                     </p>
                     <DialogTitle
                       id={titleId}
@@ -197,7 +197,7 @@ export function CallManagementDialog({
                     >
                       <span className="inline-flex items-center gap-1.5 text-steel">
                         <StatusDot live={Boolean(live)} />
-                        {live ? "Al teléfono ahora" : ended ? "Ya colgaron" : "Sin estado claro"}
+                        {live ? "On the phone now" : ended ? "They hung up" : "Status unclear"}
                       </span>
                       <span>{callLineLabel(call.socketId)}</span>
                       <span>{call.virtualPhone}</span>
@@ -208,7 +208,7 @@ export function CallManagementDialog({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    aria-label="Cerrar gestión de la llamada"
+                    aria-label="Close call management"
                     onClick={onClose}
                   >
                     <XIcon />
@@ -226,7 +226,7 @@ export function CallManagementDialog({
                       onClick={() => takeOperatorControl(call.callId)}
                     >
                       <Hand />
-                      Tomar el control
+                      Take control
                     </Button>
                   ) : held && !ended ? (
                     <Button
@@ -235,7 +235,7 @@ export function CallManagementDialog({
                       variant="outline"
                       onClick={() => releaseOperatorControl(call.callId)}
                     >
-                      Devolver al asistente
+                      Hand back to the assistant
                     </Button>
                   ) : null}
                 </div>
@@ -244,7 +244,7 @@ export function CallManagementDialog({
 
                 <div className="shrink-0 border-t border-mist bg-canvas-white px-4 py-3 sm:px-5">
                   <label className="sr-only" htmlFor={`composer-${call.callId}`}>
-                    Respuesta manual
+                    Manual reply
                   </label>
                   <div className="flex items-end gap-2.5">
                     <Textarea
@@ -257,17 +257,17 @@ export function CallManagementDialog({
                       rows={2}
                       placeholder={
                         ended
-                          ? "La conversación está cerrada."
+                          ? "The conversation is closed."
                           : held
-                            ? "Escribe una respuesta. Enter envía, Mayús+Enter nueva línea."
-                            : "Toma el control para responder."
+                            ? "Write a reply. Enter sends, Shift+Enter for a new line."
+                            : "Take control to reply."
                       }
                       className="min-h-[4.5rem] resize-none"
                     />
                     <Button
                       type="button"
                       size="icon"
-                      aria-label="Enviar respuesta"
+                      aria-label="Send reply"
                       disabled={!composerEnabled || draft.trim().length === 0}
                       onClick={submitDraft}
                     >
@@ -277,12 +277,12 @@ export function CallManagementDialog({
                   <p className="mt-2 text-[12px] text-quiet">
                     {sendHint ??
                       (ended
-                        ? "Esta llamada ya no admite intervención."
+                        ? "This call no longer accepts intervention."
                         : composerEnabled
-                          ? "Tus mensajes se guardan aquí. El envío en directo se conectará más adelante."
+                          ? "Your messages are saved here. Live send will be wired later."
                           : held
                             ? controllerLabel
-                            : "El asistente sigue al mando hasta que tomes el control.")}
+                            : "The assistant stays in charge until you take control.")}
                   </p>
                 </div>
               </div>
@@ -297,10 +297,10 @@ export function CallManagementDialog({
                   </p>
                   <p className="mt-1 text-[13px] leading-snug text-quiet">
                     {ended
-                      ? "Esta llamada ya no admite intervención."
+                      ? "This call no longer accepts intervention."
                       : held
-                        ? "El asistente está en pausa. Tú respondes desde aquí."
-                        : "El asistente de citas habla con la persona al teléfono."}
+                        ? "The assistant is paused. You reply from here."
+                        : "The booking assistant is talking to the person on the line."}
                   </p>
                 </div>
 
@@ -311,7 +311,7 @@ export function CallManagementDialog({
                     onClick={() => takeOperatorControl(call.callId)}
                   >
                     <Hand />
-                    Tomar el control
+                    Take control
                   </Button>
                 ) : held && !ended ? (
                   <Button
@@ -320,7 +320,7 @@ export function CallManagementDialog({
                     className="hidden w-full lg:inline-flex"
                     onClick={() => releaseOperatorControl(call.callId)}
                   >
-                    Devolver al asistente
+                    Hand back to the assistant
                   </Button>
                 ) : (
                   <Button
@@ -330,35 +330,35 @@ export function CallManagementDialog({
                     disabled
                   >
                     <PhoneOff />
-                    Control tomado
+                    Control taken
                   </Button>
                 )}
 
                 <div>
                   <p className="mb-3 font-heading text-[13px] text-quiet">
-                    Datos que va captando
+                    What it is capturing
                   </p>
                   <dl className="space-y-3 text-[13px]">
                     <div>
-                      <dt className="text-quiet">Quién llama</dt>
+                      <dt className="text-quiet">Caller</dt>
                       <dd className="mt-0.5 break-words text-graphite">
-                        {call.entities.name ?? "Aún no lo ha dicho"}
+                        {call.entities.name ?? "Not said yet"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-quiet">Documento</dt>
+                      <dt className="text-quiet">ID</dt>
                       <dd className="mt-0.5 truncate font-mono text-graphite">
                         {call.entities.nationalId ?? "—"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-quiet">Qué pide</dt>
+                      <dt className="text-quiet">Asking for</dt>
                       <dd className="mt-0.5 break-words text-graphite">
-                        {call.entities.appointmentType ?? "Por confirmar"}
+                        {call.entities.appointmentType ?? "To confirm"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-quiet">Línea</dt>
+                      <dt className="text-quiet">Line</dt>
                       <dd className="mt-0.5 text-graphite">
                         {callLineLabel(call.socketId)}
                       </dd>
@@ -378,8 +378,8 @@ export function CallManagementDialog({
                   >
                     <Pause />
                     {control.automationPaused
-                      ? "Que el asistente vuelva a hablar"
-                      : "Pausar al asistente"}
+                      ? "Let the assistant talk again"
+                      : "Pause the assistant"}
                   </Button>
                   <Button
                     type="button"
@@ -389,7 +389,7 @@ export function CallManagementDialog({
                     title={UNWIRED}
                   >
                     <ArrowRightLeft />
-                    Transferir
+                    Transfer
                   </Button>
                   <Button
                     type="button"
@@ -399,7 +399,7 @@ export function CallManagementDialog({
                     title={UNWIRED}
                   >
                     <UserRound />
-                    Asignar
+                    Assign
                   </Button>
                   <Button
                     type="button"
@@ -409,7 +409,7 @@ export function CallManagementDialog({
                     onClick={() => takeControl(call.callId)}
                   >
                     <PhoneOff />
-                    Finalizar conversación
+                    End conversation
                   </Button>
                 </div>
               </aside>

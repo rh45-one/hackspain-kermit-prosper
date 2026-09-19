@@ -18,7 +18,7 @@ export function ArenaDeveloperInsights({ results }: ArenaDeveloperInsightsProps)
 
   return (
     <section
-      aria-label="Insights para desarrolladores"
+      aria-label="Developer insights"
       className="rounded-xl bg-fog/60 ring-1 ring-mist"
     >
       <button
@@ -30,15 +30,15 @@ export function ArenaDeveloperInsights({ results }: ArenaDeveloperInsightsProps)
       >
         <div className="min-w-0">
           <p className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-            Insights para desarrolladores
+            Developer insights
           </p>
           <h2 className="mt-2 font-heading text-[18px] tracking-[-0.03em] text-graphite sm:text-[20px]">
-            Telemetría y tabla técnica de combates
+            Telemetry and technical bout table
           </h2>
           <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-steel sm:text-[14px]">
-            Latencia, TTFT, WER, interrupciones, códigos de auditoría y veredictos
-            del motor. Misma información de siempre; pensada para ingeniería y
-            auditoría fina.
+            Latency, TTFT, WER, interruptions, audit codes, and engine
+            verdicts. Same data as always; written for engineering and fine
+            audit.
           </p>
         </div>
         <ChevronDown
@@ -53,17 +53,17 @@ export function ArenaDeveloperInsights({ results }: ArenaDeveloperInsightsProps)
 
       {open ? (
         <div id={panelId} className="border-t border-mist px-5 pb-6 pt-5 sm:px-6 sm:pb-8">
-          <section className="mb-8 sm:mb-10" aria-label="Métricas de evaluación">
+          <section className="mb-8 sm:mb-10" aria-label="Evaluation metrics">
             <LeaderboardKpis results={results} />
           </section>
 
-          <section aria-label="Tabla de combates">
+          <section aria-label="Bout table">
             <div className="mb-4 flex items-end justify-between gap-4">
               <h3 className="font-heading text-[15px] text-graphite">
-                Tabla de combates
+                Bout table
               </h3>
               <p className="font-heading text-[12px] text-quiet">
-                {results.length} evaluaciones · clic para deep dive
+                {results.length} evaluations · click for a deep dive
               </p>
             </div>
             <LeaderboardTable results={results} />

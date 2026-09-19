@@ -29,15 +29,15 @@ function newId(prefix: string): string {
 function permissionError(error: unknown): string {
   const name = error instanceof Error ? error.name : "";
   if (name === "NotAllowedError" || name === "SecurityError") {
-    return "Se denegó el micrófono. Actívalo en el navegador e inténtalo de nuevo.";
+    return "Microphone access was denied. Enable it in the browser and try again.";
   }
   if (name === "NotFoundError") {
-    return "No se detectó ningún micrófono. Conecta uno e inténtalo de nuevo.";
+    return "No microphone found. Plug one in and try again.";
   }
   if (name === "NotReadableError") {
-    return "Otra aplicación está usando el micrófono.";
+    return "Another app is using the microphone.";
   }
-  return "No se pudo iniciar la llamada. Comprueba el micrófono y la conexión.";
+  return "Could not start the call. Check the microphone and the connection.";
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -241,7 +241,7 @@ export function useBrowserCall() {
   }, [clearPlayback]);
 
   const endCall = useCallback(async (
-    nextMessage = "Llamada finalizada. Línea disponible.",
+    nextMessage = "Call ended. Line is free.",
     nextTone: CallTone = "neutral",
   ) => {
     if (phaseRef.current === "idle" || phaseRef.current === "stopping") {
@@ -250,7 +250,7 @@ export function useBrowserCall() {
     sessionVersion.current += 1;
     intentionalClose.current = true;
     const pendingStart = startPromiseRef.current;
-    setPhase("stopping", "Finalizando llamada");
+    setPhase("stopping", "Ending call");
     sendStop();
     await releaseResources();
     if (pendingStart) {
@@ -265,7 +265,7 @@ export function useBrowserCall() {
       return;
     }
     if (socket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
-      void endCall("La conexión es demasiado lenta. Vuelve a intentarlo.", "error");
+      void endCall("The connection is too slow. Try again.", "error");
       return;
     }
     mediaChunkRef.current += 1;
@@ -305,13 +305,13 @@ export function useBrowserCall() {
       return;
     }
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) {
-      setPhase("idle", "Las llamadas requieren HTTPS o localhost en un navegador actualizado.", "error");
+      setPhase("idle", "Calls need HTTPS or localhost in a current browser.", "error");
       return;
     }
 
     const version = ++sessionVersion.current;
     intentionalClose.current = false;
-    setPhase("requesting", "Autoriza el micrófono para continuar");
+    setPhase("requesting", "Allow the microphone to continue");
 
     try {
       const Ctor = audioContextClass();
@@ -356,7 +356,7 @@ export function useBrowserCall() {
       captureNode.connect(silentGain);
       silentGain.connect(audioContext.destination);
 
-      setPhase("connecting", "Conectando con recepción");
+      setPhase("connecting", "Connecting to reception");
       const config = await fetch("/api/voice/config", { cache: "no-store" }).then((response) => {
         if (!response.ok) {
           throw new Error("Voice config unavailable");
@@ -395,12 +395,12 @@ export function useBrowserCall() {
         sessionVersion.current += 1;
         intentionalClose.current = true;
         const pendingStart = startPromiseRef.current;
-        setPhase("stopping", "El agente ha cerrado la llamada");
+        setPhase("stopping", "The agent hung up");
         void releaseResources().then(async () => {
           if (pendingStart) {
             await pendingStart;
           }
-          setPhase("idle", "El agente ha cerrado la llamada. Línea disponible.");
+          setPhase("idle", "The agent hung up. Line is free.");
         });
       });
       await waitForOpen(socket, () => version === sessionVersion.current);
@@ -426,7 +426,7 @@ export function useBrowserCall() {
         },
       }));
       playbackCursorRef.current = audioContext.currentTime + PLAYBACK_LEAD_SECONDS;
-      setPhase("active", "En línea. Ya puedes hablar.", "active");
+      setPhase("active", "On the line. You can talk now.", "active");
     } catch (error) {
       if (version !== sessionVersion.current) {
         return;

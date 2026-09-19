@@ -128,8 +128,8 @@ function Sub({ node, graph }: { node: GraphNode; graph: ClinicGraph }) {
   return (
     <span className="mt-1 block truncate pl-[14px] text-[11px] leading-tight text-quiet">
       {node.kind === "site" && node.detail ? `${node.detail} · ` : ""}
-      {total === 0 ? "sin médicos asignados" : plural(total, "médico", "médicos")}
-      {away > 0 ? `, ${away} de baja` : ""}
+      {total === 0 ? "no clinicians assigned" : plural(total, "clinician", "clinicians")}
+      {away > 0 ? `, ${away} on leave` : ""}
     </span>
   );
 }
@@ -148,7 +148,7 @@ export function CatalogueMap({ graph, layout, active, lit, onHover, onSelect }: 
     <GraphCanvas
       width={layout.width}
       height={layout.height}
-      label="Quién trabaja dónde y quién cubre qué"
+      label="Who works where and who covers what"
     >
       <svg
         className="absolute inset-0 overflow-visible"

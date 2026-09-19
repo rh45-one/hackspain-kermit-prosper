@@ -44,7 +44,7 @@ function QrCodeSvg({ url }: { url: string }) {
   if (!drawn) {
     return (
       <p className="rounded-[10px] border border-dashed border-ember-orange/50 bg-canvas-white px-4 py-3 text-[13px] leading-[1.5] text-steel">
-        Esa dirección es demasiado larga para dibujarla como QR. Ábrela a mano:{" "}
+        That address is too long to draw as a QR. Open it by hand:{" "}
         <span className="font-mono break-all">{url}</span>
       </p>
     );
@@ -55,7 +55,7 @@ function QrCodeSvg({ url }: { url: string }) {
     <svg
       viewBox={`0 0 ${span} ${span}`}
       role="img"
-      aria-label={`Código QR que abre ${url}`}
+      aria-label={`QR code that opens ${url}`}
       className="block h-auto w-full max-w-[400px] rounded-[10px]"
       shapeRendering="crispEdges"
     >
@@ -110,10 +110,10 @@ export function CallButton({
           className="block font-heading text-[15px] leading-tight"
           style={{ color: urgency.ink }}
         >
-          Llamar a {subject.role.label}
+          Call {subject.role.label}
         </span>
         <span className="block text-[12px] leading-[1.4] text-steel">
-          Abre el QR y habla tú con el agente. Demostración: no se envía nada.
+          Open the QR and talk to the agent yourself. Demo: nothing is sent.
         </span>
       </span>
     </button>
@@ -163,7 +163,7 @@ export function CallQrDialog({
         <div className="flex items-start justify-between gap-4 border-b border-mist px-6 py-4 sm:px-8">
           <p className="flex items-center gap-2.5 font-heading text-[11px] leading-none tracking-[0.09em] text-brass uppercase">
             <span className="h-px w-5 bg-brass/70" />
-            Escalado · demostración en directo
+            Escalation · live demo
           </p>
           <button
             ref={closeRef}
@@ -171,14 +171,14 @@ export function CallQrDialog({
             onClick={onClose}
             className="-mt-1 cursor-pointer rounded-full border border-mist px-3 py-1 font-heading text-[11px] tracking-[0.04em] text-quiet uppercase hover:text-graphite focus-visible:ring-2 focus-visible:ring-brass/40 focus-visible:outline-none"
           >
-            Cerrar
+            Close
           </button>
         </div>
 
         <div className="grid gap-8 px-6 py-6 sm:px-8 sm:py-7 lg:grid-cols-[minmax(0,1fr)_440px]">
           <div className="min-w-0">
             <p className="font-heading text-[12px] leading-none tracking-[0.08em] text-quiet uppercase">
-              Hay que avisar a
+              Need to alert
             </p>
             <h2
               id="call-qr-title"
@@ -191,7 +191,7 @@ export function CallQrDialog({
             <div className="mt-6 rounded-[14px] border border-mist bg-fog/70 px-5 py-4">
               <p className="flex flex-wrap items-center gap-2.5">
                 <span className="font-heading text-[12px] leading-none tracking-[0.08em] text-quiet uppercase">
-                  Porque
+                  Because
                 </span>
                 <span
                   className="rounded-full px-2.5 py-0.5 font-heading text-[11px] tracking-[0.06em] uppercase"
@@ -215,7 +215,7 @@ export function CallQrDialog({
                 <span>{subject.escalation.reason}</span>
                 {subject.otherRoutes > 0 ? (
                   <span>
-                    + otras {subject.otherRoutes} razones acaban en esta misma persona
+                    + {subject.otherRoutes} other reason{subject.otherRoutes === 1 ? "" : "s"} end with this same person
                   </span>
                 ) : null}
               </p>
@@ -227,14 +227,14 @@ export function CallQrDialog({
                 is worth saying out loud rather than hiding in a footnote. */}
             <div className="mt-5 rounded-[14px] border-2 border-ember-orange/45 bg-ember-orange/[0.06] px-5 py-4">
               <p className="font-heading text-[15px] leading-tight text-ember-orange">
-                Esto es una demostración, no una llamada de verdad.
+                This is a demonstration, not a real call.
               </p>
               <p className="mt-2 text-[14px] leading-[1.55] text-steel">
-                El QR abre el mismo agente que atiende las llamadas, con el envío
-                desactivado: nada de lo que se diga llega a la plataforma de Prosper, no se
-                crea ninguna cita y no se avisa a{" "}
-                <span className="text-graphite">{subject.role.label}</span> de verdad. En
-                producción, este botón marcaría su teléfono.
+                The QR opens the same agent that takes the calls, with submit
+                switched off: nothing said reaches Prosper, no appointment is
+                created, and{" "}
+                <span className="text-graphite">{subject.role.label}</span> is not
+                actually notified. In production, this button would dial their phone.
               </p>
             </div>
           </div>
@@ -243,11 +243,11 @@ export function CallQrDialog({
             <div className="flex flex-col items-center rounded-[16px] border border-mist bg-white p-5">
               <QrCodeSvg url={url} />
               <p className="mt-4 text-center font-heading text-[17px] leading-tight text-graphite">
-                Escanéalo y habla con el agente
+                Scan it and talk to the agent
               </p>
               <p className="mt-1.5 text-center text-[13px] leading-[1.45] text-steel">
-                Se abre en el navegador del móvil y pide el micrófono. No hace falta
-                instalar nada.
+                It opens in the phone browser and asks for the microphone. Nothing
+                to install.
               </p>
               <p className="mt-3 w-full text-center font-mono text-[13px] leading-[1.4] break-all text-steel">
                 {url}
@@ -261,15 +261,15 @@ export function CallQrDialog({
                   "hover:border-graphite/30 hover:text-graphite focus-visible:ring-2 focus-visible:ring-brass/40 focus-visible:outline-none",
                 )}
               >
-                Abrirlo aquí
+                Open it here
               </a>
             </div>
 
             {unreachable ? (
               <p className="mt-3 rounded-[12px] border border-brass/35 bg-ivory px-4 py-3 text-[12.5px] leading-[1.5] text-steel">
-                Esa dirección es local, así que un móvil no la alcanza. Apunta{" "}
-                <span className="font-mono">VOICE_PUBLIC_BASE_URL</span> al agente
-                desplegado para que el QR sirva delante de gente.
+                That address is local, so a phone cannot reach it. Point{" "}
+                <span className="font-mono">VOICE_PUBLIC_BASE_URL</span> at the
+                deployed agent so the QR works in front of people.
               </p>
             ) : null}
           </div>

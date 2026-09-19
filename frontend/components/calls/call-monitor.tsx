@@ -17,9 +17,9 @@ import { CALL_CAPACITY, type LiveCall, type TurnState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TURN_LABEL: Record<TurnState, string> = {
-  listening: "Escuchando",
-  speaking: "El asistente habla",
-  "barge-in": "Le interrumpen",
+  listening: "Listening",
+  speaking: "Assistant speaking",
+  "barge-in": "Interrupted",
 };
 
 function TurnMark({ turn }: { turn: TurnState }) {
@@ -69,7 +69,7 @@ function CallCard({
         }}
         aria-haspopup="dialog"
         aria-expanded={selected}
-        aria-label={`Abrir conversación con ${name}`}
+        aria-label={`Open conversation with ${name}`}
         className="group flex h-full w-full cursor-pointer flex-col rounded-[16px] p-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-brass/35 sm:p-7"
       >
         <div className="mb-5 flex items-start justify-between gap-5">
@@ -84,45 +84,45 @@ function CallCard({
           <div className="flex shrink-0 flex-col items-end gap-2">
             {ended ? (
               <span className="font-heading text-[13px] text-ember-orange">
-                {demo ? "Pasada a persona" : "Finalizada"}
+                {demo ? "Handed to a person" : "Ended"}
               </span>
             ) : call.status === "unknown" ? (
-              <span className="text-[13px] text-quiet">Sin estado claro</span>
+              <span className="text-[13px] text-quiet">Status unclear</span>
             ) : !demo ? (
-              <span className="text-[13px] text-quiet">En curso</span>
+              <span className="text-[13px] text-quiet">In progress</span>
             ) : (
               <TurnMark turn={call.turn} />
             )}
             <span className="font-heading text-[12px] text-quiet opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              Ver detalle
+              View detail
             </span>
           </div>
         </div>
         <TranscriptThread call={call} variant="preview" />
         <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 text-[12px] sm:grid-cols-3">
           <div>
-            <dt className="text-quiet">Quién llama</dt>
+            <dt className="text-quiet">Caller</dt>
             <dd className="mt-1 truncate text-graphite">
-              {call.entities.name ?? "Aún no lo ha dicho"}
+              {call.entities.name ?? "Not said yet"}
             </dd>
           </div>
           <div>
-            <dt className="text-quiet">Documento</dt>
+            <dt className="text-quiet">ID</dt>
             <dd className="mt-1 truncate font-mono text-graphite">
               {call.entities.nationalId ?? "—"}
             </dd>
           </div>
           <div>
-            <dt className="text-quiet">Qué pide</dt>
+            <dt className="text-quiet">Asking for</dt>
             <dd className="mt-1 truncate text-graphite">
-              {call.entities.appointmentType ?? "Por confirmar"}
+              {call.entities.appointmentType ?? "To confirm"}
             </dd>
           </div>
         </dl>
         {!demo && call.diagnostic ? (
           <p className="mt-4 text-[13px] text-steel">
-            Gestiones enviadas bien: {call.diagnostic.submissions_succeeded ?? 0}.
-            {" "}Con error: {call.diagnostic.submissions_failed ?? 0}.
+            Actions sent cleanly: {call.diagnostic.submissions_succeeded ?? 0}.
+            {" "}Failed: {call.diagnostic.submissions_failed ?? 0}.
             {call.diagnostic.empty_action_reason
               ? ` Nota: ${call.diagnostic.empty_action_reason}.`
               : ""}
@@ -139,9 +139,9 @@ function EmptySlot({ index }: { index: number }) {
       <span className="size-2 rounded-full bg-mist" />
       <div>
         <p className="font-heading text-[13px]">
-          Línea {String(index + 1).padStart(2, "0")}
+          Line {String(index + 1).padStart(2, "0")}
         </p>
-        <p className="mt-1 text-[13px]">Libre · esperando una llamada</p>
+        <p className="mt-1 text-[13px]">Free · waiting for a call</p>
       </div>
     </div>
   );
@@ -159,12 +159,12 @@ export function CallMonitor() {
 
   return (
     <div>
-      <PageHeader kicker="Recepción en vivo" title="Llamadas">
+      <PageHeader kicker="Live reception" title="Calls">
         {demo
-          ? "Aquí ves cómo el asistente de citas atiende el teléfono: escucha, habla con la persona y deja apuntado lo que va entendiendo (nombre, documento, tipo de cita)."
-          : "Últimas llamadas atendidas por el asistente de citas, con la conversación y el resultado de cada gestión."}{" "}
-        Ahora mismo hay {activeCount}{" "}
-        {activeCount === 1 ? "llamada abierta" : "llamadas abiertas"}.
+          ? "Watch the booking assistant take the phone: it listens, talks, and writes down what it understands (name, ID, appointment type)."
+          : "Latest calls handled by the booking assistant, with the conversation and the result of each action."}{" "}
+        Right now there {activeCount === 1 ? "is" : "are"} {activeCount}{" "}
+        {activeCount === 1 ? "open call" : "open calls"}.
       </PageHeader>
       <BrowserCallPanel />
       <div className="mb-[var(--section-gap)]">
@@ -176,18 +176,18 @@ export function CallMonitor() {
       >
         <div>
           <p className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-            Ahora mismo
+            Right now
           </p>
           <h2 className="mt-2 text-[clamp(1.6rem,3vw,2.25rem)] leading-none">
-            Líneas de recepción
+            Reception lines
           </h2>
           <p className="mt-2 max-w-xl text-[14px] text-steel">
-            Cada tarjeta es una conversación. Pulsa una para oír el hilo o
-            tomar el control si hace falta una persona.
+            Each card is a conversation. Open one to hear the thread or take
+            over if a person is needed.
           </p>
         </div>
         <p className="hidden text-[13px] text-quiet sm:block">
-          {activeCount} de {CALL_CAPACITY} líneas ocupadas
+          {activeCount} of {CALL_CAPACITY} lines busy
         </p>
       </div>
       <div

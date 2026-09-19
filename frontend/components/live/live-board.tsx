@@ -9,6 +9,7 @@ import {
   clockTime,
   formatDuration,
   STATUS_STYLES,
+  STATUS_LABELS,
   type LiveCallDetail,
   type LiveCallRow,
 } from "@/lib/live";
@@ -37,7 +38,7 @@ function StatusBadge({ status }: { status: LiveCallRow["status"] }) {
       {status === "en curso" ? (
         <span className="size-1.5 animate-pulse rounded-full bg-ember-orange" />
       ) : null}
-      {status}
+      {STATUS_LABELS[status]}
     </span>
   );
 }
@@ -57,7 +58,7 @@ function CallDetail({ callId }: { callId: string }) {
         setError(null);
       } catch (caught) {
         if (controller.signal.aborted) return;
-        setError(caught instanceof Error ? caught.message : "Error de conexión");
+        setError(caught instanceof Error ? caught.message : "Connection error");
       } finally {
         if (!controller.signal.aborted) {
           timer = window.setTimeout(() => void refresh(), REFRESH_MS);
@@ -75,18 +76,18 @@ function CallDetail({ callId }: { callId: string }) {
     return <p className="text-[13px] text-ember-orange">{error}</p>;
   }
   if (!detail) {
-    return <p className="text-[13px] text-quiet">Cargando la llamada…</p>;
+    return <p className="text-[13px] text-quiet">Loading the call…</p>;
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section>
         <h3 className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-          Qué ha hecho el agente
+          What the agent did
         </h3>
         {detail.events.length === 0 ? (
           <p className="mt-3 text-[13px] text-quiet">
-            Todavía no hay ninguna gestión registrada en esta llamada.
+            No action logged on this call yet.
           </p>
         ) : (
           <ol className="mt-3 space-y-2.5">
@@ -101,7 +102,7 @@ function CallDetail({ callId }: { callId: string }) {
       </section>
       <section>
         <h3 className="font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-          Conversación
+          Conversation
         </h3>
         <ol className="mt-3 max-h-[26rem] space-y-2.5 overflow-y-auto pr-1">
           {detail.conversation.map((turn, index) => (
@@ -115,7 +116,7 @@ function CallDetail({ callId }: { callId: string }) {
               )}
             >
               <p className="mb-1 font-heading text-[11px] tracking-[0.04em] text-quiet uppercase">
-                {turn.speaker}
+                {turn.speaker === "agente" ? "agent" : "caller"}
               </p>
               <p className="break-words">{turn.text}</p>
             </li>
@@ -142,12 +143,12 @@ export function LiveBoard() {
         if (controller.signal.aborted) return;
         setCalls(data);
         setError(null);
-        setUpdatedAt(new Intl.DateTimeFormat("es-ES", {
+        setUpdatedAt(new Intl.DateTimeFormat("en-GB", {
           hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Europe/Madrid",
         }).format(new Date()));
       } catch (caught) {
         if (controller.signal.aborted) return;
-        setError(caught instanceof Error ? caught.message : "Error de conexión");
+        setError(caught instanceof Error ? caught.message : "Connection error");
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -170,11 +171,11 @@ export function LiveBoard() {
 
   return (
     <div>
-      <PageHeader kicker="Clínica Arenal" title="Llamadas en directo">
-        {ongoing === 1 ? "1 llamada ahora mismo." : `${ongoing} llamadas ahora mismo.`}{" "}
-        Se actualiza sola cada tres segundos. Última comprobación: {updatedAt}.{" "}
+      <PageHeader kicker="Clínica Arenal" title="Live calls">
+        {ongoing === 1 ? "1 call right now." : `${ongoing} calls right now.`}{" "}
+        Refreshes every three seconds. Last check: {updatedAt}.{" "}
         <Link href="/calls#llamar" className="ember-underline">
-          Probar una llamada
+          Try a call
         </Link>
       </PageHeader>
 
@@ -185,10 +186,10 @@ export function LiveBoard() {
       ) : null}
 
       {loading ? (
-        <p className="text-[13px] text-quiet">Conectando con el agente…</p>
+        <p className="text-[13px] text-quiet">Connecting to the agent…</p>
       ) : calls.length === 0 && !error ? (
         <p className="text-[13px] text-quiet">
-          Todavía no ha entrado ninguna llamada. Esta pantalla se actualizará sola en cuanto suene el teléfono.
+          No call has come in yet. This screen will update on its own when the phone rings.
         </p>
       ) : (
         <ul className="space-y-3">
@@ -211,12 +212,12 @@ export function LiveBoard() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="font-heading text-[15px] text-graphite">
-                      {call.patient ?? "Llamante sin identificar"}
+                      {call.patient ?? "Unidentified caller"}
                     </span>
                     <span className="flex items-center gap-2">
                       {call.medical_emergency ? (
                         <span className="inline-flex items-center rounded-full bg-ember-orange px-2.5 py-1 font-heading text-[11px] tracking-[0.04em] text-canvas-white uppercase">
-                          Posible urgencia
+                          Possible emergency
                         </span>
                       ) : null}
                       <StatusBadge status={call.status} />
@@ -224,12 +225,12 @@ export function LiveBoard() {
                   </div>
                   <p className="text-[14px] leading-[1.5] text-steel">{call.headline}</p>
                   <p className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-quiet">
-                    <span>Entró a las {clockTime(call.started_at)}</span>
-                    <span>Duración {formatDuration(call.duration_seconds)}</span>
-                    <span>{call.turns} intervenciones</span>
+                    <span>Came in at {clockTime(call.started_at)}</span>
+                    <span>Duration {formatDuration(call.duration_seconds)}</span>
+                    <span>{call.turns} turns</span>
                     {call.submissions_failed > 0 ? (
                       <span className="text-ember-orange">
-                        {call.submissions_failed} envío(s) fallido(s)
+                        {call.submissions_failed} failed send{call.submissions_failed === 1 ? "" : "s"}
                       </span>
                     ) : null}
                   </p>

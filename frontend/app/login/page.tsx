@@ -1,8 +1,8 @@
 import { LoginPage } from "@/components/marketing/login-page";
 
 export const metadata = {
-  title: "Entrar · Pronto",
-  description: "Acceso al panel de recepción de Pronto.",
+  title: "Sign in · Pronto",
+  description: "Sign in to the Pronto reception desk.",
 };
 
 export default function Login() {

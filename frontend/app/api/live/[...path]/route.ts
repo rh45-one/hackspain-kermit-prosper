@@ -30,12 +30,12 @@ export async function GET(
   const { path } = await context.params;
   // Only the shapes the panel actually uses: calls, calls/<id>, clinic, agent.
   if (!path?.length || !ALLOWED.has(path[0]) || path.length > 2) {
-    return Response.json({ detail: "Recurso desconocido" }, { status: 404 });
+    return Response.json({ detail: "Unknown resource" }, { status: 404 });
   }
   if (path.length === 2) {
     // Only `calls` has a second segment, and only ever a call id.
     if (path[0] !== "calls" || !/^[A-Za-z0-9._-]{1,128}$/.test(path[1])) {
-      return Response.json({ detail: "Identificador no válido" }, { status: 400 });
+      return Response.json({ detail: "Invalid identifier" }, { status: 400 });
     }
   }
 
@@ -54,7 +54,7 @@ export async function GET(
     });
     if (upstream.status === 401 || upstream.status === 403) {
       return Response.json(
-        { detail: "El panel no tiene acceso al agente. Revisa OPS_TOKEN." },
+        { detail: "The desk cannot reach the agent. Check OPS_TOKEN." },
         { status: 502, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -64,7 +64,7 @@ export async function GET(
     });
   } catch {
     return Response.json(
-      { detail: "No se puede hablar con el agente. Revisa AGENT_HTTP_BASE_URL." },
+      { detail: "Cannot talk to the agent. Check AGENT_HTTP_BASE_URL." },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }

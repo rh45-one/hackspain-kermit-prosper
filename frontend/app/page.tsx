@@ -3,7 +3,7 @@ import { LandingPage } from "@/components/marketing/landing-page";
 export const metadata = {
   title: "Pronto",
   description:
-    "El agente de voz de Clínica Arenal. Atiende la llamada, identifica el caso y deja la gestión hecha.",
+    "Booked before you hang up. Pronto takes the clinic line, names the case, and files the action.",
 };
 
 export default function Home() {

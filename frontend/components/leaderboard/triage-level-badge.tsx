@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { displayCode } from "@/lib/arena-business";
 import type { TriageLevel } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +14,7 @@ const TRIAGE_BADGE: Record<TriageLevel, string> = {
 export function TriageLevelBadge({ level }: { level: TriageLevel }) {
   return (
     <Badge variant="secondary" className={cn(TRIAGE_BADGE[level])}>
-      {level}
+      {displayCode(level)}
     </Badge>
   );
 }

@@ -316,7 +316,7 @@
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
-  overflow-x: hidden;
+  overflow-x: clip;
   background:
     radial-gradient(1200px 700px at 12% -10%, rgb(128 107 54 / 0.22), transparent 55%),
     radial-gradient(900px 600px at 100% 10%, rgb(231 100 50 / 0.18), transparent 50%),
@@ -388,6 +388,10 @@
 }
 
 .hero-gradient-word {
+  display: inline-block;
+  overflow: visible;
+  padding: 0.06em 0.1em 0.22em 0;
+  line-height: 1.12;
   background: linear-gradient(115deg, #fffefb 0%, #eee9df 32%, #e76432 78%, #ff8a5c 100%);
   background-size: 180% 180%;
   -webkit-background-clip: text;

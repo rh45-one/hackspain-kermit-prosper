@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { TriageLevelBadge } from "@/components/leaderboard/triage-level-badge";
-import { toBusinessCase } from "@/lib/arena-business";
+import { displayCode, toBusinessCase } from "@/lib/arena-business";
 import type { EvaluationResult, IdentityStatus } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -99,7 +99,7 @@ export function LeaderboardDetailDialog({
 
             <div className="space-y-1">
               <p className="mb-2 font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-                Etiquetas de seguimiento
+                Tracking tags
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <TriageLevelBadge level={result.triageLevel} />
@@ -120,15 +120,15 @@ export function LeaderboardDetailDialog({
                   </Badge>
                 ) : null}
               </div>
-              <MetricRow label="Idioma" value={result.languageDetected} mono />
+              <MetricRow label="Language" value={result.languageDetected} mono />
               <MetricRow
-                label="Estado final"
-                value={result.actionOutcome}
+                label="Final State"
+                value={displayCode(result.actionOutcome)}
                 mono
               />
               <MetricRow
-                label="Código auditoría"
-                value={result.auditCode}
+                label="Audit Code"
+                value={displayCode(result.auditCode)}
                 mono
               />
             </div>
@@ -137,15 +137,15 @@ export function LeaderboardDetailDialog({
 
             <div>
               <p className="mb-2 font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
-                Telemetría del motor
+                Engine telemetry
               </p>
               <MetricRow
-                label="Identidad validada"
+                label="Identity validated"
                 value={result.identityStatus}
                 mono
               />
               <MetricRow
-                label="Latencia media (turno)"
+                label="Mean latency (turn)"
                 value={`${result.latencyMs} ms`}
                 mono
               />
@@ -155,7 +155,7 @@ export function LeaderboardDetailDialog({
                 mono
               />
               <MetricRow
-                label="Falsas interrupciones"
+                label="False interruptions"
                 value={`${result.falseInterruptions.toFixed(1)}%`}
                 mono
               />

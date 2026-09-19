@@ -64,11 +64,11 @@ export type ClinicGraph = {
 
 /** One colour per tone, named by the backend. A component never picks its own. */
 export const TONE: Record<GraphTone, { ink: string; label: string }> = {
-  human: { ink: "#1d211f", label: "Personas de la clínica" },
-  discipline: { ink: "#4c534e", label: "Especialidad" },
-  person: { ink: "#1d211f", label: "Profesional" },
-  place: { ink: "#806b36", label: "Sede" },
-  failure: { ink: "#e76432", label: "Final sin cita" },
+  human: { ink: "#1d211f", label: "Clinic people" },
+  discipline: { ink: "#4c534e", label: "Specialty" },
+  person: { ink: "#1d211f", label: "Clinician" },
+  place: { ink: "#806b36", label: "Site" },
+  failure: { ink: "#e76432", label: "No-booking ending" },
 };
 
 /**
@@ -80,9 +80,9 @@ export const URGENCY: Record<
   Urgency,
   { ink: string; word: string; width: number; dash?: string; order: number }
 > = {
-  now: { ink: "#d92d20", word: "Ahora", width: 2.6, order: 0 },
-  today: { ink: "#806b36", word: "Hoy", width: 1.7, order: 1 },
-  queue: { ink: "#8d948e", word: "En cola", width: 1.2, dash: "5 5", order: 2 },
+  now: { ink: "#d92d20", word: "Now", width: 2.6, order: 0 },
+  today: { ink: "#806b36", word: "Today", width: 1.7, order: 1 },
+  queue: { ink: "#8d948e", word: "Queued", width: 1.2, dash: "5 5", order: 2 },
 };
 
 export const EDGE_INK: Record<EdgeKind, string> = {
@@ -93,10 +93,10 @@ export const EDGE_INK: Record<EdgeKind, string> = {
 };
 
 export const EDGE_WORD: Record<EdgeKind, string> = {
-  works_at: "pasa consulta en",
-  covers: "cubre",
-  escalates_to: "avisa a",
-  covers_for: "sustituye a",
+  works_at: "sees patients at",
+  covers: "covers",
+  escalates_to: "alerts",
+  covers_for: "covers for",
 };
 
 /* ------------------------------------------------------------------- words */
@@ -107,33 +107,33 @@ export const EDGE_WORD: Record<EdgeKind, string> = {
  * an unknown specialty falls back to the catalogue's own label rather than
  * disappearing.
  */
-const SPECIALTY_ES: Record<string, string> = {
-  general_practice: "Medicina general",
-  paediatrics: "Pediatría",
-  dermatology: "Dermatología",
-  orthopaedics: "Traumatología",
-  gynaecology: "Ginecología",
-  physiotherapy: "Fisioterapia",
+const SPECIALTY_EN: Record<string, string> = {
+  general_practice: "General practice",
+  paediatrics: "Paediatrics",
+  dermatology: "Dermatology",
+  orthopaedics: "Orthopaedics",
+  gynaecology: "Gynaecology",
+  physiotherapy: "Physiotherapy",
 };
 
 export function specialtyLabel(node: GraphNode): string {
-  return SPECIALTY_ES[node.id.replace(/^sp:/, "")] ?? node.label;
+  return SPECIALTY_EN[node.id.replace(/^sp:/, "")] ?? node.label;
 }
 
 export function specialtyLabelById(specialtyId: string, fallback: string): string {
-  return SPECIALTY_ES[specialtyId] ?? fallback;
+  return SPECIALTY_EN[specialtyId] ?? fallback;
 }
 
-const LANGUAGE_ES: Record<string, string> = {
-  es: "Español",
-  en: "Inglés",
-  ca: "Catalán",
-  gl: "Gallego",
-  eu: "Euskera",
+const LANGUAGE_EN: Record<string, string> = {
+  es: "Spanish",
+  en: "English",
+  ca: "Catalan",
+  gl: "Galician",
+  eu: "Basque",
 };
 
 export function languageName(code: string): string {
-  return LANGUAGE_ES[code] ?? code.toUpperCase();
+  return LANGUAGE_EN[code] ?? code.toUpperCase();
 }
 
 /* ------------------------------------------------------------------ layout */
@@ -264,18 +264,18 @@ export function layoutCatalogue(graph: ClinicGraph): CatalogueLayout {
     width: CANVAS_WIDTH,
     height,
     columns: [
-      { id: "site", title: "Sedes", note: `${sites.length} centros`, x: xSites, w: CAT_COL_W },
+      { id: "site", title: "Sites", note: `${sites.length} centres`, x: xSites, w: CAT_COL_W },
       {
         id: "provider",
-        title: "Profesionales",
-        note: `${providers.length} médicos`,
+        title: "Clinicians",
+        note: `${providers.length} doctors`,
         x: xProviders,
         w: CAT_COL_W,
       },
       {
         id: "specialty",
-        title: "Especialidades",
-        note: `${specialties.length} disciplinas`,
+        title: "Specialties",
+        note: `${specialties.length} disciplines`,
         x: xSpecialties,
         w: CAT_COL_W,
       },

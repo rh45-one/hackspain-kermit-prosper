@@ -40,10 +40,10 @@ export function DoctorDirectory({ embedded = false }: { embedded?: boolean }) {
   return (
     <div>
       {!embedded ? (
-        <PageHeader kicker="Staff Directory" title="Directorio médico">
-          Catálogo Prosper: 6 especialidades · Centro / Norte / Sur. Roster
-          provisional hasta cablear GET /api/v1/providers (12 en la clínica
-          oficial). Ausencias disparan la Recovery Campaign.
+        <PageHeader kicker="Staff Directory" title="Clinician directory">
+          Prosper catalogue: 6 specialties · Centro / Norte / Sur. Provisional
+          roster until GET /api/v1/providers is wired (12 in the official
+          clinic). Absences fire the Recovery Campaign.
         </PageHeader>
       ) : null}
 
@@ -59,13 +59,13 @@ export function DoctorDirectory({ embedded = false }: { embedded?: boolean }) {
                 Doctor
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Especialidad
+                Specialty
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Estado
+                Status
               </TableHead>
               <TableHead className="w-[72px] text-right font-heading text-[13px] text-quiet">
-                Acciones
+                Actions
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -111,7 +111,7 @@ export function DoctorDirectory({ embedded = false }: { embedded?: boolean }) {
                           variant="ghost"
                           size="icon-sm"
                           className="text-quiet hover:text-graphite"
-                          aria-label={`Acciones de ${doctor.name}`}
+                          aria-label={`Actions for ${doctor.name}`}
                         >
                           <MoreHorizontal className="size-4" />
                         </Button>
@@ -124,7 +124,7 @@ export function DoctorDirectory({ embedded = false }: { embedded?: boolean }) {
                           className="font-heading text-[13px]"
                           disabled
                         >
-                          Ver ficha
+                          View record
                         </DropdownMenuItem>
                         <DropdownMenuSeparator className="bg-mist" />
                         <DropdownMenuItem
@@ -133,7 +133,7 @@ export function DoctorDirectory({ embedded = false }: { embedded?: boolean }) {
                           disabled={doctor.status === "absent"}
                           onSelect={() => setAbsenceTarget(doctor)}
                         >
-                          Marcar como Ausente
+                          Mark as absent
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

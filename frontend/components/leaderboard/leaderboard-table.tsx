@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { displayCode } from "@/lib/arena-business";
 import type { EvaluationResult } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -29,12 +30,12 @@ export function LeaderboardTable({ results }: LeaderboardTableProps) {
         <Table>
           <TableHeader>
             <TableRow className="border-mist hover:bg-transparent">
-              <TableHead className="text-quiet">Escenario</TableHead>
-              <TableHead className="text-quiet">Idioma</TableHead>
-              <TableHead className="text-quiet">Nivel Triaje</TableHead>
-              <TableHead className="text-quiet">Estado Final</TableHead>
-              <TableHead className="text-quiet">Código Auditoría</TableHead>
-              <TableHead className="text-quiet">Veredicto</TableHead>
+              <TableHead className="text-quiet">Scenario</TableHead>
+              <TableHead className="text-quiet">Language</TableHead>
+              <TableHead className="text-quiet">Triage Level</TableHead>
+              <TableHead className="text-quiet">Final State</TableHead>
+              <TableHead className="text-quiet">Audit Code</TableHead>
+              <TableHead className="text-quiet">Verdict</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -54,7 +55,7 @@ export function LeaderboardTable({ results }: LeaderboardTableProps) {
                   }}
                   tabIndex={0}
                   role="button"
-                  aria-label={`Abrir diagnóstico de ${row.personaScenario}`}
+                  aria-label={`Open diagnosis for ${row.personaScenario}`}
                 >
                   <TableCell>
                     <div className="font-heading text-graphite">
@@ -74,12 +75,12 @@ export function LeaderboardTable({ results }: LeaderboardTableProps) {
                   </TableCell>
                   <TableCell>
                     <code className="rounded-md bg-fog px-2 py-1 font-mono text-[11px] text-steel whitespace-normal">
-                      {row.actionOutcome}
+                      {displayCode(row.actionOutcome)}
                     </code>
                   </TableCell>
                   <TableCell>
                     <code className="font-mono text-[11px] tracking-tight text-graphite">
-                      {row.auditCode}
+                      {displayCode(row.auditCode)}
                     </code>
                   </TableCell>
                   <TableCell>

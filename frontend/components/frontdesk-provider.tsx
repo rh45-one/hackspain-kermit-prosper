@@ -128,7 +128,7 @@ export function FrontdeskProvider({
         setConnectionError(null);
       } catch (error) {
         if (controller.signal.aborted) return;
-        setConnectionError(error instanceof Error ? error.message : "Error de conexión");
+        setConnectionError(error instanceof Error ? error.message : "Connection error");
         setCalls([]);
       } finally {
         if (!controller.signal.aborted) {
@@ -167,7 +167,7 @@ export function FrontdeskProvider({
         setClinicError(null);
       } catch (error) {
         if (controller.signal.aborted) return;
-        setClinicError(error instanceof Error ? error.message : "Error de conexión");
+        setClinicError(error instanceof Error ? error.message : "Connection error");
         setPatients([]);
         setAppointments([]);
       } finally {
@@ -214,12 +214,12 @@ export function FrontdeskProvider({
   }, [controlByCall, demo]);
 
   const saveSettings = useCallback((next: AgentSettings) => {
-    if (!demo) return { ok: false as const, error: "Configura el agente mediante backend/.env" };
+    if (!demo) return { ok: false as const, error: "Configure the agent via backend/.env" };
     const url = next.tunnelUrl.trim();
     if (url && !isValidTunnelUrl(url)) {
       return {
         ok: false as const,
-        error: "El túnel debe empezar por wss:// o ws://",
+        error: "The tunnel must start with wss:// or ws://",
       };
     }
     setSettings({ ...next, tunnelUrl: url });
@@ -257,7 +257,7 @@ export function FrontdeskProvider({
                 ...call.transcript,
                 {
                   role: "agent",
-                  text: "Le paso con recepción. Un momento.",
+                  text: "Putting you through to reception. One moment.",
                   turn: "speaking",
                 },
               ],
@@ -299,11 +299,11 @@ export function FrontdeskProvider({
   const sendOperatorMessage = useCallback(
     (callId: string, text: string): { ok: true } | { ok: false; error: string } => {
       if (!callId || !text.trim()) {
-        return { ok: false, error: "Escribe un mensaje antes de enviar." };
+        return { ok: false, error: "Write a message before sending." };
       }
       return {
         ok: false,
-        error: "El envío manual no está conectado al agente. El borrador se conserva.",
+        error: "Manual send is not wired to the agent. The draft is kept.",
       };
     },
     [],
@@ -325,8 +325,8 @@ export function FrontdeskProvider({
       addKnowledgeSource,
       calls,
       activeCount,
-      capacityLabel: demo ? `${activeCount}/${CALL_CAPACITY} líneas ocupadas` :
-        `${activeCount} llamadas abiertas`,
+      capacityLabel: demo ? `${activeCount}/${CALL_CAPACITY} lines busy` :
+        `${activeCount} open calls`,
       tunnelConfigured: isValidTunnelUrl(settings.tunnelUrl),
       takeControl,
       controlFor,

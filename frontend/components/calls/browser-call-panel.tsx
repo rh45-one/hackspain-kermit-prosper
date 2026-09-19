@@ -19,14 +19,14 @@ export function BrowserCallPanel() {
         <div>
           <p className="mb-3 flex items-center gap-2.5 font-heading text-[11px] leading-none tracking-[0.08em] text-brass uppercase">
             <span className="h-px w-5 bg-brass/70" />
-            Tu línea
+            Your line
           </p>
           <h2 className="font-heading text-[clamp(1.6rem,3vw,2.25rem)] leading-none tracking-[-0.04em] text-graphite">
-            Habla con recepción.
+            Talk to reception.
           </h2>
           <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-steel sm:text-[15px]">
-            Llama desde el navegador. No se envían acciones a Prosper: es la misma
-            tubería de voz, en modo prueba.
+            Call from the browser. Nothing is sent to Prosper: same voice
+            pipe, in test mode.
           </p>
         </div>
         <p
@@ -59,7 +59,7 @@ export function BrowserCallPanel() {
           className={cn(inCall && "border-[#d8caa9] text-destructive hover:bg-ash")}
         >
           {inCall ? <PhoneOff className="size-4" /> : <Phone className="size-4" />}
-          {inCall ? "Colgar" : "Iniciar llamada"}
+          {inCall ? "Hang up" : "Start call"}
         </Button>
         <p
           className={cn(
@@ -75,7 +75,7 @@ export function BrowserCallPanel() {
         </p>
       </div>
       <p className="mt-3 text-[12px] text-quiet">
-        Solicitaremos acceso al micrófono al iniciar. Hace falta HTTPS o localhost.
+        We will ask for the microphone when you start. HTTPS or localhost required.
       </p>
     </section>
   );

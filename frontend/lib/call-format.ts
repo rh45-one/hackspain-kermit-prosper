@@ -15,16 +15,16 @@ export function formatElapsed(startedAt: string, nowMs: number): string {
 
 export function callDisplayName(name: string | undefined): string {
   const trimmed = name?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : "Persona desconocida";
+  return trimmed && trimmed.length > 0 ? trimmed : "Unknown caller";
 }
 
 /** Human label for the phone line (hides socket ids like sock-04). */
 export function callLineLabel(socketId: string): string {
   const digits = socketId.replace(/\D/g, "");
   if (digits.length > 0) {
-    return `Línea ${Number.parseInt(digits, 10)}`;
+    return `Line ${Number.parseInt(digits, 10)}`;
   }
-  return "Línea de recepción";
+  return "Reception line";
 }
 
 export function callCardElementId(callId: string): string {

@@ -31,6 +31,12 @@ export const STATUS_STYLES: Record<LiveStatus, string> = {
   "sin cierre": "bg-ash text-quiet",
 };
 
+export const STATUS_LABELS: Record<LiveStatus, string> = {
+  "en curso": "In progress",
+  finalizada: "Ended",
+  "sin cierre": "No close",
+};
+
 /** "1 min 46 s", or a dash when the call never recorded a close. */
 export function formatDuration(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds)) {
@@ -48,7 +54,7 @@ export function clockTime(iso: string): string {
   if (!Number.isFinite(parsed)) {
     return "—";
   }
-  return new Intl.DateTimeFormat("es-ES", {
+  return new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Madrid",

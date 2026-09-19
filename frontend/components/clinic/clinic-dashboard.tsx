@@ -29,9 +29,9 @@ export function ClinicDashboard() {
 
   return (
     <div>
-      <PageHeader kicker="Clínica Arenal" title="Clínica">
-        Pacientes, directorio médico y agenda en un solo sitio. Marca ausencias
-        del personal para iniciar la Recovery Campaign.
+      <PageHeader kicker="Clínica Arenal" title="Clinic">
+        Patients, staff directory, and diary in one place. Mark staff absences
+        to start the Recovery Campaign.
       </PageHeader>
 
       <Tabs
@@ -48,21 +48,21 @@ export function ClinicDashboard() {
         >
           <TabsTrigger
             value="patients"
-            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm"
+            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm data-active:hover:text-canvas-white"
           >
-            Pacientes
+            Patients
           </TabsTrigger>
           <TabsTrigger
             value="staff"
-            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm"
+            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm data-active:hover:text-canvas-white"
           >
-            Personal
+            Staff
           </TabsTrigger>
           <TabsTrigger
             value="calendar"
-            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm"
+            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm data-active:hover:text-canvas-white"
           >
-            Agenda
+            Diary
           </TabsTrigger>
         </TabsList>
 

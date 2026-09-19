@@ -19,9 +19,9 @@ export function GraphUnavailable({ detail, hint }: { detail: string; hint: strin
 
   return (
     <div>
-      <PageHeader kicker="Clínica Arenal" title="El grafo de la clínica">
-        Esta pantalla dibuja la clínica entera y las dieciocho formas en que una llamada puede
-        acabar sin cita. Ahora mismo el agente no la está sirviendo.
+      <PageHeader kicker="Clínica Arenal" title="The clinic graph">
+        This screen draws the whole clinic and the eighteen ways a call can
+        end without a booking. Right now the agent is not serving it.
       </PageHeader>
       <div className="max-w-[46rem] rounded-[16px] border border-ember-orange/30 bg-ivory px-5 py-5">
         <p className="font-heading text-[15px] text-graphite">{detail}</p>
@@ -32,7 +32,7 @@ export function GraphUnavailable({ detail, hint }: { detail: string; hint: strin
           disabled={pending}
           className="mt-4 cursor-pointer rounded-full bg-graphite px-4 py-2 font-heading text-[13px] text-canvas-white transition-opacity duration-200 disabled:opacity-50"
         >
-          {pending ? "Volviendo a preguntar…" : "Reintentar"}
+          {pending ? "Asking again…" : "Retry"}
         </button>
       </div>
     </div>

@@ -74,7 +74,7 @@ function LoadChart() {
       viewBox={`0 0 ${innerWidth + padX * 2} ${height + 20}`}
       className="h-auto w-full touch-pan-y overflow-visible outline-none"
       role="img"
-      aria-label="Llamadas a la vez y gestiones cerradas por hora"
+      aria-label="Concurrent calls and closed actions by hour"
       onPointerMove={(event) => setHoveredIndex(pointFromPointer(event))}
       onPointerLeave={() => setHoveredIndex(null)}
       onPointerDown={(event) => {
@@ -127,7 +127,7 @@ function LoadChart() {
           style={{ "--point-index": index } as CSSProperties}
           tabIndex={0}
           role="button"
-          aria-label={`${point.hour}:00, ${point.sockets} llamadas a la vez, ${point.submissions} gestiones cerradas`}
+          aria-label={`${point.hour}:00, ${point.sockets} calls at once, ${point.submissions} actions closed`}
           onFocus={() => setPinnedIndex(index)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -163,7 +163,7 @@ function LoadChart() {
               {selected.hour}:00
             </text>
             <text x="9" y="29" fill={QUIET} fontSize="8">
-              {selected.sockets} a la vez · {selected.submissions} cerradas
+              {selected.sockets} at once · {selected.submissions} closed
             </text>
           </g>
         </g>
@@ -194,9 +194,9 @@ function CapacityRing({ active }: { active: number }) {
   return (
     <svg
       viewBox="0 0 120 120"
-      className="mx-auto size-36"
+      className="mx-auto block size-36"
       role="img"
-      aria-label="Líneas de recepción ocupadas"
+      aria-label="Busy reception lines"
     >
       <circle
         cx="60"
@@ -231,7 +231,7 @@ function CapacityRing({ active }: { active: number }) {
         {active}/{CALL_CAPACITY}
       </text>
       <text x="60" y="74" textAnchor="middle" fill={QUIET} fontSize="9">
-        líneas
+        lines
       </text>
     </svg>
   );
@@ -299,15 +299,15 @@ export function ObservatoryCharts() {
   );
   const liveMetrics = [
     [
-      "Gestiones enviadas bien",
+      "Actions sent cleanly",
       summaries.reduce((sum, item) => sum + (item.submissions_succeeded ?? 0), 0),
     ],
     [
-      "Gestiones con error",
+      "Failed actions",
       summaries.reduce((sum, item) => sum + (item.submissions_failed ?? 0), 0),
     ],
     [
-      "Llamadas con plan B",
+      "Calls with a plan B",
       summaries.filter((item) => item.fallback_action_added).length,
     ],
   ] as const;
@@ -321,7 +321,7 @@ export function ObservatoryCharts() {
               key={label}
               className="surface rounded-[18px] p-[var(--card-padding)]"
             >
-              <dt className="text-[13px] text-quiet">{label} · últimos registros</dt>
+              <dt className="text-[13px] text-quiet">{label} · latest records</dt>
               <dd className="mt-2 font-heading text-2xl">{value}</dd>
             </div>
           ))}
@@ -330,12 +330,12 @@ export function ObservatoryCharts() {
       <div data-visible="true" className="grid gap-4 lg:grid-cols-3">
         <article className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-3">
           <p className="font-heading text-[17px] text-graphite">
-            Actividad del día
+            Today&apos;s activity
           </p>
           <p className="mt-1 text-[13px] text-steel">
-            Cuántas personas están al teléfono a la vez{" "}
-            <span className="text-ember-orange">—</span> y cuántas gestiones
-            se cierran <span className="text-brass">- -</span> · hora de Madrid
+            How many people are on the phone at once{" "}
+            <span className="text-ember-orange">—</span> and how many actions
+            close <span className="text-brass">- -</span> · Madrid time
           </p>
           <div className="mt-7">
             <LoadChart />
@@ -343,19 +343,21 @@ export function ObservatoryCharts() {
         </article>
         <article className="surface rounded-[18px] p-[var(--card-padding)]">
           <p className="font-heading text-[17px] text-graphite">
-            Líneas ocupadas
+            Busy lines
           </p>
-          <CapacityRing active={activeCount} />
+          <div className="flex justify-center">
+            <CapacityRing active={activeCount} />
+          </div>
           <p className="text-center text-[13px] text-steel">
-            Hay sitio para {CALL_CAPACITY} llamadas a la vez
+            Room for {CALL_CAPACITY} calls at once
           </p>
         </article>
         <article className="surface rounded-[18px] p-[var(--card-padding)] lg:col-span-2">
           <p className="font-heading text-[17px] text-graphite">
-            Cómo acabaron las gestiones
+            How the actions ended
           </p>
           <p className="mt-1 text-[13px] text-steel">
-            Lo que el asistente dejó registrado al colgar.
+            What the assistant logged when it hung up.
           </p>
           <div className="mt-7">
             <OutcomeBars />

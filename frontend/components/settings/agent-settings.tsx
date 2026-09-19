@@ -51,8 +51,8 @@ export function AgentSettingsForm() {
   if (!demo) {
     return (
       <div>
-        <PageHeader kicker="Configuración" title="Agente integrado">
-          Esto es lo que el agente está ejecutando ahora mismo, leído del propio proceso.
+        <PageHeader kicker="Settings" title="Wired agent">
+          This is what the agent is running right now, read from the process itself.
         </PageHeader>
         <LiveAgentReport />
       </div>
@@ -68,14 +68,14 @@ export function AgentSettingsForm() {
     }
     setDraft(next);
     setError(null);
-    setMessage("Configuración guardada.");
+    setMessage("Settings saved.");
   }
 
   return (
     <div>
-      <PageHeader kicker="Conexión y voz" title="Configuración del agente">
-        Túnel público, voz Pipecat y orígenes de conocimiento. Nada de esto
-        muta el EHR.
+      <PageHeader kicker="Connection and voice" title="Agent settings">
+        Public tunnel, Pipecat voice, and knowledge sources. None of this
+        mutates the EHR.
       </PageHeader>
 
       <section
@@ -84,11 +84,11 @@ export function AgentSettingsForm() {
         className="mb-[var(--section-gap)] rounded-[18px] border border-mist bg-ash/70 p-[var(--card-padding)] shadow-[var(--shadow-sm)]"
       >
         <h2 className="font-heading text-[clamp(1.65rem,4vw,2.25rem)] text-graphite">
-          Túnel y conexión
+          Tunnel and connection
         </h2>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-steel sm:text-[16px]">
-          La URL pública que el harness marca en Settings → Integration. Debe
-          ser WebSocket.
+          The public URL the harness dials in Settings → Integration. It must
+          be WebSocket.
         </p>
         <div className="mt-8 max-w-2xl space-y-5">
           <div className="space-y-2">
@@ -107,17 +107,17 @@ export function AgentSettingsForm() {
             />
             {!tunnelOk ? (
               <p className="text-[13px] text-ember-orange">
-                Rechazado: el valor tiene que empezar por wss:// o ws://
+                Rejected: the value must start with wss:// or ws://
               </p>
             ) : (
               <p className="text-[13px] text-quiet">
-                Incluye la ruta /ws. https:// no es válido.
+                Include the /ws path. https:// is not valid.
               </p>
             )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="headers" className="font-heading text-[13px] text-quiet">
-              Cabeceras de autorización
+              Auth headers
             </Label>
             <Textarea
               id="headers"
@@ -134,22 +134,22 @@ export function AgentSettingsForm() {
             />
           </div>
           <Button onClick={() => persist(draft)} disabled={!tunnelOk}>
-            Guardar conexión
+            Save connection
           </Button>
         </div>
       </section>
 
       <section data-reveal="" className="mb-[var(--section-gap)]">
         <h2 className="font-heading text-[clamp(1.65rem,4vw,2.25rem)] text-graphite">
-          Personalidad y voz
+          Personality and voice
         </h2>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-steel sm:text-[16px]">
-          Presets del pipeline Pipecat. El cerebro sigue siendo Helmcode glm5.3.
+          Pipecat pipeline presets. The brain is still Helmcode glm5.3.
         </p>
         <div className="mt-8 max-w-2xl space-y-5">
           <div className="space-y-2">
             <Label className="font-heading text-[13px] text-quiet">
-              Proveedor de voz
+              Voice provider
             </Label>
             <Select
               value={draft.voicePipeline}
@@ -175,7 +175,7 @@ export function AgentSettingsForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="prompt" className="font-heading text-[13px] text-quiet">
-              Prompt de comportamiento
+              Behaviour prompt
             </Label>
             <Textarea
               id="prompt"
@@ -194,7 +194,7 @@ export function AgentSettingsForm() {
             variant="outline"
             onClick={() => persist({ ...settings, ...draft })}
           >
-            Guardar voz y prompt
+            Save voice and prompt
           </Button>
         </div>
       </section>
@@ -204,11 +204,11 @@ export function AgentSettingsForm() {
         className="surface rounded-[18px] p-[var(--card-padding)]"
       >
         <h2 className="font-heading text-[clamp(1.65rem,4vw,2.25rem)] text-graphite">
-          Contexto de datos
+          Data context
         </h2>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-steel sm:text-[16px]">
-          CSV, cadena SQL o sincronización con la API de la clínica. Solo se
-          registra el origen; no hay escritura al EHR.
+          CSV, SQL string, or clinic API sync. Only the source is recorded;
+          there is no write to the EHR.
         </p>
         <ul className="mt-8 space-y-4">
           {settings.knowledgeSources.map((source) => (
@@ -248,7 +248,7 @@ export function AgentSettingsForm() {
                 addKnowledgeSource({
                   kind: "csv" satisfies KnowledgeKind,
                   label: file.name,
-                  detail: `${Math.round(file.size / 1024)} KB cargados en recepción`,
+                  detail: `${Math.round(file.size / 1024)} KB loaded at reception`,
                   syncedAt: new Date().toISOString(),
                 });
                 event.target.value = "";
@@ -272,19 +272,19 @@ export function AgentSettingsForm() {
               onClick={() => {
                 addKnowledgeSource({
                   kind: "sql",
-                  label: "Conexión SQL",
+                  label: "SQL connection",
                   detail: sql.trim(),
                   syncedAt: null,
                 });
                 setSql("");
               }}
             >
-              Registrar
+              Register
             </Button>
           </div>
           <div className="space-y-2">
             <Label htmlFor="api" className="font-heading text-[13px] text-quiet">
-              API clínica
+              Clinic API
             </Label>
             <Input
               id="api"
@@ -299,19 +299,19 @@ export function AgentSettingsForm() {
               onClick={() => {
                 addKnowledgeSource({
                   kind: "api",
-                  label: "Sincronización API",
+                  label: "API sync",
                   detail: apiUrl.trim(),
                   syncedAt: new Date().toISOString(),
                 });
                 setApiUrl("");
               }}
             >
-              Sincronizar
+              Sync
             </Button>
           </div>
         </div>
         <p className="mt-10 text-[13px] text-quiet">
-          Los orígenes se guardan en este navegador. No hay escritura al EHR.
+          Sources are stored in this browser. There is no write to the EHR.
         </p>
         {error ? (
           <p className="animate-in fade-in slide-in-from-bottom-1 mt-3 text-ember-orange duration-200">

@@ -32,14 +32,14 @@ export function ProblemCatalog({
   return (
     <div>
       {!embedded ? (
-        <PageHeader kicker="Ensayo" title="Problemas">
-          Dieciocho problemas, diecisiete puntuados. Esta pantalla es la hoja de
-          ruta: los cerrados se leen, no se marcan. Pronto no llama al harness.
+        <PageHeader kicker="Drill" title="Problems">
+          Eighteen problems, seventeen scored. This screen is the roadmap:
+          closed ones are read, not marked. Pronto does not call the harness.
         </PageHeader>
       ) : (
         <p className="mb-6 max-w-2xl text-[14px] leading-relaxed text-steel sm:mb-8">
-          Dieciocho problemas, diecisiete puntuados. Hoja de ruta del harness:
-          los cerrados se leen, no se marcan. Pronto no llama al harness.
+          Eighteen problems, seventeen scored. Harness roadmap: closed ones
+          are read, not marked. Pronto does not call the harness.
         </p>
       )}
 
@@ -48,11 +48,11 @@ export function ProblemCatalog({
         data-delay={embedded ? undefined : "1"}
         className="mb-8 font-heading text-[13px] text-steel sm:mb-10"
       >
-        <span className="text-brass">{openCount} abiertos</span>
+        <span className="text-brass">{openCount} open</span>
         <span className="mx-2 text-mist">·</span>
-        {PROBLEMS.length} en el roster
+        {PROBLEMS.length} on the roster
         <span className="mx-2 text-mist">·</span>
-        sin botón Call
+        no Call button
       </p>
 
       <section
@@ -67,19 +67,19 @@ export function ProblemCatalog({
                 #
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Problema
+                Problem
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
                 problem_id
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Públicos
+                Public
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Peso
+                Weight
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Estado
+                Status
               </TableHead>
               <TableHead />
             </TableRow>
@@ -107,9 +107,9 @@ export function ProblemCatalog({
                         problem.open ? "text-graphite" : "text-steel",
                       )}
                     >
-                      {problem.titleEs}
+                      {problem.title}
                     </div>
-                    <div className="text-[13px] text-quiet">{problem.title}</div>
+                    <div className="text-[13px] text-quiet">{problem.titleEs}</div>
                   </Link>
                 </TableCell>
                 <TableCell className="font-mono text-[13px] text-steel">
@@ -120,7 +120,7 @@ export function ProblemCatalog({
                 </TableCell>
                 <TableCell>
                   {problem.diagnostic || problem.weight == null ? (
-                    <span className="text-[13px] text-quiet">diagnóstico</span>
+                    <span className="text-[13px] text-quiet">diagnostic</span>
                   ) : (
                     <span className="font-heading text-graphite">
                       {problem.weight}
@@ -136,12 +136,12 @@ export function ProblemCatalog({
                         : "border-0 bg-ash text-quiet"
                     }
                   >
-                    {problem.open ? "Abierto" : "Cerrado"}
+                    {problem.open ? "Open" : "Closed"}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   <Button variant="outline" size="sm" asChild>
-                    <Link href={`/problems/${problem.id}`}>Ver</Link>
+                    <Link href={`/problems/${problem.id}`}>View</Link>
                   </Button>
                 </TableCell>
               </TableRow>

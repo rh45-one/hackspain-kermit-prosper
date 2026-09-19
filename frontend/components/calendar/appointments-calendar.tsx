@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { es } from "react-day-picker/locale";
+import { enGB } from "react-day-picker/locale";
 import { fromZonedTime } from "date-fns-tz";
 
 import { useFrontdesk } from "@/components/frontdesk-provider";
@@ -129,10 +129,10 @@ export function AppointmentsCalendar({
     <div>
       {!embedded ? (
         <div className="mb-10 flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
-          <PageHeader className="mb-0" kicker="Agenda Europe/Madrid" title="Calendario de citas">
-            {demo ? "Agenda simulada con resultados del agente." :
-              "Citas de los pacientes de la última búsqueda en Directorio, actualizadas cada minuto. Busca un paciente en Directorio para cargar su agenda. Los envíos del agente no modifican este EHR."}
-            {" "}Horas en Europe/Madrid.
+          <PageHeader className="mb-0" kicker="Diary Europe/Madrid" title="Appointment calendar">
+            {demo ? "Simulated diary with agent outcomes." :
+              "Appointments for patients from the last Directory search, refreshed every minute. Search a patient in Directory to load their diary. Agent submissions do not mutate this EHR."}
+            {" "}Times in Europe/Madrid.
           </PageHeader>
           <Legend />
         </div>
@@ -140,8 +140,8 @@ export function AppointmentsCalendar({
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-2xl text-[14px] leading-relaxed text-steel">
             {demo
-              ? "Agenda simulada con resultados del agente. Horas en Europe/Madrid."
-              : "Citas de la última búsqueda en Pacientes, actualizadas cada minuto. Horas en Europe/Madrid."}
+              ? "Simulated diary with agent outcomes. Times in Europe/Madrid."
+              : "Appointments from the last Patients search, refreshed every minute. Times in Europe/Madrid."}
           </p>
           <Legend />
         </div>
@@ -171,7 +171,7 @@ export function AppointmentsCalendar({
           variant="ghost"
           onClick={() => setDayKey(madridDayKey(new Date()))}
         >
-          Hoy
+          Today
         </Button>
         <Tabs className="ml-auto" value={mode} onValueChange={(value) => setMode(value as "week" | "day")}>
           <TabsList className="bg-ash">
@@ -179,13 +179,13 @@ export function AppointmentsCalendar({
               value="week"
               className="font-heading data-active:bg-canvas-white"
             >
-              Semana
+              Week
             </TabsTrigger>
             <TabsTrigger
               value="day"
               className="font-heading data-active:bg-canvas-white"
             >
-              Día
+              Day
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -278,11 +278,11 @@ export function AppointmentsCalendar({
           data-delay={embedded ? undefined : "2"}
           className="surface h-fit rounded-[18px] p-5 sm:p-7"
         >
-          <p className="mb-4 font-heading text-[16px] text-graphite">Ir a fecha</p>
+          <p className="mb-4 font-heading text-[16px] text-graphite">Go to date</p>
           <Calendar
             className="bg-transparent p-0"
             mode="single"
-            locale={es}
+            locale={enGB}
             weekStartsOn={1}
             selected={selectedDate}
             onSelect={(date) => {

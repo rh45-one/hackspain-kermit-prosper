@@ -78,10 +78,10 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
   return (
     <div>
       {!embedded ? (
-        <PageHeader kicker="Directorio" title="Pacientes">
-          {demo ? "Directorio simulado." : "Directorio de la clínica configurada en el backend."}
-          {demo ? " Filtra los resultados por nombre o DNI/NIE." :
-            " Busca por nombre y apellido o DNI/NIE completo. La búsqueda se actualiza cada minuto."}
+        <PageHeader kicker="Directory" title="Patients">
+          {demo ? "Simulated directory." : "Directory of the clinic configured in the backend."}
+          {demo ? " Filter results by name or DNI/NIE." :
+            " Search by first and last name or a full DNI/NIE. The search refreshes every minute."}
         </PageHeader>
       ) : null}
 
@@ -99,15 +99,15 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
         data-delay={embedded ? undefined : "1"}
         className="mb-8 rounded-[18px] border border-mist bg-ash/70 p-[var(--card-padding)] shadow-[var(--shadow-sm)] sm:mb-10"
       >
-        <p className="font-heading text-[17px] text-graphite">{demo ? "Filtros" : "Buscar pacientes"}</p>
+        <p className="font-heading text-[17px] text-graphite">{demo ? "Filters" : "Search patients"}</p>
         <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-steel sm:text-[15px]">
-          {demo ? "Nombre completo y documento. Una letra incorrecta no lanza búsqueda." :
-            "Introduce nombre y al menos un apellido, o un documento completo. Si completas el documento, la búsqueda usa ese identificador."}
+          {demo ? "Full name and ID. A wrong letter does not fire a search." :
+            "Enter a first name and at least one surname, or a full ID. If you complete the ID, the search uses that identifier."}
         </p>
         <div className="mt-7 grid gap-5 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="name" className="font-heading text-[13px] text-quiet">
-              Nombre completo
+              Full name
             </Label>
             <Input
               id="name"
@@ -120,7 +120,7 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="dni" className="font-heading text-[13px] text-quiet">
-              Documento (DNI/NIE)
+              ID (DNI/NIE)
             </Label>
             <Input
               id="dni"
@@ -135,7 +135,7 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
               <p className="text-[13px] text-ember-orange">{parsedId.error}</p>
             ) : (
               <p className="text-[13px] text-quiet">
-                Incluye la letra de control. NIE con prefijo X, Y o Z.
+                Include the control letter. NIE with prefix X, Y, or Z.
               </p>
             )}
           </div>
@@ -143,13 +143,13 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
         {!demo && (
           <div className="mt-5 flex flex-wrap items-center gap-4">
             <Button type="submit" disabled={!canSearch || clinicLoading}>
-              {clinicLoading ? "Buscando…" : "Buscar pacientes"}
+              {clinicLoading ? "Searching…" : "Search patients"}
             </Button>
             <p role="status" className="text-[14px] text-steel">
-              {clinicLoading ? "Consultando pacientes y citas…" : clinicError
+              {clinicLoading ? "Querying patients and appointments…" : clinicError
                 ? clinicError
-                : clinicSearched ? `${patients.length} pacientes en la última búsqueda.`
-                : "Realiza una búsqueda para consultar pacientes y sus citas."}
+                : clinicSearched ? `${patients.length} patients in the last search.`
+                : "Run a search to look up patients and their appointments."}
             </p>
           </div>
         )}
@@ -164,19 +164,19 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
           <TableHeader>
             <TableRow className="border-mist hover:bg-transparent">
               <TableHead className="font-heading text-[13px] text-quiet">
-                Paciente
+                Patient
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
                 DNI/NIE
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Nacimiento
+                Date of birth
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Póliza
+                Plan
               </TableHead>
               <TableHead className="font-heading text-[13px] text-quiet">
-                Volantes
+                Referrals
               </TableHead>
               <TableHead />
             </TableRow>
@@ -185,12 +185,12 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
             {rows.length === 0 ? (
               <TableRow className="border-mist hover:bg-transparent">
                 <TableCell colSpan={6} className="text-quiet">
-                  {!demo ? (clinicLoading ? "Buscando pacientes…" : clinicError
-                    ? "No se pudo completar la búsqueda. Puedes volver a intentarlo."
-                    : !clinicSearched ? "Busca un paciente por nombre y apellido o documento completo."
-                    : "Ningún paciente coincide con la última búsqueda.")
-                    : parsedId.status === "invalid" ? "Filtro de documento rechazado."
-                    : "Ningún paciente coincide."}
+                  {!demo ? (clinicLoading ? "Searching patients…" : clinicError
+                    ? "The search could not complete. You can try again."
+                    : !clinicSearched ? "Search for a patient by first and last name or a full ID."
+                    : "No patient matches the last search.")
+                    : parsedId.status === "invalid" ? "ID filter rejected."
+                    : "No patient matches."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -226,7 +226,7 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
                       variant="outline"
                       onClick={() => setSelected(patient)}
                     >
-                      Ficha
+                      Record
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -251,7 +251,7 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
               {demo ? (
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="font-heading text-[13px] text-quiet">
-                    Triaje recepción
+                    Reception triage
                   </span>
                   <Badge
                     variant="outline"
@@ -260,7 +260,7 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
                     {TRIAGE_STYLES[triage].label}
                   </Badge>
                   <span className="text-[13px] text-quiet">
-                    Derivado de la última acción simulada del agente, no es un score clínico.
+                    Derived from the agent&apos;s last simulated action, not a clinical score.
                   </span>
                 </div>
               ) : null}
@@ -269,11 +269,11 @@ export function PatientDirectory({ embedded = false }: { embedded?: boolean }) {
               </p>
               <div>
                 <h3 className="mb-5 font-heading text-[18px] text-graphite">
-                  {demo ? "Historial de citas" : "Citas registradas en la clínica"}
+                  {demo ? "Appointment history" : "Appointments on file at the clinic"}
                 </h3>
                 <div className="space-y-4">
                   {history.length === 0 ? (
-                    <p className="text-steel">Sin citas registradas.</p>
+                    <p className="text-steel">No appointments on file.</p>
                   ) : (
                     history.map((item) => {
                       const outcome = outcomeFromAction(item.action);

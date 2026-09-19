@@ -4,7 +4,7 @@ export async function GET(
 ) {
   const { resource } = await context.params;
   if (resource !== "calls" && resource !== "clinic") {
-    return Response.json({ detail: "Recurso desconocido" }, { status: 404 });
+    return Response.json({ detail: "Unknown resource" }, { status: 404 });
   }
   const base = process.env.AGENT_HTTP_BASE_URL ?? "http://127.0.0.1:7860";
   const query = new URLSearchParams();
@@ -29,7 +29,7 @@ export async function GET(
     );
     if (upstream.status === 401 || upstream.status === 403) {
       return Response.json(
-        { detail: "El panel no tiene acceso al agente. Revisa OPS_TOKEN." },
+        { detail: "The desk cannot reach the agent. Check OPS_TOKEN." },
         { status: upstream.status, headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -39,7 +39,7 @@ export async function GET(
     });
   } catch {
     return Response.json(
-      { detail: "Backend no disponible. Comprueba AGENT_HTTP_BASE_URL y agent.serve." },
+      { detail: "Backend unavailable. Check AGENT_HTTP_BASE_URL and agent.serve." },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }

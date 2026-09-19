@@ -58,12 +58,12 @@ export function DoctorAbsenceDialog({
       <DialogContent className="max-w-md border-mist bg-canvas-white sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-heading text-[clamp(1.5rem,4vw,1.85rem)] font-medium tracking-[-0.04em] text-graphite">
-            Marcar como ausente
+            Mark as absent
           </DialogTitle>
           <DialogDescription className="text-[14px] leading-relaxed text-steel">
             {doctor
-              ? `Inicia la Recovery Campaign para reubicar citas de ${doctor.name}.`
-              : "Selecciona un médico del directorio."}
+              ? `Start the Recovery Campaign to rehome appointments for ${doctor.name}.`
+              : "Select a clinician from the directory."}
           </DialogDescription>
         </DialogHeader>
 
@@ -87,7 +87,7 @@ export function DoctorAbsenceDialog({
                   htmlFor="absence-start"
                   className="font-heading text-[13px] text-quiet"
                 >
-                  Desde
+                  From
                 </Label>
                 <Input
                   id="absence-start"
@@ -102,7 +102,7 @@ export function DoctorAbsenceDialog({
                   htmlFor="absence-end"
                   className="font-heading text-[13px] text-quiet"
                 >
-                  Hasta
+                  Until
                 </Label>
                 <Input
                   id="absence-end"
@@ -119,12 +119,12 @@ export function DoctorAbsenceDialog({
                 htmlFor="absence-reason"
                 className="font-heading text-[13px] text-quiet"
               >
-                Motivo
+                Reason
               </Label>
               <Textarea
                 id="absence-reason"
                 value={reason}
-                placeholder="Baja, congreso, permiso…"
+                placeholder="Leave, conference, time off…"
                 className="min-h-24 border-mist bg-white"
                 onChange={(event) => setReason(event.target.value)}
               />
@@ -138,7 +138,7 @@ export function DoctorAbsenceDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            Cancelar
+            Cancel
           </Button>
           <Button
             type="button"
@@ -150,13 +150,13 @@ export function DoctorAbsenceDialog({
                 doctorId: doctor.id,
                 start,
                 end,
-                reason: reason.trim() || "Ausencia programada",
+                reason: reason.trim() || "Scheduled absence",
               });
               reset();
               onOpenChange(false);
             }}
           >
-            Confirmar ausencia
+            Confirm absence
           </Button>
         </DialogFooter>
       </DialogContent>

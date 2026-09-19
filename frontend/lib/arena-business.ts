@@ -4,44 +4,44 @@ import {
   type EvaluationResult,
 } from "@/lib/mock-data";
 
-/** Texto claro para dirección / recepción (sin jerga de motor). */
+/** Plain wording for directors / reception (no engine jargon). */
 export type BusinessCase = {
   id: string;
   situation: string;
   assistantDid: string;
   clinicMeaning: string;
   ok: boolean;
-  resultLabel: "Correcto" | "A revisar";
+  resultLabel: "Correct" | "Review";
   urgencyLabel: string;
 };
 
 const OUTCOME_PLAIN: Record<string, string> = {
-  EMERGENCY_DIVERTED: "Derivó la llamada a personal humano por posible emergencia",
+  EMERGENCY_DIVERTED: "Handed the call to a person for a possible emergency",
   "REFUSED: SPECIALTY_REQUIRES_GP_REFERRAL":
-    "No reservó: la especialidad exige volante del médico de cabecera",
+    "Did not book: the specialty requires a GP referral",
   BOOKED_WITHOUT_SECOND_FACTOR:
-    "Reservó una cita sin confirmar bien la identidad del llamante",
+    "Booked an appointment without confirming the caller’s identity",
   ESCALATED_TO_HUMAN_FALSE_POSITIVE:
-    "Pasó la llamada a una persona sin que hubiera una urgencia real",
+    "Passed the call to a person when there was no real emergency",
 };
 
 const AUDIT_PLAIN: Record<string, string> = {
   MEDICAL_EMERGENCY:
-    "El protocolo de urgencia se aplicó y la clínica evita demorar un caso crítico.",
+    "The emergency protocol ran, so the clinic does not delay a critical case.",
   SPECIALTY_REQUIRES_GP_REFERRAL:
-    "Se respetó la política de citas: no se salta el circuito de derivación.",
+    "Appointment policy was respected: the referral path was not skipped.",
   CALLER_NOT_AUTHORISED:
-    "Hay riesgo de reserva a nombre equivocado o acceso indebido a datos.",
+    "Risk of booking under the wrong name or leaking a record.",
   OUT_OF_SCOPE:
-    "La petición salió del alcance de recepción; conviene revisar el guion.",
+    "The request left reception’s scope; the script should be reviewed.",
 };
 
 const URGENCY_PLAIN: Record<EvaluationResult["triageLevel"], string> = {
-  LEVEL_I: "Urgencia máxima",
-  LEVEL_II: "Alta prioridad",
-  LEVEL_III: "Prioridad media",
-  LEVEL_IV: "Rutina con reglas",
-  LEVEL_V: "Consulta ligera",
+  LEVEL_I: "Highest urgency",
+  LEVEL_II: "High priority",
+  LEVEL_III: "Medium priority",
+  LEVEL_IV: "Routine with rules",
+  LEVEL_V: "Light enquiry",
 };
 
 function plainOutcome(outcome: string): string {
@@ -58,7 +58,7 @@ function plainOutcome(outcome: string): string {
 function plainAudit(code: string): string {
   return (
     AUDIT_PLAIN[code] ??
-    "Revisar el caso con el equipo de recepción para confirmar el criterio."
+    "Review the case with reception to confirm the call."
   );
 }
 
@@ -70,7 +70,7 @@ export function toBusinessCase(result: EvaluationResult): BusinessCase {
     assistantDid: plainOutcome(result.actionOutcome),
     clinicMeaning: plainAudit(result.auditCode),
     ok,
-    resultLabel: ok ? "Correcto" : "A revisar",
+    resultLabel: ok ? "Correct" : "Review",
     urgencyLabel: URGENCY_PLAIN[result.triageLevel],
   };
 }
@@ -87,17 +87,17 @@ export function businessSummary(results: EvaluationResult[]) {
   let responseLabel: string;
   let responseHint: string;
   if (p90 === 0) {
-    responseLabel = "Sin datos";
-    responseHint = "Aún no hay evaluaciones.";
+    responseLabel = "No data";
+    responseHint = "No evaluations yet.";
   } else if (p90 <= 700) {
-    responseLabel = "Ágil";
-    responseHint = "La espera en línea se percibe fluida.";
+    responseLabel = "Snappy";
+    responseHint = "Hold time feels fluid.";
   } else if (p90 <= LATENCY_PENALTY_MS) {
-    responseLabel = "Aceptable";
-    responseHint = "Dentro del margen que tolera un llamante.";
+    responseLabel = "Acceptable";
+    responseHint = "Inside what a caller will tolerate.";
   } else {
-    responseLabel = "Lenta";
-    responseHint = "Los llamantes pueden cortar o insistir.";
+    responseLabel = "Slow";
+    responseHint = "Callers may hang up or press.";
   }
 
   return {
@@ -110,9 +110,14 @@ export function businessSummary(results: EvaluationResult[]) {
     responseHint,
     headline:
       failed === 0
-        ? "La recepción automática está respondiendo como se espera."
+        ? "Automatic reception is answering as expected."
         : failed === 1
-          ? "Hay 1 caso que conviene revisar con el equipo."
-          : `Hay ${failed} casos que conviene revisar con el equipo.`,
+          ? "There is 1 case the team should review."
+          : `There are ${failed} cases the team should review.`,
   };
+}
+
+/** Stored codes stay underscored; the desk shows them with spaces. */
+export function displayCode(value: string): string {
+  return value.replaceAll("_", " ");
 }

@@ -8,24 +8,24 @@ import type {
 } from "@/lib/types";
 
 export const REASON_LABELS: Record<OutcomeReason, string> = {
-  not_eligible_age: "Edad fuera de ventana",
-  referral_required: "Hace falta volante",
-  provider_not_in_network: "Profesional fuera de red",
-  specialty_not_covered: "Especialidad no cubierta",
-  location_not_covered: "Centro no cubierto",
-  insurer_referral_required: "Volante exigido por la póliza",
-  allowance_exhausted: "Cupo agotado",
-  provider_on_leave: "Profesional de baja",
-  location_hours: "Fuera de horario del centro",
-  type_not_offered: "Tipo no ofertado",
-  patient_history: "Historial del paciente",
-  no_availability: "Sin hueco",
-  clinic_closed: "Clínica cerrada",
-  patient_not_found: "Paciente no encontrado",
-  provider_not_found: "Profesional no encontrado",
-  caller_not_authorised: "Llamante no autorizado",
-  out_of_scope: "Fuera de alcance",
-  medical_emergency: "Urgencia médica",
+  not_eligible_age: "Age outside the window",
+  referral_required: "Referral required",
+  provider_not_in_network: "Clinician out of network",
+  specialty_not_covered: "Specialty not covered",
+  location_not_covered: "Site not covered",
+  insurer_referral_required: "Referral required by the plan",
+  allowance_exhausted: "Allowance exhausted",
+  provider_on_leave: "Clinician on leave",
+  location_hours: "Outside site hours",
+  type_not_offered: "Type not offered",
+  patient_history: "Patient history",
+  no_availability: "No slot",
+  clinic_closed: "Clinic closed",
+  patient_not_found: "Patient not found",
+  provider_not_found: "Clinician not found",
+  caller_not_authorised: "Caller not authorised",
+  out_of_scope: "Out of scope",
+  medical_emergency: "Medical emergency",
 };
 
 export function outcomeFromAction(action: ActionVerb): ReceptionOutcome {
@@ -46,22 +46,22 @@ export const OUTCOME_STYLES: Record<
   { label: string; className: string; chip: string }
 > = {
   BOOKED: {
-    label: "Cita agendada",
+    label: "Booked",
     className: "border-0 bg-ivory text-brass",
     chip: "border-0 bg-ivory text-graphite",
   },
   CANCELLED: {
-    label: "Cita cancelada",
+    label: "Cancelled",
     className: "border-0 bg-mist text-graphite",
     chip: "border-0 bg-mist text-graphite",
   },
   REFUSED: {
-    label: "No se pudo agendar",
+    label: "Could not book",
     className: "border-0 bg-ash text-quiet",
     chip: "border-0 bg-ash text-steel",
   },
   DIVERTED: {
-    label: "Pasada a una persona",
+    label: "Handed to a person",
     className: "border-0 bg-ivory text-ember-orange",
     chip: "border-0 bg-ivory text-ember-orange",
   },
@@ -101,19 +101,19 @@ export const TRIAGE_STYLES: Record<
   { label: string; className: string }
 > = {
   rutinario: {
-    label: "Rutinario",
+    label: "Routine",
     className: "border-0 bg-ivory text-brass",
   },
   vigilancia: {
-    label: "Vigilancia",
+    label: "Watch",
     className: "border-0 bg-ash text-steel",
   },
   desviado: {
-    label: "Desviado",
+    label: "Diverted",
     className: "border-0 bg-ivory text-ember-orange",
   },
   urgente: {
-    label: "Urgente",
+    label: "Urgent",
     className: "border-0 bg-graphite text-canvas-white",
   },
 };

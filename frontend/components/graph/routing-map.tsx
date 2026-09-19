@@ -43,7 +43,7 @@ export function RoutingMap({ layout, filtered, active, lit, onHover, onSelect }:
     <GraphCanvas
       width={layout.width}
       height={layout.height}
-      label="Las dieciocho formas de acabar sin cita y quién se entera de cada una"
+      label="The eighteen ways to end without a booking, and who hears about each"
     >
       <svg
         className="absolute inset-0 overflow-visible"
@@ -84,18 +84,18 @@ export function RoutingMap({ layout, filtered, active, lit, onHover, onSelect }:
       <ColumnTitle
         x={0}
         w={layout.reasons[0]?.w ?? 330}
-        title="Qué puede fallar"
-        note={`${plural(layout.reasons.length, "final", "finales")} sin cita`}
+        title="What can fail"
+        note={`${plural(layout.reasons.length, "ending", "endings")} without a booking`}
       />
       <ColumnTitle
         x={layout.roles[0]?.x ?? 0}
         w={layout.roles[0]?.w ?? 286}
-        title="Quién responde"
+        title="Who answers"
         // Los dos números, porque el de arriba solo mentía por omisión: once
         // reciben rutas y el resto entra cuando una de esas once no puede, y
         // decir once a secas hacía que faltaran treinta y dos personas que
         // estaban dibujadas ahí al lado.
-        note={`${layout.roles.length + layout.chain.length} personas · ${layout.roles.length} reciben rutas`}
+        note={`${layout.roles.length + layout.chain.length} people · ${layout.roles.length} receive routes`}
         align="right"
       />
 
@@ -192,9 +192,9 @@ export function RoutingMap({ layout, filtered, active, lit, onHover, onSelect }:
             <span className="mt-1.5 font-mono text-[10.5px] tracking-[0.02em] text-quiet">
               {orphan
                 ? filtered
-                  ? "nada con este filtro"
-                  : "no le llega ninguna razón"
-                : `${plural(seat.incoming.length, "ruta", "rutas")} · ${breakdown(seat.incoming)}`}
+                  ? "nothing with this filter"
+                  : "no reason reaches them"
+                : `${plural(seat.incoming.length, "route", "routes")} · ${breakdown(seat.incoming)}`}
             </span>
           </button>
         );

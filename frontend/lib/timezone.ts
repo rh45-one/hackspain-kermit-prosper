@@ -1,5 +1,5 @@
 import { addDays } from "date-fns";
-import { es } from "date-fns/locale";
+import { enGB } from "date-fns/locale";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 import { CLINIC_TZ } from "@/lib/types";
@@ -19,7 +19,7 @@ export function formatMadrid(
   pattern: string,
 ): string {
   const date = typeof instant === "string" ? new Date(instant) : instant;
-  return formatInTimeZone(date, CLINIC_TZ, pattern, { locale: es });
+  return formatInTimeZone(date, CLINIC_TZ, pattern, { locale: enGB });
 }
 
 export function addMadridDays(dayKey: string, days: number): string {
@@ -44,7 +44,7 @@ export function minutesFromMidnightMadrid(instant: Date | string): number {
 }
 
 export function weekdayShortEs(dayKey: string): string {
-  return formatInTimeZone(madridNoon(dayKey), CLINIC_TZ, "EEE", { locale: es });
+  return formatInTimeZone(madridNoon(dayKey), CLINIC_TZ, "EEE", { locale: enGB });
 }
 
 export function dayNumber(dayKey: string): string {
@@ -52,5 +52,5 @@ export function dayNumber(dayKey: string): string {
 }
 
 export function monthTitleEs(dayKey: string): string {
-  return formatInTimeZone(madridNoon(dayKey), CLINIC_TZ, "LLLL yyyy", { locale: es });
+  return formatInTimeZone(madridNoon(dayKey), CLINIC_TZ, "LLLL yyyy", { locale: enGB });
 }

@@ -20,44 +20,44 @@ export function ArenaBusinessSummary({ results }: ArenaBusinessSummaryProps) {
   const cards: SummaryCard[] = [
     {
       id: "pass-rate",
-      label: "Pruebas superadas",
+      label: "Tests passed",
       value: `${summary.passRate}%`,
-      hint: `${summary.passed} de ${summary.total} escenarios`,
+      hint: `${summary.passed} of ${summary.total} scenarios`,
       tone: summary.passRate >= 80 ? "good" : summary.passRate >= 50 ? "neutral" : "warn",
     },
     {
       id: "review",
-      label: "Casos a revisar",
+      label: "Cases to review",
       value: String(summary.failed),
       hint:
         summary.failed === 0
-          ? "Ningún fallo en esta ronda"
-          : "Requieren criterio de recepción",
+          ? "No misses in this round"
+          : "Need a reception call",
       tone: summary.failed === 0 ? "good" : "warn",
     },
     {
       id: "response",
-      label: "Tiempo de respuesta",
+      label: "Response time",
       value: summary.responseLabel,
       hint: summary.responseHint,
       tone:
-        summary.responseLabel === "Ágil"
+        summary.responseLabel === "Snappy"
           ? "good"
-          : summary.responseLabel === "Lenta"
+          : summary.responseLabel === "Slow"
             ? "warn"
             : "neutral",
     },
     {
       id: "rules",
-      label: "Cumplimiento de reglas",
+      label: "Rule compliance",
       value: `${summary.rulesOkRate}%`,
-      hint: "Sin saltarse políticas de la clínica",
+      hint: "Without skipping clinic policy",
       tone: summary.rulesOkRate === 100 ? "good" : "warn",
     },
   ];
 
   return (
-    <section aria-label="Resumen para dirección">
+    <section aria-label="Summary for directors">
       <p className="mb-6 max-w-2xl text-[15px] leading-relaxed text-steel sm:mb-8 sm:text-[16px]">
         {summary.headline}
       </p>

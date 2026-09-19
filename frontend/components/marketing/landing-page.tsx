@@ -9,9 +9,9 @@ import { AuroraField } from "@/components/marketing/aurora-field";
 import { CallPreview } from "@/components/marketing/call-preview";
 
 const STATS = [
-  { value: "12", label: "facultativos en agenda" },
-  { value: "Madrid", label: "hora de la clínica" },
-  { value: "Verbo", label: "nunca un hueco inventado" },
+  { value: "12", label: "clinicians on the book" },
+  { value: "Madrid", label: "clinic time, always" },
+  { value: "A verb", label: "never a ghost slot" },
 ] as const;
 
 export function LandingPage() {
@@ -29,7 +29,7 @@ export function LandingPage() {
           href="/login"
           className="rounded-full border border-white/12 bg-white/5 px-4 py-2 font-heading text-[13px] text-canvas-white/90 backdrop-blur-md transition-[background-color,transform] duration-200 hover:bg-white/10 active:scale-[0.98]"
         >
-          Entrar
+          Sign in
         </Link>
       </header>
 
@@ -40,27 +40,27 @@ export function LandingPage() {
             className="mb-5 flex items-center gap-2.5 font-heading text-[11px] tracking-[0.14em] text-brass uppercase"
           >
             <span className="h-px w-7 bg-brass/80" />
-            Recepción con voz
+            Voice at the desk
           </p>
           <h1
             data-reveal=""
             data-delay="1"
-            className="max-w-[14ch] font-heading text-[clamp(2.6rem,6.4vw,5.2rem)] leading-[0.92] tracking-[-0.06em] text-canvas-white"
+            className="max-w-[20ch] overflow-visible pb-[0.16em] font-heading text-[clamp(2.6rem,6.4vw,5.2rem)] leading-[1.04] tracking-[-0.06em] text-canvas-white"
           >
-            El teléfono,{" "}
-            <span className="hero-gradient-word">resuelto.</span>
+            Booked{" "}
+            <span className="hero-gradient-word">before you hang up.</span>
           </h1>
           <p
             data-reveal=""
             data-delay="2"
             className="mt-6 max-w-[34rem] text-[17px] leading-relaxed text-white/62 sm:text-[18px]"
           >
-            Pronto coge la llamada de Clínica Arenal, identifica el caso y deja
-            la gestión hecha. El modelo no improvisa un hueco: envía un verbo.
+            Pronto takes Clínica Arenal&apos;s line, names the case, and files
+            the action. The model never invents a slot — it sends a verb.
           </p>
           <div data-reveal="" data-delay="3" className="mt-9 flex flex-wrap items-center gap-4">
             <Link href="/login" className="cta-glow group inline-flex items-center gap-2 rounded-full bg-canvas-white px-6 py-3.5 font-heading text-[15px] tracking-[-0.02em] text-graphite transition-transform duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]">
-              Entrar al panel
+              Open the desk
               <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
             </Link>
             <p className="text-[13px] text-white/40">Clínica Arenal · HackSpain 2026</p>

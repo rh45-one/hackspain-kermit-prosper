@@ -21,9 +21,9 @@ import type { ClinicGraph } from "@/lib/graph";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "El grafo de la clínica · Clínica Arenal",
+  title: "The clinic graph · Clínica Arenal",
   description:
-    "Quién existe, quién cubre qué, quién está dónde y las dieciocho formas en que una llamada puede acabar sin cita.",
+    "Who exists, who covers what, who is where, and the eighteen ways a call can end without a booking.",
 };
 
 /**
@@ -68,44 +68,44 @@ async function loadGraph(): Promise<Loaded> {
   } catch {
     return {
       ok: false,
-      detail: "No se puede hablar con el agente.",
-      hint: `El panel ha intentado ${base}/ops/api/live/graph y no ha contestado nadie. Revisa AGENT_HTTP_BASE_URL.`,
+      detail: "Cannot talk to the agent.",
+      hint: `The panel tried ${base}/ops/api/live/graph and nobody answered. Check AGENT_HTTP_BASE_URL.`,
     };
   }
 
   if (response.status === 401 || response.status === 403) {
     return {
       ok: false,
-      detail: "El agente ha contestado, pero no nos deja entrar.",
-      hint: "La consola de operaciones exige la cabecera X-Ops-Token. Revisa que OPS_TOKEN en el panel sea el mismo secreto que el del despliegue.",
+      detail: "The agent answered, but it will not let us in.",
+      hint: "The ops console requires the X-Ops-Token header. Check that OPS_TOKEN in the panel is the same secret as the deployment.",
     };
   }
   if (response.status === 404) {
     return {
       ok: false,
-      detail: "Ese agente todavía no sirve el grafo.",
-      hint: "GET /ops/api/live/graph devuelve 404, así que el despliegue al que apunta el panel es anterior a esa ruta. Vuelve a desplegar el backend o apunta AGENT_HTTP_BASE_URL a uno que ya la tenga.",
+      detail: "That agent does not serve the graph yet.",
+      hint: "GET /ops/api/live/graph returns 404, so the deployment the panel points at is older than that route. Redeploy the backend or point AGENT_HTTP_BASE_URL at one that already has it.",
     };
   }
   if (!response.ok) {
     return {
       ok: false,
-      detail: `El agente ha respondido ${response.status}.`,
-      hint: "La ruta existe pero ha fallado al construir el grafo. Mira los logs del backend.",
+      detail: `The agent replied ${response.status}.`,
+      hint: "The route exists but failed to build the graph. Check the backend logs.",
     };
   }
 
   try {
     const graph = (await response.json()) as ClinicGraph;
     if (!Array.isArray(graph?.nodes) || !Array.isArray(graph?.escalations)) {
-      throw new Error("forma inesperada");
+      throw new Error("unexpected shape");
     }
     return { ok: true, graph };
   } catch {
     return {
       ok: false,
-      detail: "El agente ha respondido algo que no es un grafo.",
-      hint: "Se esperaban `nodes`, `edges`, `escalations` y `legend`. El contrato lo define el backend en agent/ops/graph.py.",
+      detail: "The agent replied with something that is not a graph.",
+      hint: "Expected `nodes`, `edges`, `escalations`, and `legend`. The contract is defined by the backend in agent/ops/graph.py.",
     };
   }
 }

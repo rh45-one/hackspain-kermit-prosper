@@ -19,14 +19,14 @@ const interTight = Inter_Tight({
 export const metadata: Metadata = {
   title: "Pronto · Clínica Arenal",
   description:
-    "Panel de Pronto para la recepción de Clínica Arenal.",
+    "Pronto desk for Clínica Arenal reception.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection();
   return (
     <html
-      lang="es"
+      lang="en"
       className={`${inter.variable} ${interTight.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background font-sans text-graphite">

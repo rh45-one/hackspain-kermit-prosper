@@ -55,8 +55,8 @@ export function GraphInspector({
     return (
       <div className="rounded-[14px] border border-dashed border-mist bg-fog/70 px-5 py-4">
         <p className="text-[13px] leading-[1.6] text-quiet">
-          Pasa por encima de cualquier nodo para encenderle los vecinos, o pincha uno para
-          dejarlo fijo y leer aquí de dónde sale cada dato.
+          Hover any node to light its neighbours, or click one to pin it and
+          read here where each fact comes from.
         </p>
       </div>
     );
@@ -95,7 +95,7 @@ export function GraphInspector({
         ) : null}
         {node.kind === "provider" && !node.available ? (
           <span className="rounded-full bg-ember-orange/12 px-2 py-0.5 font-heading text-[10px] tracking-[0.06em] text-ember-orange uppercase">
-            De baja
+            On leave
           </span>
         ) : null}
       </div>
@@ -105,25 +105,25 @@ export function GraphInspector({
       <dl className="mt-3 divide-y divide-mist/70">
         {node.kind === "provider" ? (
           <>
-            <Row term="Especialidad">
+            <Row term="Specialty">
               {specialtyLabelById(node.meta.specialty_id ?? "", node.detail || "—")}
             </Row>
-            <Row term="Pasa consulta">{names(graph, sites)}</Row>
-            <Row term="Idiomas">
+            <Row term="Sees patients at">{names(graph, sites)}</Row>
+            <Row term="Languages">
               {(node.meta.languages ?? []).map(languageName).join(", ") || "—"}
             </Row>
-            <Row term="Se le puede citar">
+            <Row term="Can be booked">
               {node.available ? (
-                "Sí."
+                "Yes."
               ) : (
                 <>
-                  No: está de baja, así que ninguna petición puede acabar en él.{" "}
+                  No: they are on leave, so no request can end with them.{" "}
                   <button
                     type="button"
                     onClick={() => onPick("reason:provider_on_leave")}
                     className="ember-underline cursor-pointer text-ember-orange"
                   >
-                    Ver a quién se avisa
+                    See who is alerted
                   </button>
                 </>
               )}
@@ -133,15 +133,15 @@ export function GraphInspector({
 
         {node.kind === "site" ? (
           <>
-            <Row term="Dirección">{node.detail || "—"}</Row>
-            <Row term="Profesionales">{names(graph, workedBy)}</Row>
+            <Row term="Address">{node.detail || "—"}</Row>
+            <Row term="Clinicians">{names(graph, workedBy)}</Row>
           </>
         ) : null}
 
         {node.kind === "specialty" ? (
           <>
-            <Row term="La cubren">{names(graph, workedBy)}</Row>
-            <Row term="Nombre API">
+            <Row term="Covered by">{names(graph, workedBy)}</Row>
+            <Row term="API name">
               <span className="font-mono text-[12px]">{node.label}</span>
             </Row>
           </>
@@ -149,10 +149,10 @@ export function GraphInspector({
 
         {node.kind === "role" ? (
           <>
-            <Row term="Qué hace">{node.detail || "—"}</Row>
-            <Row term="Qué le llega">
+            <Row term="What they do">{node.detail || "—"}</Row>
+            <Row term="What reaches them">
               {listens.length === 0 ? (
-                "Nada. Está declarado en el grafo y hoy no hay ninguna razón enrutada a él."
+                "Nothing. They are declared on the graph and today no reason is routed to them."
               ) : (
                 <ul className="space-y-1">
                   {listens.map((item) => {
@@ -185,8 +185,8 @@ export function GraphInspector({
 
         {escalation ? (
           <>
-            <Row term="Qué ha pasado">{escalation.detail}</Row>
-            <Row term="Quién se entera">
+            <Row term="What happened">{escalation.detail}</Row>
+            <Row term="Who hears">
               <button
                 type="button"
                 onClick={() => onPick(escalation.target)}
@@ -195,13 +195,13 @@ export function GraphInspector({
                 {graph.nodes.find((n) => n.id === escalation.target)?.label ?? escalation.target}
               </button>
             </Row>
-            <Row term="Con qué prisa">
+            <Row term="How fast">
               {graph.legend.urgency[escalation.urgency] ?? escalation.urgency}
             </Row>
             {escalation.reason === "provider_on_leave" ? (
-              <Row term="Hoy afecta a">
+              <Row term="Affects today">
                 {away.length === 0
-                  ? "A nadie: todos los médicos del catálogo están disponibles."
+                  ? "Nobody: every clinician in the catalogue is available."
                   : away.map((doctor, index) => (
                       <span key={doctor.id}>
                         {index > 0 ? ", " : ""}
@@ -216,7 +216,7 @@ export function GraphInspector({
                     ))}
               </Row>
             ) : null}
-            <Row term="Id del reto">
+            <Row term="Challenge id">
               <span className="font-mono text-[12px]">{escalation.reason}</span>
             </Row>
           </>
@@ -225,8 +225,8 @@ export function GraphInspector({
 
       {node.kind === "role" && listens.length > 0 ? (
         <p className="mt-3 text-[12px] leading-[1.5] text-quiet">
-          {plural(listens.length, "razón", "razones")} de las {graph.escalations.length} acaban
-          aquí.
+          {plural(listens.length, "reason", "reasons")} of {graph.escalations.length} end
+          here.
         </p>
       ) : null}
     </div>

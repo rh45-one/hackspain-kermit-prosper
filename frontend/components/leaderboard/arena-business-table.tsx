@@ -24,16 +24,16 @@ export function ArenaBusinessTable({ results }: ArenaBusinessTableProps) {
         <TableHeader>
           <TableRow className="border-mist hover:bg-transparent">
             <TableHead className="w-[22%] whitespace-normal text-quiet">
-              Situación
+              Situation
             </TableHead>
             <TableHead className="w-[32%] whitespace-normal text-quiet">
-              Qué hizo el asistente
+              What the assistant did
             </TableHead>
             <TableHead className="w-[32%] whitespace-normal text-quiet">
-              Para la clínica
+              For the clinic
             </TableHead>
             <TableHead className="w-[14%] whitespace-normal text-quiet">
-              Resultado
+              Result
             </TableHead>
           </TableRow>
         </TableHeader>

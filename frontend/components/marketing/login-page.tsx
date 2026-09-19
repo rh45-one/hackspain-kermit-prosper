@@ -35,7 +35,7 @@ export function LoginPage() {
     const email = String(data.get("email") ?? "").trim();
     const password = String(data.get("password") ?? "");
     if (!email || !password) {
-      setError("Introduce correo y contraseña.");
+      setError("Enter an email and a password.");
       return;
     }
     setError("");
@@ -70,7 +70,7 @@ export function LoginPage() {
     <div className="marketing-shell">
       <AuroraField />
       <header className="relative z-10 mx-auto flex w-full max-w-[1240px] items-center justify-between px-6 py-6 sm:px-10">
-        <Link href="/" className="flex items-center gap-3 text-canvas-white" aria-label="Pronto, volver">
+        <Link href="/" className="flex items-center gap-3 text-canvas-white" aria-label="Pronto, back home">
           <span className="grid size-10 place-items-center rounded-[12px] bg-canvas-white text-graphite">
             <ProntoMark className="size-[22px]" />
           </span>
@@ -87,15 +87,14 @@ export function LoginPage() {
             Clínica Arenal
           </p>
           <h1 className="mt-3 font-heading text-[2.1rem] leading-none tracking-[-0.05em] text-canvas-white">
-            Entrar al panel
+            Sign in to the desk
           </h1>
           <p className="mt-3 text-[14px] leading-relaxed text-white/55">
-            Recepción en vivo, llamadas y resultados. Con la cuenta de tu
-            clínica.
+            Live reception, calls, and results. With your clinic account.
           </p>
 
           <label className="mt-8 block font-heading text-[12px] text-white/70" htmlFor="email">
-            Correo
+            Email
           </label>
           <input
             id="email"
@@ -103,12 +102,12 @@ export function LoginPage() {
             type="text"
             autoComplete="username"
             required
-            placeholder="recepcion@arenal.es"
+            placeholder="desk@arenal.es"
             className="mt-2 h-12 w-full rounded-[12px] border border-white/12 bg-white/5 px-3.5 text-[15px] text-canvas-white outline-none placeholder:text-white/30 transition-[border-color,box-shadow] focus-visible:border-brass/70 focus-visible:ring-3 focus-visible:ring-brass/20"
           />
 
           <label className="mt-5 block font-heading text-[12px] text-white/70" htmlFor="password">
-            Contraseña
+            Password
           </label>
           <input
             id="password"
@@ -133,7 +132,7 @@ export function LoginPage() {
               "cta-glow group mt-8 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-canvas-white font-heading text-[15px] tracking-[-0.02em] text-graphite transition-transform duration-200 hover:-translate-y-0.5 active:scale-[0.98] disabled:translate-y-0 disabled:opacity-70",
             )}
           >
-            {busy ? "Entrando…" : "Continuar"}
+            {busy ? "Opening…" : "Continue"}
             <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
           </button>
         </form>

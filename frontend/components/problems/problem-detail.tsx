@@ -16,9 +16,9 @@ import type { ProblemBrief } from "@/lib/problems/types";
 
 function publicCaseEmptyCopy(problem: ProblemBrief): string {
   if (problem.diagnostic) {
-    return "The Switchboard no tiene casos propios: el burst público son cinco líneas del problema 1. No se inventan respuestas aquí.";
+    return "The Switchboard has no cases of its own: the public burst is five lines of problem 1. Answers are not invented here.";
   }
-  return `Los ${problem.publicCaseCount} casos públicos oficiales no están vendored. No se inventan respuestas. Este problema no se marca desde Pronto.`;
+  return `The ${problem.publicCaseCount} official public cases are not vendored. Answers are not invented. This problem is not marked from Pronto.`;
 }
 
 export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
@@ -29,11 +29,11 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
         className="mb-8 inline-flex items-center gap-2 font-heading text-[13px] text-steel transition-colors hover:text-graphite"
       >
         <ArrowLeft className="size-3.5" strokeWidth={1.8} />
-        Volver a Resultados · Problemas
+        Back to Results · Problems
       </Link>
 
-      <PageHeader kicker={`Problema ${problem.number}`} title={problem.titleEs}>
-        {problem.title}
+      <PageHeader kicker={`Problem ${problem.number}`} title={problem.title}>
+        {problem.titleEs}
       </PageHeader>
 
       <div className="mb-10 flex flex-wrap items-center gap-3">
@@ -45,22 +45,22 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
               : "border-0 bg-ash text-quiet"
           }
         >
-          {problem.open ? "Abierto" : "Cerrado"}
+          {problem.open ? "Open" : "Closed"}
         </Badge>
         {problem.diagnostic || problem.weight == null ? (
           <Badge variant="outline" className="border-0 bg-ash text-steel">
-            Diagnóstico · no puntúa
+            Diagnostic · does not score
           </Badge>
         ) : (
           <Badge variant="outline" className="border-0 bg-ivory text-graphite">
-            Peso {problem.weight}
+            Weight {problem.weight}
           </Badge>
         )}
         <span className="font-mono text-[13px] text-quiet">{problem.id}</span>
         <span className="text-[13px] text-quiet">
           {problem.diagnostic && problem.burstSize
-            ? `0 casos propios · 1 burst de ${problem.burstSize}`
-            : `${problem.publicCaseCount} casos públicos`}
+            ? `0 own cases · 1 burst of ${problem.burstSize}`
+            : `${problem.publicCaseCount} public cases`}
         </span>
       </div>
 
@@ -68,7 +68,7 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
         data-reveal=""
         className="surface mb-8 rounded-[18px] p-[var(--card-padding)]"
       >
-        <h2 className="font-heading text-[18px] text-graphite">Resumen</h2>
+        <h2 className="font-heading text-[18px] text-graphite">Summary</h2>
         <p className="mt-4 max-w-[46rem] text-[16px] leading-[1.65] text-steel">
           {problem.summary}
         </p>
@@ -80,7 +80,7 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
         className="surface mb-8 rounded-[18px] p-[var(--card-padding)]"
       >
         <h2 className="font-heading text-[18px] text-graphite">
-          Respuesta esperada
+          Expected answer
         </h2>
         <div className="mt-4 flex flex-wrap gap-2">
           {problem.answerVerbs.map((verb) => {
@@ -107,10 +107,10 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
           className="surface mb-8 rounded-[18px] p-[var(--card-padding)]"
         >
           <h2 className="font-heading text-[18px] text-graphite">
-            Vocabulario de fechas
+            Date vocabulary
           </h2>
           <p className="mt-2 text-[14px] text-quiet">
-            Publicado y fijo. Cada caso usa una frase de esta lista.
+            Published and fixed. Each case uses a phrase from this list.
           </p>
           <ul className="mt-5 flex flex-wrap gap-2">
             {problem.datePhrases.map((phrase) => (
@@ -134,21 +134,21 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
         >
           <div className="px-[var(--card-padding)] pt-[var(--card-padding)]">
             <h2 className="font-heading text-[18px] text-graphite">
-              Encaminamiento de triaje
+              Triage routing
             </h2>
             <p className="mt-2 mb-5 text-[14px] text-quiet">
-              Quejas publicadas. El tipo de cita sigue el historial, no el
-              síntoma.
+              Published complaints. Appointment type follows history, not the
+              symptom.
             </p>
           </div>
           <Table>
             <TableHeader>
               <TableRow className="border-mist hover:bg-transparent">
                 <TableHead className="font-heading text-[13px] text-quiet">
-                  El llamante dice
+                  The caller says
                 </TableHead>
                 <TableHead className="font-heading text-[13px] text-quiet">
-                  Destino
+                  Destination
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -174,10 +174,10 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
           className="surface mb-8 rounded-[18px] p-[var(--card-padding)]"
         >
           <h2 className="font-heading text-[18px] text-graphite">
-            Banderas rojas
+            Red flags
           </h2>
           <p className="mt-2 text-[14px] text-quiet">
-            Escalar, no reservar. Lista publicada, no juicio clínico.
+            Escalate, do not book. Published list, not a clinical judgement.
           </p>
           <ul className="mt-5 space-y-3">
             {problem.redFlags.map((flag) => (
@@ -198,7 +198,7 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
           className="surface mb-8 rounded-[18px] p-[var(--card-padding)]"
         >
           <h2 className="font-heading text-[18px] text-graphite">
-            Texturas de ruido
+            Noise textures
           </h2>
           <div className="mt-4 flex flex-wrap gap-2">
             {problem.noiseTextures.map((texture) => (
@@ -220,10 +220,10 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
           className="surface mb-8 rounded-[18px] p-[var(--card-padding)]"
         >
           <h2 className="font-heading text-[18px] text-graphite">
-            Campos protegidos
+            Protected fields
           </h2>
           <p className="mt-2 max-w-[42rem] text-[14px] leading-relaxed text-quiet">
-            Solo se leen los turnos del agente. El nombre no está protegido.
+            Only the agent&apos;s turns are read. The name is not protected.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {problem.protectedFields.map((field) => (
@@ -244,7 +244,7 @@ export function ProblemDetail({ problem }: { problem: ProblemBrief }) {
         className="surface rounded-[18px] p-[var(--card-padding)]"
       >
         <h2 className="font-heading text-[18px] text-graphite">
-          Casos públicos
+          Public cases
         </h2>
         {problem.publicCases.length === 0 ? (
           <p className="mt-4 max-w-[42rem] text-[15px] leading-[1.6] text-steel">

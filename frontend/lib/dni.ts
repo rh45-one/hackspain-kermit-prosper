@@ -31,7 +31,7 @@ export function parseSpanishId(raw: string): IdParseResult {
     if (control !== expected) {
       return {
         status: "invalid",
-        error: `Letra de control inválida (esperada ${expected})`,
+        error: `Invalid control letter (expected ${expected})`,
       };
     }
     return { status: "valid", normalized: value };
@@ -47,13 +47,13 @@ export function parseSpanishId(raw: string): IdParseResult {
     if (control !== expected) {
       return {
         status: "invalid",
-        error: `Letra de control inválida (esperada ${expected})`,
+        error: `Invalid control letter (expected ${expected})`,
       };
     }
     return { status: "valid", normalized: value };
   }
 
-  return { status: "invalid", error: "Formato DNI/NIE no reconocido" };
+  return { status: "invalid", error: "Unrecognised DNI/NIE format" };
 }
 
 export function isValidTunnelUrl(url: string): boolean {

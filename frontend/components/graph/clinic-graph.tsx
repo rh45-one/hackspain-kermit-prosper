@@ -216,11 +216,11 @@ export function ClinicGraphBoard({
 
       {cover ?? null}
 
-      <PageHeader kicker="Clínica Arenal" title="El grafo de la clínica">
-        Quién existe, quién cubre qué, quién está dónde — y las {counts.reasons} formas en que
-        una llamada puede acabar sin cita, cada una con la persona a la que le llega. Todo lo
-        que ves lo calcula el agente del catálogo que publica la clínica: el panel no inventa ni
-        un nodo.
+      <PageHeader kicker="Clínica Arenal" title="The clinic graph">
+        Who exists, who covers what, who is where — and the {counts.reasons} ways a
+        call can end without a booking, each with the person it reaches. Everything
+        you see is computed by the catalogue agent the clinic publishes: the panel
+        invents not a single node.
       </PageHeader>
 
       <div
@@ -229,46 +229,46 @@ export function ClinicGraphBoard({
       >
         <Stat
           value={String(counts.providers)}
-          label="Profesionales"
+          label="Clinicians"
           note={
             counts.onLeave.length === 0
-              ? "todos disponibles hoy"
-              : `${plural(counts.onLeave.length, "de baja", "de baja")}: ${counts.onLeave
+              ? "all available today"
+              : `${plural(counts.onLeave.length, "on leave", "on leave")}: ${counts.onLeave
                   .map((n) => n.label)
                   .join(", ")}`
           }
         />
         <Stat
           value={`${counts.specialties} · ${counts.sites}`}
-          label="Especialidades y sedes"
-          note={`${counts.catalogueEdges} aristas calculadas del catálogo`}
+          label="Specialties and sites"
+          note={`${counts.catalogueEdges} edges computed from the catalogue`}
         />
         <Stat
           value={String(counts.reasons)}
-          label="Finales sin cita"
-          note="vocabulario cerrado: uno más y falla un test"
+          label="No-booking endings"
+          note="closed vocabulary: one more and a test fails"
         />
         <Stat
           value={`${counts.urgency.now} · ${counts.urgency.today} · ${counts.urgency.queue}`}
-          label="Ahora · Hoy · En cola"
-          note={`${counts.roles} personas en la plantilla`}
+          label="Now · Today · Queued"
+          note={`${counts.roles} people on the roster`}
         />
       </div>
 
       {!graph.warm ? (
         <p className="mb-8 rounded-[12px] border border-brass/30 bg-ivory px-4 py-3 text-[13px] leading-[1.55] text-steel">
-          El catálogo todavía no está caliente en el agente, así que este dibujo solo trae las
-          personas declaradas y los finales cerrados. Los médicos, las sedes y las especialidades
-          aparecerán en cuanto la clínica responda.
+          The catalogue is not warm on the agent yet, so this drawing only carries
+          the declared people and the closed endings. Clinicians, sites, and
+          specialties will appear as soon as the clinic answers.
         </p>
       ) : null}
 
       <section data-reveal="" className="mb-14">
-        <SectionTitle kicker="Capa 1 · el catálogo" title="La clínica entera de un vistazo">
-          Cada médico está unido a las sedes donde pasa consulta y a la disciplina que cubre.
-          Pasa por encima de uno para aislar su vecindario. Los que están{" "}
-          <span className="text-graphite">de baja siguen dibujados, apagados</span>: borrarlos
-          escondería justo el motivo por el que una petición no se puede atender.
+        <SectionTitle kicker="Layer 1 · the catalogue" title="The whole clinic at a glance">
+          Each clinician is joined to the sites where they see patients and the
+          discipline they cover. Hover one to isolate its neighbourhood. Those{" "}
+          <span className="text-graphite">on leave stay drawn, dimmed</span>: deleting
+          them would hide the exact reason a request cannot be served.
         </SectionTitle>
         <div className="rounded-[18px] border border-mist bg-fog/45 p-4 sm:p-6">
           <CatalogueMap
@@ -309,7 +309,7 @@ export function ClinicGraphBoard({
                 aria-hidden
                 className="h-3 w-5 rounded-[4px] border border-dashed border-quiet bg-fog"
               />
-              De baja, no se le puede citar
+              On leave, cannot be booked
             </span>
           </div>
         </div>
@@ -317,19 +317,19 @@ export function ClinicGraphBoard({
 
       <section data-reveal="">
         <SectionTitle
-          kicker="Capa 2 · el escalado"
-          title={`Las ${counts.reasons} formas de acabar sin cita`}
+          kicker="Layer 2 · escalation"
+          title={`${counts.reasons} ways to end without a booking`}
         >
-          Esto es lo que nadie más enseña: cuando el agente no puede citar, no se limita a
-          colgar. Cada final tiene un destinatario y una prisa.{" "}
-          <span className="text-graphite">Ahora</span> interrumpe a alguien,{" "}
-          <span className="text-graphite">hoy</span> le llega antes de que se vaya, y{" "}
-          <span className="text-graphite">en cola</span> espera a que alguien lo mire.
+          This is what nobody else shows: when the agent cannot book, it does not
+          just hang up. Each ending has a recipient and a hurry.{" "}
+          <span className="text-graphite">Now</span> interrupts someone,{" "}
+          <span className="text-graphite">today</span> reaches them before they leave, and{" "}
+          <span className="text-graphite">queued</span> waits for someone to look.
         </SectionTitle>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="mr-1 font-heading text-[11px] tracking-[0.07em] text-quiet uppercase">
-            Filtrar por prisa
+            Filter by hurry
           </span>
           {URGENCIES.map((key) => {
             const on = visible.has(key);
@@ -362,7 +362,7 @@ export function ClinicGraphBoard({
               onClick={() => setVisible(new Set(URGENCIES))}
               className="cursor-pointer text-[12px] text-quiet underline underline-offset-4 hover:text-graphite"
             >
-              ver las {counts.reasons}
+              show all {counts.reasons}
             </button>
           ) : null}
         </div>
@@ -415,7 +415,7 @@ export function ClinicGraphBoard({
                 onClick={() => setPinned(null)}
                 className="absolute -top-2.5 right-2 z-10 cursor-pointer rounded-full border border-mist bg-canvas-white px-2.5 py-1 font-heading text-[11px] tracking-[0.04em] text-quiet uppercase shadow-[var(--shadow-sm)] hover:text-graphite"
               >
-                Cerrar
+                Close
               </button>
               <div className="max-h-[56vh] overflow-y-auto rounded-[16px] shadow-[var(--shadow-md)]">
                 <GraphInspector
