@@ -106,6 +106,78 @@ TEAM: tuple[dict[str, Any], ...] = (
         "may_ask": "si puede coger consultas de medicina general",
         "must_not_ask": "",
     },
+    # The rest of the rota, invented, and deliberately built AROUND the five
+    # mobiles above rather than into them. Every one of these covers for a real
+    # teammate, never the other way round: the chains the team tests with —
+    # Ginés → Germán, and the four specialties — keep pointing exactly where
+    # they pointed, so a test call still rings the handset it rang yesterday.
+    # What this adds is the second line, for when the first one does not pick up.
+    {
+        "slug": "lucia-serrano",
+        "name": "Dra. Lucía Serrano",
+        "role": "Ginecóloga",
+        "detail": "Tercera de ginecología. Entra cuando no están ni el jefe ni Germán.",
+        "languages": ["es", "en"],
+        "covers_for": "german-padua",
+        "opening": "Si le llamas es porque ni el jefe ni Germán pueden.",
+        "may_ask": "si puede coger una consulta de ginecología",
+        "must_not_ask": "no le pidas tardes: tiene reducción de jornada",
+    },
+    {
+        "slug": "andres-vila",
+        "name": "Dr. Andrés Vila",
+        "role": "Otorrinolaringólogo",
+        "detail": "ORL. Segundo de Hugo.",
+        "languages": ["es", "ca"],
+        "covers_for": "hugo-rodriguez",
+        "opening": "",
+        "may_ask": "si puede coger una consulta de ORL",
+        "must_not_ask": "",
+    },
+    {
+        "slug": "nuria-cano",
+        "name": "Nuria Cano",
+        "role": "Psiquiatra",
+        "detail": "Salud mental. Segunda de Marina.",
+        "languages": ["es", "en"],
+        "covers_for": "marina-vicens",
+        "opening": "",
+        "may_ask": "si puede atender una urgencia de salud mental",
+        "must_not_ask": "nunca le pases una consulta que no sea de lo suyo",
+    },
+    {
+        "slug": "elena-prat",
+        "name": "Elena Prat",
+        "role": "Podóloga",
+        "detail": "Podología. Segunda de Jose.",
+        "languages": ["ca", "es"],
+        "covers_for": "jose-antunez",
+        "opening": "Contéstale en català si empieza en català.",
+        "may_ask": "si puede coger una consulta de podología",
+        "must_not_ask": "",
+    },
+    {
+        "slug": "sara-buendia",
+        "name": "Sara Buendía",
+        "role": "Coordinación",
+        "detail": "Lleva las agendas y reparte lo que nadie ha cogido.",
+        "languages": ["es", "en"],
+        "covers_for": "front_desk",
+        "opening": "Es quien reparte el trabajo: ve al grano.",
+        "may_ask": "abrir agenda, mover consultas, buscar quién cubre",
+        "must_not_ask": "nada clínico",
+    },
+    {
+        "slug": "medico-de-guardia",
+        "name": "Médico de guardia",
+        "role": "Guardia",
+        "detail": "Fuera del horario de consulta, y el último eslabón de todas las cadenas.",
+        "languages": ["es", "en"],
+        "covers_for": "sara-buendia",
+        "opening": "Está de guardia: sé breve, puede estar ocupado.",
+        "may_ask": "si puede atender algo que no aguanta a mañana",
+        "must_not_ask": "no le pidas cubrir agenda ordinaria",
+    },
     {
         # `front_desk`, not `recepcion`: the rule is that a configured row
         # replaces the default with the SAME key. A new slug adds a second
@@ -156,6 +228,7 @@ def seed(path: str, org_id: str = DEFAULT_ORG_ID) -> tuple[int, int]:
                 provider_id=person.get("provider_id"),
                 phone=person.get("phone", ""),
                 opening=person.get("opening", ""),
+                covers_for=person.get("covers_for", ""),
                 may_ask=tuple(x for x in [person.get("may_ask", "")] if x),
                 must_not_ask=tuple(x for x in [person.get("must_not_ask", "")] if x),
             ),

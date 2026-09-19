@@ -1,5 +1,7 @@
 import { ClinicGraphBoard } from "@/components/graph/clinic-graph";
+import { CoverSuggestionPanel } from "@/components/graph/cover-suggestion";
 import { GraphUnavailable } from "@/components/graph/graph-unavailable";
+import type { CoverSuggestion } from "@/lib/cover";
 import type { ClinicGraph } from "@/lib/graph";
 
 /**
@@ -108,10 +110,68 @@ async function loadGraph(): Promise<Loaded> {
   }
 }
 
-export default async function GrafoPage() {
-  const loaded = await loadGraph();
+/**
+ * La sugerencia de cobertura, pedida en el servidor durante esta recarga.
+ *
+ * Deliberadamente en el mismo `await` que el grafo y no en un efecto del
+ * cliente: el token de ops vive en este proceso, y una pestaña que pregunta
+ * por su cuenta tendría que llevarlo encima. Además así la página pinta ya con
+ * la respuesta puesta, que es lo que se quiere delante de un jurado.
+ *
+ * Nunca rompe la página. Sin situación no pregunta a nadie; si el agente no
+ * contesta, devuelve null y el panel dibuja el grafo igual que siempre.
+ */
+async function loadCover(situation: string, reason: string): Promise<CoverSuggestion | null> {
+  if (!situation.trim()) {
+    return null;
+  }
+  const base = (process.env.AGENT_HTTP_BASE_URL ?? "http://127.0.0.1:7861").replace(/\/$/, "");
+  const token = process.env.OPS_TOKEN;
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["X-Ops-Token"] = token;
+  }
+  const query = new URLSearchParams({ situation: situation.trim(), reason });
+  try {
+    const response = await fetch(`${base}/ops/api/live/cover?${query}`, {
+      cache: "no-store",
+      headers,
+      // Jev tiene un segundo de presupuesto al otro lado; cinco aquí cubren
+      // ese segundo más la red sin dejar la página colgando si algo se atasca.
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as CoverSuggestion;
+  } catch {
+    return null;
+  }
+}
+
+/** Vocabulario cerrado: el motivo viaja en la URL y no se acepta cualquier cosa. */
+const REASON = /^[a-z_]{1,64}$/;
+
+export default async function GrafoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ situacion?: string; motivo?: string }>;
+}) {
+  const params = await searchParams;
+  const situation = (params.situacion ?? "").slice(0, 400);
+  const raw = (params.motivo ?? "provider_on_leave").trim();
+  const reason = REASON.test(raw) ? raw : "provider_on_leave";
+
+  const [loaded, cover] = await Promise.all([loadGraph(), loadCover(situation, reason)]);
   if (!loaded.ok) {
     return <GraphUnavailable detail={loaded.detail} hint={loaded.hint} />;
   }
-  return <ClinicGraphBoard graph={loaded.graph} callUrl={callPageUrl()} />;
+  return (
+    <ClinicGraphBoard
+      graph={loaded.graph}
+      callUrl={callPageUrl()}
+      cover={<CoverSuggestionPanel situation={situation} cover={cover} />}
+      highlight={cover?.suggested?.slug ?? null}
+    />
+  );
 }
