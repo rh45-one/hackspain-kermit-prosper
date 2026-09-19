@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from agent.accounts import db as accounts_db
 from agent.accounts import directory
 from agent.accounts.store import Person, Route, Store, reset_store_cache, store
 from agent.brain import deps
@@ -158,7 +159,7 @@ def test_the_migration_adds_the_tables_to_an_existing_database(tmp_path):
         db.execute("DROP TABLE people")
         db.execute("DROP TABLE routes")
         db.execute("PRAGMA user_version = 1")
-    assert Store(path).migrate() == 2
+    assert Store(path).migrate() == accounts_db.SCHEMA_VERSION
     assert Store(path).get_user(user.id) is not None
     assert Store(path).list_people(DEFAULT_ORG_ID) == []
 

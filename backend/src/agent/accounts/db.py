@@ -60,7 +60,7 @@ from agent.orgs import DEFAULT_ORG_ID
 
 # Bumped by appending to _MIGRATIONS. Never by editing one in place: the
 # volume already holds a database that has run the old ones.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
     (
@@ -174,6 +174,17 @@ _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
             )
             """,
             "CREATE INDEX IF NOT EXISTS idx_people_org ON people(org_id)",
+        ),
+    ),
+    (
+        3,
+        (
+            # Who steps in when this person is not there. A route says "when a
+            # doctor is off, ring Germán" and that is one answer for every
+            # absence; this says which absence, which is what a rota is. Held
+            # as a slug rather than a foreign key so deleting somebody leaves a
+            # chain that reads as broken instead of one that quietly vanishes.
+            "ALTER TABLE people ADD COLUMN covers_for TEXT NOT NULL DEFAULT ''",
         ),
     ),
 ]

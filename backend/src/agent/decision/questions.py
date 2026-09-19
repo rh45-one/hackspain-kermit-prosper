@@ -115,12 +115,50 @@ def build_plan_question(plans: Mapping[str, str]) -> dict[str, JsonValue]:
     }
 
 
+COVER_KEY = "cover"
+COVER_UNCLEAR = "unclear"
+COVER_INSTRUCTIONS = (
+    "A shift at the clinic has been left uncovered and somebody has to be "
+    "rung about it. Given what happened and who is on the rota, which single "
+    "person should be called? Answer 'unclear' unless one of them is clearly "
+    "the right call — ringing the wrong colleague costs more than asking a "
+    "human which one."
+)
+
+
+def build_cover_question(people: Mapping[str, str]) -> dict[str, JsonValue]:
+    """A closed choice over the people this clinic can actually ring.
+
+    ``people`` maps slug to a line describing them — role, what they cover,
+    what they may be asked. It comes from the organisation's own directory, so
+    a colleague hired today is an option today and nobody edits this file.
+
+    The escape hatch is always offered and it is the point. A rota where
+    nobody hesitates is a rota that one day wakes the cardiologist about a
+    sprained ankle.
+    """
+    criteria: dict[str, str] = dict(people)
+    criteria[COVER_UNCLEAR] = (
+        "No single one of them is clearly right, or the situation needs a "
+        "person to decide. Fall back to whoever the clinic configured."
+    )
+    return {
+        COVER_KEY: {
+            "type": "choice",
+            "instructions": COVER_INSTRUCTIONS,
+            "criteria": criteria,
+        }
+    }
+
+
 def intent_choice_labels() -> frozenset[str]:
     """The labels a Jev choice answer is allowed to return."""
     return frozenset(INTENT_CRITERIA)
 
 
 __all__ = [
+    "COVER_KEY",
+    "COVER_UNCLEAR",
     "INTENT_CRITERIA",
     "INTENT_INSTRUCTIONS",
     "INTENT_KEY",
@@ -134,6 +172,7 @@ __all__ = [
     "PLAN_KEY",
     "PLAN_UNCLEAR",
     "QUESTION_KEYS",
+    "build_cover_question",
     "build_plan_question",
     "build_questions",
     "intent_choice_labels",
