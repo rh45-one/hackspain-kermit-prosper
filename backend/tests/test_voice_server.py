@@ -116,6 +116,17 @@ def test_healthz(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_browser_call_page_and_assets_are_served(client):
+    page = client.get("/call")
+
+    assert page.status_code == 200
+    assert "Call the scheduling agent" in page.text
+    assert 'id="call-button"' in page.text
+    assert client.get("/call/app.js").status_code == 200
+    assert client.get("/call/mic-worklet.js").status_code == 200
+    assert client.get("/call/styles.css").status_code == 200
+
+
 def test_websocket_handshake_connected_start_stop(client, flushed, tmp_path):
     """The full wire handshake: connected -> start -> stop -> close."""
     with client.websocket_connect("/ws") as ws:
@@ -133,6 +144,21 @@ def test_websocket_handshake_connected_start_stop(client, flushed, tmp_path):
     assert ctx.stopped is True
     # The offline flush falls back to the mandatory no-action record.
     assert ctx.queued_actions == [{"route": "no-action", "reason": "out_of_scope"}]
+
+
+def test_demo_websocket_uses_pipeline_without_submission(client, flushed, tmp_path):
+    with client.websocket_connect("/ws/demo") as ws:
+        ws.send_json({"event": "connected", "protocol": "Call", "version": "1.0.0"})
+        ws.send_json(start_message(21, with_phone=False))
+        wait_until_call_known(calls_dir_of(client, tmp_path), "CA-concurrent-21")
+        ws.send_json({"event": "stop", "streamSid": "SM-21"})
+
+    assert wait_for(lambda: len(flushed.contexts) == 1)
+    ctx = flushed.contexts[0]
+    assert ctx.call_id == "CA-concurrent-21"
+    assert ctx.submit_actions is False
+    assert ctx.submitted is True
+    assert ctx.queued_actions == []
 
 
 def test_websocket_without_from_number(client, flushed, tmp_path):

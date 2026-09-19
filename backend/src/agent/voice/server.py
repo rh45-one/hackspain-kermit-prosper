@@ -1,12 +1,14 @@
-"""Entry point: FastAPI app serving the voice WebSocket and health checks.
+"""Entry point: FastAPI app serving voice WebSockets and the call simulator.
 
 Run: uv run python -m agent.voice.server   (listens on VOICE_WS_PORT)
 """
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport
 from pipecat.workers.runner import WorkerRunner
@@ -46,6 +48,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Prosper voice agent", lifespan=lifespan)
+call_client_dir = Path(__file__).resolve().parents[3] / "serverwebsock"
+app.mount("/call", StaticFiles(directory=call_client_dir, html=True), name="call")
 
 
 @app.get("/healthz")
@@ -55,10 +59,24 @@ async def healthz() -> dict[str, str]:
 
 @app.websocket("/ws")
 async def voice_ws(websocket: WebSocket) -> None:
-    """One phone call. Everything inside is per-connection."""
+    """One scored Prosper call. Everything inside is per-connection."""
+    await _run_voice_socket(websocket, submit_actions=True)
+
+
+@app.websocket("/ws/demo")
+async def demo_voice_ws(websocket: WebSocket) -> None:
+    """One browser demo call using the production pipeline without submissions."""
+    await _run_voice_socket(websocket, submit_actions=False)
+
+
+async def _run_voice_socket(websocket: WebSocket, *, submit_actions: bool) -> None:
     await websocket.accept()
-    ctx = CallContext(data_dir=app_settings.data_dir)
-    logger.info("socket open (provisional id {})", ctx.call_id)
+    ctx = CallContext(data_dir=app_settings.data_dir, submit_actions=submit_actions)
+    logger.info(
+        "{} socket open (provisional id {})",
+        "scored" if submit_actions else "demo",
+        ctx.call_id,
+    )
 
     try:
         transport_params_ = transport_params(ctx, app_settings)
@@ -79,8 +97,8 @@ async def voice_ws(websocket: WebSocket) -> None:
         logger.exception("pipeline error on call {}: {}", ctx.call_id, exc)
     finally:
         ctx.mark_stopped()
-        # Exactly one submission flush per call: the CallContext guard makes
-        # repeat invocations (here and on early returns) no-ops.
+        # Exactly one flush per call. Demo contexts take the audited no-submit
+        # branch; scored calls retain the normal Prosper submission contract.
         await flush_call(ctx, app_settings)
         logger.info("socket done: call {} (stopped={})", ctx.call_id, ctx.stopped)
 

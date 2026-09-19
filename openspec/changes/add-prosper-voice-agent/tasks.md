@@ -1,7 +1,7 @@
 # Tasks: add-prosper-voice-agent
 
 Baseline evidence (2026-09-19): `uv run --project backend pytest -q` collects
-**345 tests**; 344 pass and 1 skips (the factory dependency-guard test is
+**415 tests**; 414 pass and 1 is skipped (the factory dependency-guard test is
 unreachable now that `pipecat-ai[google]` is installed). The date-dependent
 closure-day test is fixed with a frozen-clock fixture. Checkboxes below are
 marked `[x]` only where backed by the offline suite or a present, wired
@@ -9,7 +9,7 @@ module; live-gate items stay unchecked.
 
 ## 1. Scaffold (coordinator)
 
-- [x] 1.1 uv project, pinned deps, package layout, .env.example, Makefile, runbook README
+- [x] 1.1 uv project, pinned deps, package layout, .env.example, Makefile, runbook README — `make tunnel` verifies its local upstream; `make public` manages the local server plus Free/static ngrok tunnel
 - [x] 1.2 OpenAPI schema vendored at docs/prosper/openapi.json
 - [x] 1.3 Config + structured logging + paths
 
@@ -31,7 +31,7 @@ module; live-gate items stay unchecked.
 
 - [x] 4.1 pipecat WebsocketServerTransport + TwilioFrameSerializer server on /ws
 - [x] 4.2 Per-socket PipelineTask wiring STT→LLM(tools)→TTS with Silero barge-in
-- [x] 4.3 Guarded tool set over clinic+scheduling (registry-validated ids) — 38/39 brain-tool tests pass; the one red test is the date-dependent closure case noted above
+- [x] 4.3 Guarded tool set over clinic+scheduling (registry-validated ids) — brain-tool tests pass; the date-dependent closure case uses the frozen-clock fixture noted above
 - [x] 4.4 System prompt v1 (multilingual, refusal discipline, no-id-speech)
 - [x] 4.5 Local audio simulator: script a public case, dial own WS without the harness
 
@@ -78,3 +78,10 @@ module; live-gate items stay unchecked.
 - [x] 10.2 Offline tests for the bridge, engine selection, Jev abstention and per-socket isolation — `test_gemini_live.py`, `test_integration_engine.py`, `test_brain_tools.py`
 - [x] 10.3 10-call scored concurrency plus the 20-socket diagnostic on the Gemini path — 20 lightweight concurrent sockets pass offline (`test_twenty_lightweight_concurrent_sockets_on_gemini`); the scored 10-call run is live and stays open under 10.4
 - [ ] 10.4 Live gate: one practice case, then a scored Run All; only then may `gemini_live` replace `cascade` as the default
+
+## 11. Browser call simulator
+
+- [x] 11.1 Serve a dependency-free, accessible call page from `backend/serverwebsock/` at `/call` — responsive desktop/mobile Chrome render smoke checks pass
+- [x] 11.2 Add `/ws/demo` using the production pipeline and Twilio wire format while preventing all Prosper submissions — route-owned context guard and endpoint tests
+- [x] 11.3 Capture microphone PCM, resample and encode 8kHz mu-law in 20ms frames; decode agent audio and honor `clear` — AudioWorklet plus bounded playback/network queues
+- [x] 11.4 Cover page serving, demo isolation and no-submission behavior; document local and deployed use — full suite 414 passed, 1 skipped

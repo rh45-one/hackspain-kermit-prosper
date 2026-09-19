@@ -115,6 +115,23 @@ async def test_flush_without_api_key_never_posts(tmp_path):
     assert ctx.queued_actions == [BOOK_ACTION]  # action preserved for later inspection
 
 
+async def test_demo_call_never_constructs_submitter_or_adds_fallback(tmp_path, fake_submitter):
+    ctx = CallContext(
+        data_dir=str(tmp_path / "data"),
+        call_id="browser-demo",
+        submit_actions=False,
+    )
+
+    await flush_call(ctx, _Settings())
+
+    assert FakeSubmitter.instances == []
+    assert ctx.submitted is True
+    assert ctx.queued_actions == []
+    audit = (tmp_path / "data" / "calls" / "browser-demo.jsonl").read_text()
+    assert '"event": "flush_skipped"' in audit
+    assert '"reason": "demo_call"' in audit
+
+
 async def test_flush_skips_unknown_route_but_keeps_flushing(tmp_path, fake_submitter):
     ctx = make_ctx(tmp_path, [{"route": "teleport"}, BOOK_ACTION])
 
