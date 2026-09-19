@@ -486,7 +486,12 @@ export function layoutRouting(graph: ClinicGraph, visible: Set<Urgency>): Routin
       // forever. Seating each person once is the whole guard needed.
       if (seated.has(child.id) || depth > 4) continue;
       seated.add(child.id);
-      const x = xRoles + depth * (CHAIN_W + CHAIN_GAP_X);
+      // El primer salto arranca DESPUÉS de la caja de oyente, que es más
+      // ancha que las de cadena. Multiplicar por `CHAIN_W` desde el principio
+      // lo metía 52 px dentro de la columna anterior, y lo que se veía eran
+      // las fichas montadas unas encima de otras.
+      const x =
+        xRoles + ROLE_W + CHAIN_GAP_X + (depth - 1) * (CHAIN_W + CHAIN_GAP_X);
       const floor = cursors.get(depth) ?? ROUTE_TOP;
       const y = Math.max(floor, centreY(anchor) - CHAIN_H / 2);
       cursors.set(depth, y + CHAIN_H + CHAIN_GAP_Y);
@@ -514,7 +519,7 @@ export function layoutRouting(graph: ClinicGraph, visible: Set<Urgency>): Routin
     if (seated.has(node.id)) continue;
     seated.add(node.id);
     const floor = cursors.get(1) ?? ROUTE_TOP;
-    const box = { x: xRoles + (CHAIN_W + CHAIN_GAP_X), y: floor, w: CHAIN_W, h: CHAIN_H };
+    const box = { x: xRoles + ROLE_W + CHAIN_GAP_X, y: floor, w: CHAIN_W, h: CHAIN_H };
     cursors.set(1, floor + CHAIN_H + CHAIN_GAP_Y);
     placed.set(node.id, box);
     chain.push({ node, ...box });

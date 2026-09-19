@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Maximize2, Minus, Plus } from "lucide-react";
+import { Expand, Minimize2, Minus, Plus, Scan } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -47,6 +47,8 @@ export function GraphCanvas({
   label: string;
 }) {
   const viewport = useRef<HTMLDivElement | null>(null);
+  const frame = useRef<HTMLDivElement | null>(null);
+  const [full, setFull] = useState(false);
   const [scale, setScale] = useState(1);
   const [fitted, setFitted] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -55,13 +57,26 @@ export function GraphCanvas({
   // fitting at all.
   const touched = useRef(false);
 
-  /** The scale at which the whole width is on screen. Never enlarges. */
+  /**
+   * La escala a la que cabe. Nunca agranda por encima del 100%.
+   *
+   * Fuera de pantalla completa sólo cuenta el ancho: el contenedor crece con
+   * el contenido, así que "alto disponible" no significa nada. En pantalla
+   * completa el alto sí está acotado, y ahí la gracia es ver el dibujo
+   * entero — de nada sirve encajar el ancho si la mitad de la gente sigue
+   * por debajo del borde.
+   */
   const fitScale = useCallback(() => {
     const box = viewport.current;
     if (!box) return 1;
-    const available = box.clientWidth - 8;
-    return available > 0 ? Math.min(1, Math.max(MIN_SCALE, available / width)) : 1;
-  }, [width]);
+    const availableWidth = box.clientWidth - 8;
+    if (availableWidth <= 0) return 1;
+    let ratio = availableWidth / width;
+    if (document.fullscreenElement && box.clientHeight > 0) {
+      ratio = Math.min(ratio, (box.clientHeight - 8) / height);
+    }
+    return Math.min(1, Math.max(MIN_SCALE, ratio));
+  }, [width, height]);
 
   const fit = useCallback(() => setScale(fitScale()), [fitScale]);
 
@@ -94,6 +109,39 @@ export function GraphCanvas({
     setScale((current) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number((current + delta).toFixed(2)))));
   }, []);
 
+  /**
+   * Agrandar de verdad: pantalla completa.
+   *
+   * El botón que había sólo reencuadraba, y reencuadrar cuando ya cabe no
+   * hace nada — pulsabas "agrandar" y no pasaba nada, que es peor que no
+   * tener botón. Un mapa de mil seiscientos píxeles metido en una columna de
+   * texto no se arregla con zoom: se arregla dándole la pantalla.
+   *
+   * Al entrar y al salir se vuelve a ajustar, porque el ancho disponible
+   * acaba de cambiar por completo.
+   */
+  const toggleFull = useCallback(() => {
+    const box = frame.current;
+    if (!box) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    } else {
+      void box.requestFullscreen?.().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => {
+      setFull(Boolean(document.fullscreenElement));
+      touched.current = false;
+      // Un fotograma para que el navegador aplique el nuevo tamaño antes de
+      // medirlo; medir durante la transición devuelve el tamaño de antes.
+      requestAnimationFrame(() => requestAnimationFrame(() => setScale(fitScale())));
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [fitScale]);
+
   // Drag to pan, on the scroll container. Only with the primary button and
   // only from the background: a drag that started on a node is that node
   // being clicked, and stealing it would break selecting anybody.
@@ -121,11 +169,54 @@ export function GraphCanvas({
   };
 
   return (
-    <div className="relative">
+    <div
+      ref={frame}
+      className={cn(
+        "relative",
+        // En pantalla completa el contenedor es la pantalla: fondo propio,
+        // porque el elemento en fullscreen se dibuja contra negro y este
+        // dibujo es tinta oscura sobre papel claro.
+        full && "flex h-screen w-screen flex-col bg-canvas-white p-4",
+      )}
+    >
+      {/*
+        La barra va ENCIMA del lienzo y no flotando sobre él. Flotando en la
+        esquina tapaba el rótulo de la última columna — "ESPECIALIDADES"
+        desaparecía debajo del control de zoom — y un control que esconde
+        justo la parte del dibujo que está al lado no es un control, es un
+        estorbo.
+      */}
+      <div className="mb-2 flex items-center justify-end gap-1">
+        <div className="flex items-center gap-0.5 rounded-full border border-mist bg-canvas-white/90 p-1">
+          <Control label="Alejar" onClick={() => zoom(-STEP)} disabled={scale <= MIN_SCALE}>
+            <Minus className="size-3.5" />
+          </Control>
+          <span className="w-10 text-center font-mono text-[11px] tabular-nums text-steel">
+            {Math.round(scale * 100)}%
+          </span>
+          <Control label="Acercar" onClick={() => zoom(STEP)} disabled={scale >= MAX_SCALE}>
+            <Plus className="size-3.5" />
+          </Control>
+          <Control
+            label="Ajustar a la pantalla"
+            onClick={() => {
+              touched.current = false;
+              fit();
+            }}
+          >
+            <Scan className="size-3.5" />
+          </Control>
+          <Control label={full ? "Salir de pantalla completa" : "Pantalla completa"} onClick={toggleFull}>
+            {full ? <Minimize2 className="size-3.5" /> : <Expand className="size-3.5" />}
+          </Control>
+        </div>
+      </div>
+
       <div
         ref={viewport}
         className={cn(
           "-mx-1 overflow-auto px-1 pb-2 touch-pan-x touch-pan-y",
+          full && "min-h-0 flex-1",
           dragging ? "cursor-grabbing select-none" : "cursor-grab",
         )}
         onPointerDown={onPointerDown}
@@ -154,28 +245,6 @@ export function GraphCanvas({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1">
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-mist bg-canvas-white/90 p-1 backdrop-blur">
-          <Control label="Alejar" onClick={() => zoom(-STEP)} disabled={scale <= MIN_SCALE}>
-            <Minus className="size-3.5" />
-          </Control>
-          <span className="w-10 text-center font-mono text-[11px] tabular-nums text-steel">
-            {Math.round(scale * 100)}%
-          </span>
-          <Control label="Acercar" onClick={() => zoom(STEP)} disabled={scale >= MAX_SCALE}>
-            <Plus className="size-3.5" />
-          </Control>
-          <Control
-            label="Ajustar a la pantalla"
-            onClick={() => {
-              touched.current = false;
-              fit();
-            }}
-          >
-            <Maximize2 className="size-3.5" />
-          </Control>
-        </div>
-      </div>
     </div>
   );
 }
