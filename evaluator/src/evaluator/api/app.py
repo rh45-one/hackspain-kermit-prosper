@@ -24,10 +24,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
 from evaluator.api.chat import ChatSessionManager, create_chat_router
+from evaluator.api.history import HistoryStore
+from evaluator.api.history import summary as history_summary
+from evaluator.api.jobs import JobError, JobStore
 from evaluator.api.redact import redact_secrets, redact_text
 from evaluator.models import CaseResult
 from evaluator.profiles import ProfileCatalog
@@ -148,11 +151,15 @@ def create_app(
     web_dir: Path | str | None = None,
     session_root: Path | str | None = None,
     profiles: ProfileCatalog | None = None,
+    scenario_root: Path | str | None = None,
 ) -> FastAPI:
     root = Path(results_root)
     web = Path(web_dir) if web_dir else None
     catalog = profiles or ProfileCatalog.builtin()
-    sessions = ChatSessionManager(session_root or root / "_chat-sessions", catalog)
+    sessions = ChatSessionManager(session_root or root / "_chat-sessions", catalog, archive_root=root)
+    history = HistoryStore(root)
+    scenarios = Path(scenario_root) if scenario_root else Path(__file__).parents[3] / "scenarios"
+    jobs = JobStore(root, catalog, scenarios)
     app = FastAPI(title="Pronto evaluator - developer console", docs_url="/api/docs")
     app.include_router(create_chat_router(sessions))
 
@@ -177,6 +184,98 @@ def create_app(
     @app.get("/api/runs")
     def runs() -> list[dict[str, Any]]:
         return [_run_row(d) for d in _list_runs(root)]
+
+    @app.post("/api/history/import", status_code=202)
+    async def import_history(body: dict[str, Any] | None = None) -> dict[str, int]:
+        """Rebuild the local call index from evaluator-owned run artifacts.
+
+        No path is accepted from the browser: the only source is the results
+        root this process was started with. Repeating the request is safe.
+        """
+        if body and set(body) - {"source"}:
+            raise HTTPException(400, "campos desconocidos en la importación")
+        if body and body.get("source", "runs") != "runs":
+            raise HTTPException(400, "la única fuente permitida es runs")
+        return history.import_runs()
+
+    @app.get("/api/history/calls")
+    def history_calls(
+        origin: str | None = None,
+        candidate: str | None = None,
+        version: str | None = None,
+        verdict: str | None = None,
+        scenario_id: str | None = None,
+        from_: str | None = Query(None, alias="from"),
+        to: str | None = None,
+        include_doubles: bool = False,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> dict[str, Any]:
+        if page < 1 or not 1 <= page_size <= 100:
+            raise HTTPException(422, "page debe ser >= 1 y page_size estar entre 1 y 100")
+        filters = {
+            "origin": origin, "candidate": candidate, "candidate_version": version,
+            "verdict": verdict, "scenario_id": scenario_id, "from": from_, "to": to,
+            "include_doubles": include_doubles,
+        }
+        rows = history.calls(filters)
+        start = (page - 1) * page_size
+        return {
+            "items": rows[start : start + page_size], "page": page, "page_size": page_size,
+            "total": len(rows), "next_page": page + 1 if start + page_size < len(rows) else None,
+        }
+
+    @app.get("/api/history/calls/{record_id}")
+    def history_call(record_id: str) -> dict[str, Any]:
+        row = history.call(record_id)
+        if row is None:
+            raise HTTPException(404, "llamada desconocida")
+        return redact_secrets(row)
+
+    @app.get("/api/history/summary")
+    def history_overview(
+        origin: str | None = None,
+        candidate: str | None = None,
+        version: str | None = None,
+        verdict: str | None = None,
+        scenario_id: str | None = None,
+        from_: str | None = Query(None, alias="from"),
+        to: str | None = None,
+        include_doubles: bool = False,
+    ) -> dict[str, Any]:
+        rows = history.calls({
+            "origin": origin, "candidate": candidate, "candidate_version": version,
+            "verdict": verdict, "scenario_id": scenario_id, "from": from_, "to": to,
+            "include_doubles": include_doubles,
+        })
+        return history_summary(rows)
+
+    @app.post("/api/jobs", status_code=202)
+    def create_job(body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return jobs.create(body)
+        except JobError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.get("/api/jobs")
+    def list_jobs() -> list[dict[str, Any]]:
+        return jobs.list()
+
+    @app.get("/api/jobs/{job_id}")
+    def get_job(job_id: str) -> dict[str, Any]:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, "trabajo desconocido")
+        return job
+
+    @app.post("/api/jobs/{job_id}/cancel", status_code=202)
+    def cancel_job(job_id: str) -> dict[str, Any]:
+        try:
+            return jobs.cancel(job_id)
+        except KeyError:
+            raise HTTPException(404, "trabajo desconocido") from None
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from None
 
     @app.get("/api/runs/{run_id}")
     def run_detail(run_id: str) -> dict[str, Any]:
@@ -244,6 +343,40 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
         return {"a": a, "b": b, "summary": result.summary(), "metrics": result.metrics}
+
+    @app.get("/api/comparisons")
+    def comparisons(
+        run_id: str,
+        candidate: list[str] | None = None,
+        include_cases: bool = False,
+    ) -> dict[str, Any]:
+        """Stable comparison envelope for the console.
+
+        The legacy per-run route remains available; this one adds explicit
+        population and stability metadata so a one-off result cannot look like
+        a statistically settled winner.
+        """
+        directory = _run_dir(root, run_id)
+        cases = _cases_or_empty(directory)
+        requested = set(candidate or [])
+        known = {case.candidate for case in cases}
+        unknown = sorted(requested - known)
+        if unknown:
+            raise HTTPException(400, f"candidatos desconocidos: {', '.join(unknown)}")
+        selected = [case for case in cases if not requested or case.candidate in requested]
+        table = side_by_side(directory)
+        repetitions = {case.scenario_id: len([item for item in selected if item.scenario_id == case.scenario_id]) for case in selected}
+        repeated = any(value > 1 for value in repetitions.values())
+        payload: dict[str, Any] = {
+            "run_id": run_id,
+            "candidates": sorted({case.candidate for case in selected}),
+            "sample_size": {name: sum(1 for case in selected if case.candidate == name) for name in sorted({case.candidate for case in selected})},
+            "stability": {"available": repeated, "reason": None if repeated else "se requieren repeticiones"},
+            "summary": table.summary(),
+        }
+        if include_cases:
+            payload["cases"] = [_case_payload(case, run_id, _candidate_versions(_manifest(directory))) for case in selected]
+        return payload
 
     @app.get("/api/runs/{run_id}/report")
     def report(run_id: str) -> FileResponse:

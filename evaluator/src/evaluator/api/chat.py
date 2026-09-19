@@ -22,9 +22,11 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import os
 import shutil
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -96,6 +98,7 @@ class ChatSession:
     turns: list[ChatTurn] = field(default_factory=list)
     closed: bool = False
     started_at: str = ""
+    on_close: Callable[[dict[str, Any]], None] | None = None
 
     async def _transcribe(self, audio: bytes) -> str:
         if not audio:
@@ -207,6 +210,7 @@ class ChatSession:
             # the runner and the observer write, with the manual origin so the
             # historical view can tell the three apart.
             "origin": "manual",
+            "profile_id": self.options.profile_id,
             "started_at": self.started_at,
             "ended_at": datetime.now(UTC).isoformat(),
             "evidence": {
@@ -226,6 +230,7 @@ class ChatSession:
             "transport_error": evidence.error,
             "transcript_chars": audit.caller_chars if audit.available else None,
             "submissions": record.get("actions", []),
+            "turns": [turn.as_dict() for turn in self.turns],
             "rejected": [
                 attempt
                 for attempt in record.get("attempts", [])
@@ -248,6 +253,8 @@ class ChatSession:
                 "passed": result.passed,
                 "failure_signal": result.failure_signal,
             }
+        if self.on_close:
+            self.on_close(payload)
         return payload
 
 
@@ -267,10 +274,14 @@ class ChatSessionManager:
     """
 
     def __init__(
-        self, session_root: Path | str, catalog: ProfileCatalog | None = None
+        self,
+        session_root: Path | str,
+        catalog: ProfileCatalog | None = None,
+        archive_root: Path | str | None = None,
     ) -> None:
         self.root = Path(session_root)
         self.catalog = catalog or ProfileCatalog.builtin()
+        self.archive_root = Path(archive_root) if archive_root else None
         self._sessions: dict[str, ChatSession] = {}
 
     async def create(self, options: TesterOptions) -> ChatSession:
@@ -294,9 +305,23 @@ class ChatSessionManager:
             session=session,
             transcriber=transcriber_from_env(_stt_env(options.stt_provider)),
             started_at=datetime.now(UTC).isoformat(),
+            on_close=self._archive,
         )
         self._sessions[session_id] = manager_session
         return manager_session
+
+    def _archive(self, payload: dict[str, Any]) -> None:
+        """Persist a closed manual session for the same rebuildable history.
+
+        The file remains evaluator evidence under the results root. It contains
+        only what the manual endpoint already returned to its local caller.
+        """
+        if self.archive_root is None:
+            return
+        directory = self.archive_root / "_manual-calls"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{payload['call_id']}.json"
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
     def get(self, session_id: str) -> ChatSession:
         session = self._sessions.get(session_id)

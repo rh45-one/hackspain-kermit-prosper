@@ -63,9 +63,10 @@ Filtros opcionales: `origin` (`simulated`, `real`, `manual`), `candidate`,
 }
 ```
 
-### `GET /api/history/calls/{call_id}`
+### `GET /api/history/calls/{record_id}`
 
-Devuelve la llamada completa: identidad, resultado, acciones, transcripción
+`record_id` es el identificador opaco devuelto por la lista; el `call_id` del
+agente puede repetirse entre orígenes. Devuelve la llamada completa: identidad, resultado, acciones, transcripción
 ordenada por `seconds` cuando existe, evidencias y vínculos `run_id`/`case_id`.
 Si la fuente solo contiene fragmentos, se devuelve como `transcript_fragments`
 sin fingir turnos. `404` para una llamada inexistente.

@@ -21,6 +21,7 @@ import subprocess
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -726,7 +727,11 @@ def _not_ready_case(
     )
 
 
-def run_experiment(config_path: str, out_root: str | None = None) -> Path:
+def run_experiment(
+    config_path: str,
+    out_root: str | None = None,
+    cancel_requested: Callable[[], bool] | None = None,
+) -> Path:
     """Run one experiment end to end; returns the results directory."""
     config_path_obj = Path(config_path).resolve()
     config = ExperimentConfig.load(str(config_path_obj))
@@ -782,7 +787,14 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
         not_ready = {name for name, problem in startup.items() if problem}
 
         results: list[CaseResult] = []
+        cancelled = False
         for rep, scenario, path, cand in case_plan(config, scenarios):
+            # Cancellation is checked between calls. A current call gets to
+            # close its clinic window and flush its evidence before the rig
+            # tears down its own clinic/double processes in ``finally``.
+            if cancel_requested and cancel_requested():
+                cancelled = True
+                break
             case_id = f"{cand.name}/{scenario.id}/r{rep}"
             if cand.name in not_ready:
                 results.append(
@@ -808,7 +820,7 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
 
         # Switchboard diagnostic (problem 2): N simultaneous calls, one
         # scenario each, to expose state contamination between sessions.
-        if config.switchboard is not None:
+        if config.switchboard is not None and not cancelled:
             n = config.switchboard.concurrency
             for cand in config.candidates:
                 if cand.name in not_ready:
@@ -853,6 +865,9 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
                 for s, _ in scenarios
             ],
             "note": "resultado local - no es el veredicto oficial del reto",
+            "status": "cancelled" if cancelled else "completed",
+            "completed_cases": len(results),
+            "planned_cases": len(case_plan(config, scenarios)),
         }
         (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
         with open(out_dir / "cases.jsonl", "w", encoding="utf-8") as fh:
