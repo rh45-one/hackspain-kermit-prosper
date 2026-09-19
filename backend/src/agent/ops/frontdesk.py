@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, JsonValue, ValidationError
 
 from agent.clinic.client import ProsperClient
-from agent.clinic.errors import ProsperError
+from agent.clinic.errors import ClinicValidationError, ProsperError
 from agent.clinic.models import Appointment, PatientMatch
 from agent.config import settings
 
@@ -97,15 +97,22 @@ def calls() -> list[CallView]:
 
 
 @router.get("/clinic")
-async def clinic() -> ClinicView:
+async def clinic(name: str = "", national_id: str = "") -> ClinicView:
     config = settings()
     if not config.prosper_api_key:
         raise HTTPException(503, "PROSPER_API_KEY no configurada en el backend")
+    name, national_id = name.strip(), national_id.strip()
+    # The official directory is a search API, not a full patient export.
+    if not name and not national_id:
+        return ClinicView(patients=[], appointments=[])
+    if name and len(name.split()) < 2:
+        raise HTTPException(422, "Introduce el nombre y al menos un apellido")
     client = ProsperClient(config)
     try:
         async with asyncio.timeout(25):
             catalogue, directory = await asyncio.gather(
-                client.get_clinic(), client.search_directory()
+                client.get_clinic(),
+                client.search_directory(name=name or None, national_id=national_id or None),
             )
             providers = {item.id: item.name for item in catalogue.providers}
             locations = {item.id: item.name for item in catalogue.locations}
@@ -132,6 +139,8 @@ async def clinic() -> ClinicView:
                 patients=directory.matches,
                 appointments=[item for group in groups for item in group],
             )
+    except ClinicValidationError as exc:
+        raise HTTPException(422, "Revisa el nombre y apellido o el documento completo") from exc
     except (ProsperError, httpx.HTTPError, TimeoutError, ValidationError) as exc:
         raise HTTPException(502, "No se pudo consultar la clínica configurada") from exc
     finally:

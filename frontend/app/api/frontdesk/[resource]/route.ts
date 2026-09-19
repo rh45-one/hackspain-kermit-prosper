@@ -1,5 +1,5 @@
 export async function GET(
-  _request: Request,
+  request: Request,
   context: RouteContext<"/api/frontdesk/[resource]">,
 ) {
   const { resource } = await context.params;
@@ -7,9 +7,17 @@ export async function GET(
     return Response.json({ detail: "Recurso desconocido" }, { status: 404 });
   }
   const base = process.env.AGENT_HTTP_BASE_URL ?? "http://127.0.0.1:7860";
+  const query = new URLSearchParams();
+  if (resource === "clinic") {
+    const incoming = new URL(request.url).searchParams;
+    for (const key of ["name", "national_id"]) {
+      const value = incoming.get(key);
+      if (value) query.set(key, value);
+    }
+  }
   try {
     const upstream = await fetch(
-      `${base.replace(/\/$/, "")}/ops/api/frontdesk/${resource}`,
+      `${base.replace(/\/$/, "")}/ops/api/frontdesk/${resource}?${query}`,
       { cache: "no-store", signal: AbortSignal.timeout(30000) },
     );
     return Response.json(await upstream.json(), {

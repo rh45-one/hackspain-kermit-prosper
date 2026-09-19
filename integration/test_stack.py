@@ -104,7 +104,9 @@ async def test_booking_tools_submit_to_evaluator_and_feed_frontdesk(stack, monke
         assert len(record["attempts"]) == 1
         async with httpx.AsyncClient(base_url=agent_url) as agent:
             calls = (await agent.get("/ops/api/frontdesk/calls")).json()
-            data = (await agent.get("/ops/api/frontdesk/clinic")).json()
+            data = (await agent.get(
+                "/ops/api/frontdesk/clinic", params={"national_id": "12345678Z"}
+            )).json()
         assert calls[0]["diagnostic"]["submissions_succeeded"] == 1
         assert calls[0]["status"] == "ended"
         assert any(p["patient_id"] == "P00042" for p in data["patients"])

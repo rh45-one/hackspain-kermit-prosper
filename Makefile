@@ -1,4 +1,4 @@
-.PHONY: setup check lint test frontend-check smoke clinic agent frontend
+.PHONY: setup check lint test frontend-check smoke clinic agent agent-live frontend
 
 setup:
 	uv sync --project backend --frozen
@@ -29,6 +29,9 @@ clinic:
 
 agent:
 	PROSPER_API_BASE_URL=http://127.0.0.1:8090 PROSPER_API_KEY=pk-local-eval PORT=7860 uv run --project backend python -m agent.serve
+
+agent-live:
+	uv run --project backend python -m agent.serve
 
 frontend:
 	npm --prefix frontend run dev

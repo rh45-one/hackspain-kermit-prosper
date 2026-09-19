@@ -31,6 +31,9 @@ type FrontdeskContextValue = {
   demo: boolean;
   connectionError: string | null;
   clinicError: string | null;
+  clinicLoading: boolean;
+  clinicSearched: boolean;
+  searchPatients: (query: { name?: string; national_id?: string }) => void;
   loading: boolean;
   settings: AgentSettings;
   saveSettings: (next: AgentSettings) => { ok: true } | { ok: false; error: string };
@@ -69,6 +72,16 @@ export function FrontdeskProvider({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [clinicError, setClinicError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!demo);
+  const [clinicLoading, setClinicLoading] = useState(false);
+  const [clinicQuery, setClinicQuery] = useState<{ name?: string; national_id?: string } | null>(null);
+
+  const searchPatients = useCallback((query: { name?: string; national_id?: string }) => {
+    setClinicLoading(true);
+    setClinicError(null);
+    setPatients([]);
+    setAppointments([]);
+    setClinicQuery(query);
+  }, []);
 
   useEffect(() => {
     if (!demo) return;
@@ -89,55 +102,77 @@ export function FrontdeskProvider({
   useEffect(() => {
     if (demo) return;
     const controller = new AbortController();
-    const timers: Partial<Record<"calls" | "clinic", number>> = {};
-    async function refresh(resource: "calls" | "clinic") {
+    let timer: number | undefined;
+    async function refresh() {
       try {
-        const response = await fetch(`/api/frontdesk/${resource}`, {
+        const response = await fetch("/api/frontdesk/calls", {
           cache: "no-store", signal: controller.signal,
         });
         if (!response.ok) {
           const error: { detail?: string } = await response.json();
           throw new Error(error.detail ?? `HTTP ${response.status}`);
         }
-        if (resource === "calls") {
-          const data: LiveCall[] = await response.json();
-          if (controller.signal.aborted) return;
-          setCalls(data);
-          setConnectionError(null);
-        } else {
-          const data: { patients: Patient[]; appointments: Appointment[] } = await response.json();
-          if (controller.signal.aborted) return;
-          setPatients(data.patients);
-          setAppointments(data.appointments);
-          setClinicError(null);
-        }
+        const data: LiveCall[] = await response.json();
+        if (controller.signal.aborted) return;
+        setCalls(data);
+        setConnectionError(null);
       } catch (error) {
         if (controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : "Error de conexión";
-        if (resource === "calls") {
-          setConnectionError(message);
-          setCalls([]);
-        } else {
-          setClinicError(message);
-          setPatients([]);
-          setAppointments([]);
-        }
+        setConnectionError(error instanceof Error ? error.message : "Error de conexión");
+        setCalls([]);
       } finally {
         if (!controller.signal.aborted) {
-          if (resource === "calls") setLoading(false);
-          timers[resource] = window.setTimeout(
-            () => void refresh(resource), resource === "calls" ? 3000 : 60000,
-          );
+          setLoading(false);
+          timer = window.setTimeout(() => void refresh(), 3000);
         }
       }
     }
-    void refresh("calls");
-    void refresh("clinic");
+    void refresh();
     return () => {
       controller.abort();
-      Object.values(timers).forEach(window.clearTimeout);
+      window.clearTimeout(timer);
     };
   }, [demo]);
+
+  useEffect(() => {
+    if (demo || clinicQuery === null) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    const query = new URLSearchParams();
+    if (clinicQuery.name) query.set("name", clinicQuery.name);
+    if (clinicQuery.national_id) query.set("national_id", clinicQuery.national_id);
+    async function refresh() {
+      try {
+        const response = await fetch(`/api/frontdesk/clinic?${query}`, {
+          cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) {
+          const error: { detail?: string } = await response.json();
+          throw new Error(error.detail ?? `HTTP ${response.status}`);
+        }
+        const data: { patients: Patient[]; appointments: Appointment[] } = await response.json();
+        if (controller.signal.aborted) return;
+        setPatients(data.patients);
+        setAppointments(data.appointments);
+        setClinicError(null);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setClinicError(error instanceof Error ? error.message : "Error de conexión");
+        setPatients([]);
+        setAppointments([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setClinicLoading(false);
+          timer = window.setTimeout(() => void refresh(), 60000);
+        }
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [demo, clinicQuery]);
 
   useEffect(() => {
     if (!demo) return;
@@ -221,6 +256,9 @@ export function FrontdeskProvider({
       demo,
       connectionError,
       clinicError,
+      clinicLoading,
+      clinicSearched: clinicQuery !== null,
+      searchPatients,
       loading,
       settings,
       saveSettings,
@@ -235,7 +273,8 @@ export function FrontdeskProvider({
       appointments,
     }),
     [activeCount, addKnowledgeSource, calls, saveSettings, settings, takeControl,
-      demo, connectionError, clinicError, loading, patients, appointments],
+      demo, connectionError, clinicError, clinicLoading, clinicQuery, searchPatients,
+      loading, patients, appointments],
   );
 
   return (

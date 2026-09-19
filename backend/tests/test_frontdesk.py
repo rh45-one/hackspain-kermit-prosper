@@ -60,6 +60,7 @@ def test_clinic_enriches_appointments_and_keeps_key_on_server(config, monkeypatc
         if route.endswith("/clinic"):
             body = load_fixture("clinic")
         elif route.endswith("/directory"):
+            assert request.url.params["national_id"] == "12345678Z"
             body = load_fixture("directory")
         else:
             assert request.url.params["when"] == "all"
@@ -71,7 +72,7 @@ def test_clinic_enriches_appointments_and_keeps_key_on_server(config, monkeypatc
         lambda config: ProsperClient(config, transport=httpx.MockTransport(handle)),
     )
     with TestClient(app) as client:
-        response = client.get("/ops/api/frontdesk/clinic")
+        response = client.get("/ops/api/frontdesk/clinic", params={"national_id": "12345678Z"})
     assert response.status_code == 200
     assert len(response.json()["patients"]) == 2
     assert len(response.json()["appointments"]) == 2
@@ -87,7 +88,32 @@ def test_clinic_failures_are_explicit_and_do_not_return_mocks(config, monkeypatc
         frontdesk, "ProsperClient", lambda config: ProsperClient(config, transport=transport),
     )
     with TestClient(app) as client:
-        response = client.get("/ops/api/frontdesk/clinic")
+        response = client.get("/ops/api/frontdesk/clinic", params={"national_id": "12345678Z"})
     assert response.status_code == (502 if configured else 503)
     assert set(response.json()) == {"detail"}
+    assert "private detail" not in response.text
+
+
+def test_empty_directory_does_not_request_full_export(config, monkeypatch):
+    def unexpected_client(config):
+        pytest.fail("Empty searches must not call Prosper")
+
+    monkeypatch.setattr(frontdesk, "ProsperClient", unexpected_client)
+    with TestClient(app) as client:
+        response = client.get("/ops/api/frontdesk/clinic")
+        invalid = client.get("/ops/api/frontdesk/clinic", params={"name": "Marta"})
+    assert response.status_code == 200
+    assert response.json() == {"patients": [], "appointments": []}
+    assert invalid.status_code == 422
+
+
+def test_official_search_rejection_is_actionable(config, monkeypatch):
+    transport = httpx.MockTransport(lambda request: httpx.Response(422, text="private detail"))
+    monkeypatch.setattr(
+        frontdesk, "ProsperClient", lambda config: ProsperClient(config, transport=transport),
+    )
+    with TestClient(app) as client:
+        response = client.get("/ops/api/frontdesk/clinic", params={"name": "Marta Ruiz"})
+    assert response.status_code == 422
+    assert "documento completo" in response.json()["detail"]
     assert "private detail" not in response.text

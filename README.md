@@ -1,5 +1,9 @@
 # hackspain-kermit-prosper — Prosper ClinicReflow
 
+Para retomar la integración y repartir trabajo en otras sesiones, empieza por
+[`integration/HANDOFF.md`](integration/HANDOFF.md). Incluye el runtime activo,
+las pruebas reales, las incidencias pendientes y cuatro tareas independientes.
+
 HackSpain 2026, Prosper track. A voice agent answers inbound clinic calls over
 a Twilio Media Streams WebSocket, negotiates scheduling with the caller, and
 submits exact booking actions to the Prosper platform.

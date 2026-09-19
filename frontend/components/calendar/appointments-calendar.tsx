@@ -126,7 +126,7 @@ export function AppointmentsCalendar() {
       <div className="mb-10 flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
         <PageHeader className="mb-0" kicker="Agenda Europe/Madrid" title="Calendario de citas">
           {demo ? "Agenda simulada con resultados del agente." :
-            "Citas existentes de la clínica, actualizadas cada minuto. Los envíos del agente no modifican este EHR."}
+            "Citas de los pacientes de la última búsqueda en Directorio, actualizadas cada minuto. Busca un paciente en Directorio para cargar su agenda. Los envíos del agente no modifican este EHR."}
           {" "}Horas en Europe/Madrid.
         </PageHeader>
         <Legend />

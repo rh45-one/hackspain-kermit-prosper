@@ -83,6 +83,36 @@ no se han añadido autenticación ni un despliegue público.
 
 ## Llamada con proveedores reales
 
+Para probar en la **plataforma oficial**, usa el archivo `backend/.env` con la
+URL y clave reales de Prosper. Un `.env` en la raíz no se carga automáticamente.
+Si solo tienes el de la raíz, cópialo a `backend/.env` sin sobrescribir una
+configuración existente (`cp -n .env backend/.env`). Ambos archivos están ignorados
+por Git. Mantén abiertas estas terminales:
+
+```sh
+# Terminal 1: voz y Ops; respeta VOICE_WS_PORT (7860 en la configuración local).
+make agent-live
+
+# Terminal 2: interfaz de operaciones, http://localhost:3000/calls.
+make frontend
+
+# Terminal 3, una vez instalado y autenticado ngrok:
+ngrok http 7860
+```
+
+Comprueba `http://localhost:7860/healthz` y después
+`https://<dominio-ngrok>/healthz`. Guarda `wss://<dominio-ngrok>/ws` en
+**Prosper → Settings → Integration** antes de lanzar una llamada de práctica.
+`PUBLIC_WS_URL` en `.env` no configura la plataforma. Evita `make agent` para
+estas pruebas: ese target sustituye las credenciales por las de la clínica local.
+
+El directorio oficial exige nombre y al menos un apellido o un documento exacto;
+no permite exportar todos los pacientes con una consulta vacía. En FrontDesk,
+introduce esos datos y pulsa **Buscar pacientes**. La ficha y la agenda muestran
+los pacientes de la última búsqueda, que se actualiza cada minuto. El documento,
+si está completo, tiene prioridad sobre el nombre. Los errores de búsqueda se
+muestran explícitamente y las llamadas continúan actualizándose por separado.
+
 Configura `backend/.env` siguiendo `backend/.env.example` y `backend/README.md`:
 `VOICE_ENGINE=gemini_live` necesita Gemini; `cascade` necesita STT, LLM y TTS.
 No hay fallback silencioso entre motores. Jev y los proveedores opcionales
