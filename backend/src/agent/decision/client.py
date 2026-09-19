@@ -24,6 +24,7 @@ import logging
 import os
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Self
 
 import httpx
@@ -78,6 +79,25 @@ _REQUIRED_ANSWER_KEYS: tuple[str, str, str] = (
 
 class _CancelledError(Exception):
     """Internal signal that the per-socket cancel token fired mid-request."""
+
+
+@dataclass(frozen=True)
+class CoverChoice:
+    """Jev's answer about who covers a shift, threshold included.
+
+    `slug` is None whenever there is no answer, and `why` says which kind of
+    no it was. `threshold` travels with it so a screen can show the bar the
+    confidence was measured against instead of a bare number nobody can read.
+    """
+
+    slug: str | None
+    confidence: float
+    why: str  # chosen | not_confident | unclear | unreachable | http_error | malformed | not_asked
+    threshold: float
+
+    @property
+    def sure(self) -> bool:
+        return self.slug is not None
 
 
 class JevClient:
@@ -282,15 +302,35 @@ class JevClient:
     ) -> str | None:
         """Who to ring about an uncovered shift, or None to fall back.
 
+        The slug alone, for callers that only want the answer. `choose_cover`
+        below carries the confidence and the reason it abstained.
+        """
+        return (await self.choose_cover(situation, people, timeout_seconds=timeout_seconds)).slug
+
+    async def choose_cover(
+        self,
+        situation: str,
+        people: Mapping[str, str],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> CoverChoice:
+        """Who to ring about an uncovered shift, and how sure Jev is.
+
         The options are the clinic's own rota, so this never chooses somebody
-        who does not work there. None means "ask the configured route" and it
-        is returned for an abstention, for low confidence, for the explicit
-        'unclear' answer and for any failure — every road out of here that is
-        not a colleague this clinic can actually ring.
+        who does not work there.
+
+        The threshold is the point of the whole thing. Above it the answer is
+        a decision and the panel states it; below it there is no answer, and
+        saying so is better than naming somebody with a shrug. Every road that
+        is not a colleague this clinic can actually ring — an abstention, low
+        confidence, the explicit 'unclear', a timeout, a 500 — comes back with
+        `slug=None` and a `why` that says which road it was, because "Jev was
+        not sure" and "Jev never answered" are different things to a person
+        reading a screen.
         """
         started = self._clock()
         if not situation.strip() or not people or not self._api_key:
-            return None
+            return CoverChoice(None, 0.0, "not_asked", self._min_confidence)
         payload: dict[str, JsonValue] = {
             "state": {"what_happened": situation.strip()},
             "model": self._model,
@@ -299,16 +339,16 @@ class JevClient:
         try:
             response = await self._post_with_controls(payload, None, timeout_seconds)
         except (_CancelledError, TimeoutError, httpx.HTTPError, httpx.TransportError):
-            return None
+            return CoverChoice(None, 0.0, "unreachable", self._min_confidence)
         if response.status_code != 200:
-            return None
+            return CoverChoice(None, 0.0, "http_error", self._min_confidence)
         try:
             parsed = SystemOneResponse.model_validate(response.json())
         except (ValidationError, ValueError):
-            return None
+            return CoverChoice(None, 0.0, "malformed", self._min_confidence)
         answer = parsed.answers.get(COVER_KEY)
         if not isinstance(answer, ChoiceAnswer):
-            return None
+            return CoverChoice(None, 0.0, "malformed", self._min_confidence)
         self._logger.info(
             "jev cover choice=%s confidence=%.2f latency_ms=%.0f",
             answer.choice,
@@ -316,10 +356,10 @@ class JevClient:
             self._latency_ms(started),
         )
         if answer.choice == COVER_UNCLEAR or answer.choice not in people:
-            return None
+            return CoverChoice(None, answer.confidence, "unclear", self._min_confidence)
         if answer.confidence < self._min_confidence:
-            return None
-        return answer.choice
+            return CoverChoice(None, answer.confidence, "not_confident", self._min_confidence)
+        return CoverChoice(answer.choice, answer.confidence, "chosen", self._min_confidence)
 
     # ---- transport --------------------------------------------------------
     async def _post_with_controls(
@@ -454,4 +494,4 @@ class JevClient:
         self._logger.debug("jev_assess", extra={"extra_data": decision.as_audit_dict()})
 
 
-__all__ = ["ENDPOINT_PATH", "JevClient"]
+__all__ = ["ENDPOINT_PATH", "CoverChoice", "JevClient"]

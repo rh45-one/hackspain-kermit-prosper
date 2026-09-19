@@ -112,14 +112,15 @@ async def suggest_cover(
     chosen: Person | None = None
     latency_ms = 0.0
     asked = bool(situation.strip()) and bool(people)
+    choice = None
     if asked:
         started = perf_counter()
         names = {p.slug: p.name for p in people}
         options = {p.slug: _describe(p, names) for p in people}
-        slug = await _ask_jev(situation, options)
+        choice = await _ask_jev(situation, options)
         latency_ms = round((perf_counter() - started) * 1000.0, 1)
-        if slug:
-            chosen = next((p for p in people if p.slug == slug), None)
+        if choice is not None and choice.slug:
+            chosen = next((p for p in people if p.slug == choice.slug), None)
 
     suggested = _card(chosen, source="jev") or _card(fallback, source="route")
     return {
@@ -129,13 +130,21 @@ async def suggest_cover(
         "suggested": suggested,
         "fallback": _card(fallback, source="route"),
         "urgency": escalation.urgency if escalation is not None else "",
+        # The threshold, stated rather than applied in silence. Above it the
+        # answer is a decision; below it there is none, and the screen says
+        # which of the two happened instead of showing the same card twice.
+        "sure": chosen is not None,
+        "confidence": round(choice.confidence, 3) if choice is not None else 0.0,
+        "threshold": choice.threshold if choice is not None else 0.0,
+        "why": choice.why if choice is not None else "not_asked",
         "considered": [{"slug": p.slug, "name": p.name, "role": p.role} for p in people],
         "latency_ms": latency_ms,
     }
 
 
-async def _ask_jev(situation: str, people: dict[str, str]) -> str | None:
-    """The sidecar, or None. Never raises: a panel does not 500 over a hint."""
+async def _ask_jev(situation: str, people: dict[str, str]) -> Any | None:
+    """The sidecar's `CoverChoice`, or None. Never raises: a panel does not
+    500 over a hint."""
     try:
         from agent.brain.tools import _build_jev_client
         from agent.config import settings
@@ -146,7 +155,7 @@ async def _ask_jev(situation: str, people: dict[str, str]) -> str | None:
         # A second of budget rather than the call path's 600 ms. Nobody is on
         # hold here, and an abstention on a slow day is a worse answer than a
         # page that paints 400 ms later.
-        return await client.classify_cover(situation, people, timeout_seconds=1.0)
+        return await client.choose_cover(situation, people, timeout_seconds=1.0)
     except Exception:  # noqa: BLE001 - the route below is always a valid answer
         return None
 

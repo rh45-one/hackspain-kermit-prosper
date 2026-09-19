@@ -195,6 +195,52 @@ export function RoutingMap({ layout, filtered, active, lit, onHover, onSelect }:
           </button>
         );
       })}
+
+      {/*
+        Las cadenas de cobertura: quién sustituye a quién.
+        Más pequeñas y sin borde de aviso a propósito — a esta gente no le
+        llega ninguna ruta y no es un problema, es que entran cuando falla el
+        de al lado. Dibujarlas igual que a los que sí escuchan haría que
+        cuarenta y tres cajas se leyeran como cuarenta y tres iguales.
+      */}
+      {layout.chain.map((seat) => {
+        const id = seat.node.id;
+        const dim = Boolean(lit) && !lit?.has(id);
+        return (
+          <button
+            key={id}
+            type="button"
+            onMouseEnter={() => onHover(id)}
+            onMouseLeave={() => onHover(null)}
+            onFocus={() => onHover(id)}
+            onBlur={() => onHover(null)}
+            onClick={() => onSelect(id)}
+            aria-pressed={active === id}
+            className={cn(
+              "clinic-graph-fade absolute flex cursor-pointer flex-col justify-center overflow-hidden rounded-[11px] border px-3 text-left outline-none",
+              "border-mist/70 bg-canvas-white/70",
+              "transition-[opacity,box-shadow,transform,border-color,top,left] duration-300 ease-out",
+              "hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-brass/40",
+              active === id && "border-graphite/30 bg-canvas-white shadow-[var(--shadow-md)]",
+              dim && "opacity-20",
+            )}
+            style={{
+              left: seat.x,
+              top: seat.y,
+              width: seat.w,
+              height: seat.h,
+              animationDelay: `${320 + (seat.y % 900) * 0.3}ms`,
+            }}
+          >
+            <span className="font-heading text-[13.5px] leading-tight text-graphite">
+              {seat.node.label}
+            </span>
+            <span className="mt-0.5 line-clamp-2 text-[11px] leading-[1.3] text-steel">
+              {seat.node.detail}
+            </span>
+          </button>
+        );
+      })}
     </GraphCanvas>
   );
 }

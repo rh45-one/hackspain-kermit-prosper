@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent.accounts.store import Person, Route, Store
+from agent.decision.client import CoverChoice
 from agent.ops import console
 from agent.ops import cover as ops_cover
 from agent.ops.console import app
@@ -30,9 +31,13 @@ def _door(monkeypatch, accounts_db):
     shop.upsert_route(ORG, Route(reason="provider_on_leave", person_slug="ana", urgency="today"))
 
 
-def _ask(monkeypatch, answer):
+def _ask(monkeypatch, answer, *, confidence: float = 0.9):
+    """Stub the sidecar with the `CoverChoice` it would have returned."""
+
     async def _stub(situation, people, **kwargs):
-        return answer(situation, people) if callable(answer) else answer
+        slug = answer(situation, people) if callable(answer) else answer
+        why = "chosen" if slug else "unclear"
+        return CoverChoice(slug, confidence, why, 0.5)
 
     monkeypatch.setattr(ops_cover, "_ask_jev", _stub)
 
@@ -60,13 +65,19 @@ def test_jev_can_reach_the_second_line_of_the_rota(monkeypatch):
     assert answer["suggested"]["source"] == "jev"
     # The route is still returned, so the panel can show what happens anyway.
     assert answer["fallback"]["slug"] == "ana"
+    # And it says it decided, rather than leaving the reader to infer it.
+    assert answer["sure"] is True
+    assert answer["confidence"] >= answer["threshold"]
 
 
 def test_an_abstention_leaves_the_configured_route_answering(monkeypatch):
-    _ask(monkeypatch, None)
+    _ask(monkeypatch, None, confidence=0.2)
     answer = _get(situation="No sé qué pasa", reason="provider_on_leave")
     assert answer["suggested"]["slug"] == "ana"
     assert answer["suggested"]["source"] == "route"
+    # The screen must be able to say WHICH kind of no this was.
+    assert answer["sure"] is False
+    assert answer["why"] == "unclear"
 
 
 def test_the_sidecar_being_down_is_not_a_failed_page(monkeypatch):

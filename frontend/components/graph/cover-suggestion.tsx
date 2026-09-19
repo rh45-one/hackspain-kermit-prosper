@@ -19,10 +19,27 @@
 import type { CoverSuggestion } from "@/lib/cover";
 
 const EXAMPLES = [
-  "El jefe de ginecología está de baja el lunes",
-  "Marina no puede venir y hay una urgencia de salud mental",
+  "Me ha dado un infarto",
+  "Un niño de seis años con fiebre muy alta",
   "Hugo está de vacaciones y hay pacientes de otorrino",
+  "El jefe de ginecología está de baja el lunes",
 ];
+
+/**
+ * Por qué no hay respuesta, dicho como se lo dirías a alguien.
+ *
+ * "No estaba seguro" y "no contestó" son cosas distintas para quien está
+ * mirando la pantalla: una la arregla escribiendo mejor la frase y la otra
+ * es que el servicio está caído. Un único "sin sugerencia" las confunde.
+ */
+const WHY: Record<string, string> = {
+  unclear: "Jev no ha visto a nadie claramente mejor que la ruta, así que no ha elegido.",
+  not_confident: "Jev se ha quedado por debajo del umbral. Prefiere no decidir a decidir mal.",
+  unreachable: "Jev no ha contestado a tiempo.",
+  http_error: "Jev ha respondido con un error.",
+  malformed: "Jev ha respondido algo que no se entiende.",
+  not_asked: "No se ha preguntado.",
+};
 
 export function CoverSuggestionPanel({
   situation,
@@ -107,8 +124,12 @@ export function CoverSuggestionPanel({
               sin preguntar habría ido a {cover.fallback.name}
             </span>
           ) : null}
-          {cover?.latency_ms ? (
-            <span className="ml-auto text-[12px] tabular-nums text-steel/80">
+          {cover?.asked ? (
+            <span
+              className="ml-auto text-[12px] tabular-nums text-steel/80"
+              title={`Umbral ${cover.threshold.toFixed(2)}. Por encima decide; por debajo no contesta.`}
+            >
+              confianza {cover.confidence.toFixed(2)} · umbral {cover.threshold.toFixed(2)} ·{" "}
               {Math.round(cover.latency_ms)} ms
             </span>
           ) : null}
@@ -117,8 +138,8 @@ export function CoverSuggestionPanel({
 
       {situation && !fromJev && cover?.asked ? (
         <p className="mt-2 text-[12px] leading-[1.6] text-steel">
-          Jev no ha visto a nadie claramente mejor que la ruta, así que no ha elegido. Abstenerse
-          es una respuesta: la clínica sigue teniendo a quien llamar.
+          {WHY[cover.why] ?? "Jev no ha elegido."} Abstenerse es una respuesta: la clínica sigue
+          teniendo a quien llamar.
         </p>
       ) : null}
     </section>

@@ -21,6 +21,12 @@ export type CoverSuggestion = {
   suggested: CoverPerson | null;
   fallback: CoverPerson | null;
   urgency: string;
+  /** Por encima del umbral. Es la diferencia entre una decisión y un encogimiento de hombros. */
+  sure: boolean;
+  confidence: number;
+  threshold: number;
+  /** chosen | not_confident | unclear | unreachable | http_error | malformed | not_asked */
+  why: string;
   considered: { slug: string; name: string; role: string }[];
   latency_ms: number;
 };

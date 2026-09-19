@@ -16,7 +16,7 @@
 export type GraphKind = "role" | "specialty" | "provider" | "site" | "reason";
 export type GraphTone = "human" | "discipline" | "person" | "place" | "failure";
 export type Urgency = "now" | "today" | "queue";
-export type EdgeKind = "works_at" | "covers" | "escalates_to";
+export type EdgeKind = "works_at" | "covers" | "escalates_to" | "covers_for";
 
 export type GraphNode = {
   id: string;
@@ -89,12 +89,14 @@ export const EDGE_INK: Record<EdgeKind, string> = {
   works_at: "#806b36",
   covers: "#4c534e",
   escalates_to: "#e76432",
+  covers_for: "#4c8c78",
 };
 
 export const EDGE_WORD: Record<EdgeKind, string> = {
   works_at: "pasa consulta en",
   covers: "cubre",
   escalates_to: "avisa a",
+  covers_for: "sustituye a",
 };
 
 /* ------------------------------------------------------------------- words */
@@ -292,12 +294,21 @@ const ROLE_W = 286;
 const ROLE_H = 88;
 const ROLE_GAP = 16;
 const ROUTE_TOP = 38;
+// A person in a cover chain draws smaller than a person a route reaches: the
+// column is a chain of substitutes, not a list of listeners, and at the same
+// size forty-three boxes read as forty-three equals.
+const CHAIN_W = 208;
+const CHAIN_H = 64;
+const CHAIN_GAP_X = 26;
+const CHAIN_GAP_Y = 10;
 
 export type RoutingLayout = {
   width: number;
   height: number;
   reasons: (Box & { node: GraphNode; escalation: Escalation })[];
   roles: (Box & { node: GraphNode; incoming: Escalation[] })[];
+  /** Everybody else: the cover chains, hanging off the person they step in for. */
+  chain: (Box & { node: GraphNode })[];
   edges: PlacedEdge[];
 };
 
@@ -416,7 +427,88 @@ export function layoutRouting(graph: ClinicGraph, visible: Set<Urgency>): Routin
     });
   }
 
-  return { width: CANVAS_WIDTH, height, reasons, roles, edges };
+  /**
+   * And then the rest of the clinic, hanging off the people the routes reach.
+   *
+   * This column used to be only the listeners, so the graph knew who hears
+   * about a problem and had nothing to say about who actually steps in — the
+   * team was a different screen. A rota is a chain: the route reaches the
+   * head of gynaecology, the head is off, and the question is who is next.
+   * Drawn here, next to the person they cover, the answer is on the same
+   * picture as the question.
+   *
+   * Each hop of a chain is a narrower column to the right, and a chain's own
+   * column keeps its own cursor, so two chains of different lengths never
+   * land on top of each other.
+   */
+  const parentOf = new Map<string, string>();
+  for (const edge of graph.edges) {
+    if (edge.kind === "covers_for") parentOf.set(edge.source, edge.target);
+  }
+  const children = new Map<string, GraphNode[]>();
+  for (const node of roleNodes) {
+    const parent = parentOf.get(node.id);
+    if (parent === undefined || parent === node.id) continue;
+    const list = children.get(parent);
+    if (list) list.push(node);
+    else children.set(parent, [node]);
+  }
+
+  const seated = new Set(roles.map((r) => r.node.id));
+  const chain: RoutingLayout["chain"] = [];
+  // One cursor per depth: a column packs downwards and never overlaps itself.
+  const cursors = new Map<number, number>();
+  const placed = new Map<string, Box>();
+
+  const walk = (id: string, anchor: Box, depth: number) => {
+    for (const child of children.get(id) ?? []) {
+      // A cycle in the data — two people covering each other — would walk
+      // forever. Seating each person once is the whole guard needed.
+      if (seated.has(child.id) || depth > 4) continue;
+      seated.add(child.id);
+      const x = xRoles + depth * (CHAIN_W + CHAIN_GAP_X);
+      const floor = cursors.get(depth) ?? ROUTE_TOP;
+      const y = Math.max(floor, centreY(anchor) - CHAIN_H / 2);
+      cursors.set(depth, y + CHAIN_H + CHAIN_GAP_Y);
+      const box = { x, y, w: CHAIN_W, h: CHAIN_H };
+      placed.set(child.id, box);
+      chain.push({ node: child, ...box });
+      edges.push({
+        id: `covers:${child.id}->${id}`,
+        source: child.id,
+        target: id,
+        kind: "covers_for",
+        d: curve(x, y + CHAIN_H / 2, anchor.x + anchor.w, centreY(anchor)),
+      });
+      walk(child.id, box, depth + 1);
+    }
+  };
+  // Roots first, in the order the listener column already settled on, so a
+  // chain starts level with the person it belongs to.
+  for (const seat of roles) walk(seat.node.id, seat, 1);
+  // Anybody left is in a chain whose root nobody routes to. They are still
+  // staff and still have to be on the picture.
+  for (const node of roleNodes) {
+    if (seated.has(node.id)) continue;
+    seated.add(node.id);
+    const floor = cursors.get(1) ?? ROUTE_TOP;
+    const box = { x: xRoles + (CHAIN_W + CHAIN_GAP_X), y: floor, w: CHAIN_W, h: CHAIN_H };
+    cursors.set(1, floor + CHAIN_H + CHAIN_GAP_Y);
+    placed.set(node.id, box);
+    chain.push({ node, ...box });
+    walk(node.id, box, 2);
+  }
+
+  const deepest = chain.reduce((m, c) => Math.max(m, c.x + c.w), CANVAS_WIDTH);
+  const lowest = chain.reduce((m, c) => Math.max(m, c.y + c.h), height);
+  return {
+    width: deepest + 8,
+    height: Math.max(height, lowest + 14),
+    reasons,
+    roles,
+    chain,
+    edges,
+  };
 }
 
 /* ----------------------------------------------------------- neighbourhood */
