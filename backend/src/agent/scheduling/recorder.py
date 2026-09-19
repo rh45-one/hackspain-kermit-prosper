@@ -17,7 +17,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -26,6 +26,10 @@ MADRID = ZoneInfo("Europe/Madrid")
 _DNI_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE"
 _NIE_PREFIX = {"X": "0", "Y": "1", "Z": "2"}
 _NATIONAL_ID_CLEAN = re.compile(r"[\s-]+")
+INSURERS = frozenset({
+    "sanitas", "adeslas", "dkv", "asisa", "mapfre", "caser", "cigna", "axa",
+    "nueva_mutua", "privado",
+})
 
 # The exact body each submit route accepts, besides ``call_id``. Order is the
 # contract's order; a route that is not here cannot be submitted.
@@ -148,6 +152,22 @@ def normalize_action(action: dict[str, Any]) -> dict[str, Any]:
         out["email"] = normalize_email(action.get("email", ""))
         for key in ("given_name", "first_surname", "second_surname", "date_of_birth", "insurer"):
             out[key] = str(action.get(key) or "").strip()
+        out["insurer"] = re.sub(r"[\s-]+", "_", out["insurer"].casefold())
+        if out["insurer"] not in INSURERS:
+            raise ValueError("insurer: ask for a supported insurance plan or privado")
+        try:
+            birthday = date.fromisoformat(out["date_of_birth"])
+        except ValueError as exc:
+            raise ValueError("date_of_birth: ask for the full date (YYYY-MM-DD)") from exc
+        if birthday > datetime.now(MADRID).date():
+            raise ValueError("date_of_birth: cannot be in the future; ask again")
+        out["date_of_birth"] = birthday.isoformat()
+        for key in ROUTE_FIELDS["register"]:
+            value = str(out.get(key, "")).casefold()
+            if value in {"unknown", "n/a", "none", "pending", "not provided"} or any(
+                marker in value for marker in ("placeholder", "replace_me", "example.com")
+            ):
+                raise ValueError(f"{key}: missing caller data; ask for it, never use a placeholder")
     if route in ("book", "reschedule") and action.get("slot"):
         out["slot"] = normalize_slot(action["slot"])
     if route in ("no-action", "escalate"):

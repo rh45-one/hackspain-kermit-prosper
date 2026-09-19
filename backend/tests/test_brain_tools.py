@@ -561,6 +561,7 @@ async def test_register_normalizes_and_queues(box, ctx):
     action = ctx.queued_actions[-1]
     assert action["route"] == "register"
     assert action["national_id"] == "12345678Z"
+    assert action["insurer"] == "sanitas"
 
 
 async def test_finish_requires_closed_vocabulary_reason(box, ctx):
@@ -981,3 +982,21 @@ async def test_toolbox_aclose_closes_the_sidecar(box, ctx):
     await box.aclose()  # idempotent
     assert closed["n"] == 1
     assert box.jev is None
+
+
+@pytest.mark.parametrize(('field', 'value'), [
+    ('insurer', 'UnknownPlan'), ('email', 'placeholder@email.com'),
+    ('phone', ''), ('email', 'pending'), ('date_of_birth', 'not-a-date'),
+    ('given_name', ''),
+])
+async def test_register_validates_before_queueing(box, ctx, field, value):
+    payload = {
+        'given_name': 'Ana', 'first_surname': 'García', 'second_surname': 'López',
+        'national_id': '12345678Z', 'date_of_birth': '1990-01-01', 'phone': '611222333',
+        'email': 'ana.garcia@gmail.com', 'insurer': 'Sanitas',
+    }
+    payload[field] = value
+    params = FakeParams()
+    await box.register_new_patient(params, **payload)
+    assert 'error' in params.result
+    assert ctx.queued_actions == []

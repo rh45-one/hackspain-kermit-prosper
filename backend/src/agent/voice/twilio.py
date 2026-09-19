@@ -20,7 +20,7 @@ import json
 from typing import Any
 
 from loguru import logger
-from pipecat.frames.frames import Frame
+from pipecat.frames.frames import AudioRawFrame, Frame, InputAudioRawFrame
 from pipecat.serializers.twilio import TwilioFrameSerializer
 
 from agent.voice.context import CallContext
@@ -39,6 +39,12 @@ class ProsperTwilioSerializer(TwilioFrameSerializer):
             params=TwilioFrameSerializer.InputParams(auto_hang_up=False),
         )
         self._ctx = ctx
+
+    async def serialize(self, frame: Frame) -> str | bytes | None:
+        payload = await super().serialize(frame)
+        if payload and isinstance(frame, AudioRawFrame):
+            self._ctx.measure_wire_audio("out_serialized", frame.audio)
+        return payload
 
     async def deserialize(self, data: str | bytes) -> Frame | None:
         try:
@@ -72,4 +78,7 @@ class ProsperTwilioSerializer(TwilioFrameSerializer):
         if event == "media":
             self._ctx.mark_pipeline_stage("caller_audio_received")
         # media / dtmf / anything else: stock Twilio handling.
-        return await super().deserialize(data)
+        frame = await super().deserialize(data)
+        if isinstance(frame, InputAudioRawFrame):
+            self._ctx.measure_wire_audio("in_decoded", frame.audio)
+        return frame

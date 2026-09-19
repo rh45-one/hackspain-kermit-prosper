@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import audioop
 import json
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 # How long the pipeline waits for the harness `start` event after client
 # connect before giving up on the from_number hint.
@@ -23,7 +25,7 @@ class CallContext:
     """Everything a single phone call owns: identity, registries, audit."""
 
     data_dir: str = "./data"
-    call_id: str = field(default_factory=lambda: f"local-{int(time.time() * 1000)}")
+    call_id: str = field(default_factory=lambda: f"local-{uuid4().hex}")
     stream_sid: str = ""
     from_number: str | None = None
     started_at: float = field(default_factory=time.monotonic)
@@ -59,6 +61,7 @@ class CallContext:
     pipeline_stages: set[str] = field(default_factory=set)
     pipeline_error: bool = False
     outcome_summary_emitted: bool = False
+    wire_audio: dict[str, dict[str, int]] = field(default_factory=dict)
 
     # Transcript + audit
     transcript: list[dict[str, str]] = field(default_factory=list)
@@ -78,6 +81,24 @@ class CallContext:
         self.audit("call_context_created", {"from_number": self.from_number})
 
     # ---- identity --------------------------------------------------------
+    def measure_wire_audio(self, direction: str, pcm: bytes) -> None:
+        """Measure decoded wire samples without retaining audio or claiming speech.
+
+        An RMS threshold only distinguishes energetic frames from near silence;
+        it is not VAD. Output here means serialized, not acknowledged playback.
+        """
+        samples = len(pcm) // 2
+        if not samples:
+            return
+        rms = audioop.rms(pcm[:samples * 2], 2)
+        stats = self.wire_audio.setdefault(direction, {
+            "packets": 0, "samples": 0, "energetic_packets": 0, "max_rms": 0,
+        })
+        stats["packets"] += 1
+        stats["samples"] += samples
+        stats["energetic_packets"] += int(rms >= 100)
+        stats["max_rms"] = max(stats["max_rms"], rms)
+
     def set_call_id(self, call_id: str) -> None:
         """Bind the harness callSid when the start event arrives.
 

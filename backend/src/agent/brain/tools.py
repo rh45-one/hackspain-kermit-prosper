@@ -958,6 +958,10 @@ class ToolBox:
     ) -> None:
         """Register a caller who is not on file. Nothing is booked.
 
+        Collect EVERY field from the caller before calling this tool. Never
+        invent contact data, use placeholders, or infer insurance from the
+        clinic's plans. If a field is missing, ask for it first.
+
         Args:
             given_name: The patient's given name.
             first_surname: First surname.
@@ -972,8 +976,10 @@ class ToolBox:
         if not valid:
             await params.result_callback({"error": "national id check letter does not match; ask again"})
             return
-        self.ctx.queued_actions.append(
-            {
+        from agent.scheduling.recorder import build_body
+
+        try:
+            body = build_body({
                 "route": "register",
                 "given_name": given_name.strip(),
                 "first_surname": first_surname.strip(),
@@ -983,8 +989,13 @@ class ToolBox:
                 "phone": phone.strip(),
                 "email": email.strip(),
                 "insurer": insurer.strip(),
-            }
-        )
+            }, self.ctx.call_id)
+        except ValueError as exc:
+            await params.result_callback({"error": str(exc), "registered_would_be": False})
+            return
+        action = {"route": "register", **{k: v for k, v in body.items() if k != "call_id"}}
+        if action not in self.ctx.queued_actions:
+            self.ctx.queued_actions.append(action)
         self.ctx.audit("action_queued", {"route": "register", "national_id": normalized_id})
         await params.result_callback({"registered_would_be": True})
 

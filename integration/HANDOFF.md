@@ -1,5 +1,10 @@
 # Continuidad: Prosper integrado y primeras pruebas reales
 
+**Actualización posterior:** la rama ya está publicada en `origin/integration/prosper-tested`.
+El usuario confirmó fallos en todos los casos puntuados. Lee primero
+[INCIDENT-2026-09-19.md](INCIDENT-2026-09-19.md) para las correcciones posteriores,
+el motor comprobado y la validación de audio. El resto es el snapshot anterior.
+
 Este es el punto de entrada para una sesión nueva de Codex, GLM, DeepSeek u otro
 agente. Lee este documento antes de arrancar procesos o modificar la integración.
 Los nombres de modelos no implican que se hayan lanzado sesiones adicionales.

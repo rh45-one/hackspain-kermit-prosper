@@ -148,6 +148,9 @@ def transport_params(ctx: CallContext, settings: Any) -> FastAPIWebsocketParams:
         audio_in_sample_rate=TELEPHONY_SAMPLE_RATE,
         audio_out_enabled=True,
         audio_out_sample_rate=TELEPHONY_SAMPLE_RATE,
+        # Match the harness's 20 ms cadence (160 mu-law bytes), rather than
+        # Pipecat's default 40 ms output packets.
+        audio_out_10ms_chunks=2,
         serializer=ProsperTwilioSerializer(ctx),
         session_timeout=settings.max_call_minutes * 60,
         add_wav_header=False,

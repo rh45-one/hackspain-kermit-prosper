@@ -80,6 +80,7 @@ async def voice_ws(websocket: WebSocket) -> None:
         logger.exception("pipeline error on call {}: {}", ctx.call_id, exc)
     finally:
         ctx.mark_stopped()
+        ctx.audit("wire_audio_metrics", ctx.wire_audio)
         # Exactly one submission flush per call: the CallContext guard makes
         # repeat invocations (here and on early returns) no-ops.
         await flush_call(ctx, app_settings)
