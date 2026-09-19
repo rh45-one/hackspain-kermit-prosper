@@ -59,7 +59,10 @@ export function LoginPage() {
       // pintan en el servidor, y sin esto la primera visita se sirve desde la
       // caché de antes de la cookie — entras, y te sigue diciendo que no.
       router.refresh();
-      router.push("/equipo");
+      // A la primera pestaña del panel, que es donde se trabaja. `/equipo`
+      // es una pantalla de configuración: entrar y aterrizar ahí es como
+      // abrir un programa en la pantalla de ajustes.
+      router.push("/calls");
     } catch {
       setError("No se puede hablar con el panel. Inténtalo otra vez.");
       setBusy(false);

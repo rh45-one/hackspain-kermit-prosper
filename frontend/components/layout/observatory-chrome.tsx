@@ -78,10 +78,18 @@ export function ObservatoryChrome() {
       )}
     >
       <div className="mx-auto flex h-[72px] max-w-[var(--page-max-width)] items-center justify-between gap-5">
+        {/*
+          Al panel, no a la portada.
+          Dentro del panel el logo es "volver a casa", y casa es la primera
+          pestaña de la barra que tiene justo al lado — no la página de
+          marketing por la que ya se pasó para entrar. Llevar a alguien que
+          está trabajando de vuelta a la pantalla de presentación es un
+          callejón: tiene que volver a entrar por donde ya entró.
+        */}
         <Link
-          href="/"
+          href={NAV[0].href}
           className="group flex shrink-0 items-center gap-3 rounded-lg outline-none active:scale-[0.99]"
-          aria-label="Pronto, go home"
+          aria-label="Pronto, ir al panel"
         >
           <span className="grid size-9 place-items-center rounded-[10px] bg-graphite text-canvas-white shadow-sm transition-transform duration-200 ease-out group-hover:-translate-y-0.5 group-active:translate-y-0">
             <ProntoMark className="size-[22px]" />
