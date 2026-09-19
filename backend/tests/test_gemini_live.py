@@ -309,21 +309,18 @@ def test_factory_pins_model_modality_prompt_and_tools(monkeypatch):
     assert kwargs["tools"] == toolbox.tools()  # registry-validated ToolBox
 
 
-def test_factory_hands_the_turns_to_local_vad(monkeypatch):
-    """Server VAD off, because its endpointing is too slow for this clock.
+def test_gemini_keeps_its_own_turn_detection_on_a_named_window(monkeypatch):
+    """Gemini decides when a caller has finished; we only say how long to wait.
 
-    Gemini takes ~5 s of silence to close a caller turn. Local VAD closes one
-    in under a second, and over the ~24 exchanges these calls run that is the
-    difference between finishing inside the three-minute cap and being cut off
-    — 15 of 20 calls died on that cap.
+    It is trained for this and it is the one listening to the audio. Running
+    a second detector in our process was tried and is what let a watchdog end
+    turns while callers were still mid-sentence, with the agent reading
+    "[Waiting for user response]" out loud.
 
-    This was tried and reverted once, when a call lost the caller's "Hello.":
-    with server VAD off, pipecat forwards audio only while _user_is_speaking
-    (llm.py:1746), so a missed onset buries the turn. The risk is now measured
-    instead of feared — Silero detects this telephony path at full volume, at
-    -12 dB and at -22 dB, for a long sentence and for a bare "Hello." — and
-    the matching analyzer lives in agent.voice.pipeline. The two halves are
-    one decision; neither is safe alone.
+    The one thing left to us is the clock. Unconfigured, Gemini waits about
+    4.8 s of silence before closing a turn — measured — and at the ~24
+    exchanges these calls run that spends two of the three minutes a call
+    gets. Naming the window keeps the decision Gemini's and the budget ours.
     """
     import agent.voice.gemini_live as gl
 
@@ -338,8 +335,11 @@ def test_factory_hands_the_turns_to_local_vad(monkeypatch):
     )
 
     vad = service.kwargs["settings"].vad
-    assert vad is not None, "VAD must be configured explicitly, not left at the default"
-    assert vad.disabled is True
+    assert vad is not None, "left at the provider default rather than stated"
+    assert vad.disabled is False, "turn detection belongs to Gemini"
+    assert 300 <= vad.silence_duration_ms <= 1500, (
+        "shorter cuts callers off mid-sentence; longer spends the call waiting"
+    )
 
 
 def test_factory_lets_the_model_pick_the_language(monkeypatch):

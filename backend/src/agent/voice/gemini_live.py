@@ -57,8 +57,10 @@ from agent.voice.twilio import ProsperTwilioSerializer
 # which must not be a hard dependency of this module (the factory is
 # dependency-guarded and testable with fakes without it).
 try:
+    from google.genai.types import EndSensitivity
     from pipecat.services.google.gemini_live.llm import GeminiModalities, GeminiVADParams
 except ImportError:  # pragma: no cover - exercised when google-genai is absent
+    EndSensitivity = None
     GeminiModalities = None
     GeminiVADParams = None
 
@@ -253,6 +255,18 @@ def _gemini_language(settings: Any) -> str | None:
     return str(getattr(settings, "gemini_language", "") or "") or None
 
 
+def _gemini_silence_ms(settings: Any) -> int:
+    """How much silence Gemini waits for before calling a caller turn over.
+
+    Unconfigured it waits about 4.8 s, measured. That is fine on an unhurried
+    line and ruinous on this one: these calls run ~24 exchanges against a
+    three-minute cap, so the default alone would spend two thirds of the call
+    waiting. 800 ms is comfortably longer than a breath mid-sentence and far
+    shorter than the default.
+    """
+    return int(getattr(settings, "gemini_silence_ms", 0) or 800)
+
+
 def create_gemini_live_service(
     settings: Any,
     toolbox: Any,
@@ -323,7 +337,24 @@ def create_gemini_live_service(
     # -22 dB, for a long sentence and for a bare "Hello.". See
     # agent.voice.pipeline for the telephony VAD parameters that go with it.
     #
-    vad_params = GeminiVADParams(disabled=True) if GeminiVADParams is not None else None
+    # Gemini decides its own turns. It is trained for it and it is the thing
+    # listening to the audio; a second detector in our process is one more
+    # thing to be wrong, and it was — driving turns locally is what let a
+    # watchdog end them while callers were mid-sentence.
+    #
+    # What we do say is how long to wait. Left alone it takes ~4.8 s of
+    # silence to decide a caller has finished, and at ~24 exchanges that is
+    # two of the three minutes a call gets. Naming the silence window keeps
+    # the decision Gemini's and the clock ours.
+    vad_params = (
+        GeminiVADParams(
+            disabled=False,
+            silence_duration_ms=_gemini_silence_ms(settings),
+            end_sensitivity=EndSensitivity.END_SENSITIVITY_HIGH,
+        )
+        if GeminiVADParams is not None
+        else None
+    )
     service = service_cls(
         api_key=api_key,
         settings=service_cls.Settings(

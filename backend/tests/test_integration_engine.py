@@ -182,31 +182,20 @@ async def test_gemini_engine_builds_bridged_pipeline(tmp_path):
     assert toolbox_service.kwargs["tools"] == service.kwargs["tools"]
 
 
-async def test_local_vad_decides_the_turns_with_telephony_parameters(tmp_path):
-    """The analyzer, and the parameters, are both the point.
+async def test_no_second_turn_detector_runs_in_our_process(tmp_path):
+    """One thing decides when a caller has finished, and it is Gemini.
 
-    Gemini's own endpointing waits ~5 s per turn, which these calls cannot
-    afford. Handing turns to Silero is worth about four seconds an exchange
-    — but only with telephony parameters: pipecat's default min_volume of
-    0.6 is a loud-room threshold and an 8 kHz mu-law line carries speech far
-    below it. Shipping the analyzer with that default is how the caller's
-    "Hello." goes unheard and the agent sits silent.
+    A local analyzer here was tried twice. The first time a missed onset left
+    the agent deaf; the second it drove turns fast enough to cut callers off
+    mid-sentence. Gemini is trained for this and is the one listening — a
+    second detector is one more thing to be wrong.
     """
     settings = EngineSettings(voice_engine="gemini_live", gemini_api_key="k")
     build(tmp_path, "CA-vad", settings)
 
     parts = FakePipeline.built[-1]
     user_agg = next(p for p in parts if type(p).__name__ == "LLMUserAggregator")
-    bridge = next(p for p in parts if isinstance(p, GeminiInputBridge))
-    analyzer = user_agg._params.vad_analyzer
-
-    assert analyzer is not None, "nothing would end a caller turn"
-    params = analyzer.params
-    assert params.min_volume == 0.0, "a loud-room threshold on a telephone line"
-    assert params.stop_secs >= 0.5, "would end the turn on a breath mid-sentence"
-
-    # The analyzer must see wire-rate audio, so it sits ahead of the bridge.
-    assert parts.index(user_agg) < parts.index(bridge)
+    assert user_agg._params.vad_analyzer is None
 
 
 async def test_caller_tap_sits_where_upstream_transcriptions_reach_it(tmp_path):

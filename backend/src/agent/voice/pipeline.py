@@ -16,7 +16,6 @@ from typing import Any
 
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -215,39 +214,13 @@ def build_worker(
         # _ready_for_realtime_input flag. Without it the input gate silently
         # drops every caller audio frame and Gemini stays deaf.
         #
-        # Local Silero decides the caller's turns, paired with
-        # vad=GeminiVADParams(disabled=True) in create_gemini_live_service.
-        # Gemini's own endpointing waits ~5 s of silence; this closes a turn
-        # in under one, which over ~24 exchanges is the difference between
-        # finishing inside the three-minute cap and being cut off.
-        #
-        # The parameters are telephony's, not a headset's. min_volume=0.6 is
-        # pipecat's default and is a loud-room threshold; an 8 kHz mu-law
-        # line carries speech far below it, so volume is taken out of the
-        # decision entirely and Silero's own confidence decides. stop_secs
-        # 0.8 leaves room for a breath mid-sentence without ending the turn
-        # on it. Verified on this exact path at full volume, -12 dB and
-        # -22 dB, for a long sentence and for a bare "Hello.".
-        #
-        # The caller tap sits BETWEEN the aggregator and the service: the
-        # service pushes user TranscriptionFrames UPSTREAM and the aggregator
-        # consumes them without forwarding, so a tap placed ahead of it
-        # records nothing and Jev's latest-turn snapshot stays empty for the
-        # whole call.
+        # No VAD analyzer here: Gemini decides its own turns. It is trained
+        # for it, it is the one listening, and a second detector in our
+        # process is one more thing to be wrong — which it was. The only
+        # thing we tell it is how long a silence means "finished", in
+        # create_gemini_live_service.
         context = LLMContext()
-        user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
-            context,
-            user_params=LLMUserAggregatorParams(
-                vad_analyzer=SileroVADAnalyzer(
-                    params=VADParams(
-                        confidence=0.6,
-                        start_secs=0.2,
-                        stop_secs=0.8,
-                        min_volume=0.0,
-                    )
-                )
-            ),
-        )
+        user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
         input_bridge = GeminiInputBridge(ctx, audio_converter)
         parts += [
             user_aggregator,
