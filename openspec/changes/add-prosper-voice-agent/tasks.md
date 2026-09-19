@@ -81,7 +81,7 @@ module; live-gate items stay unchecked.
 
 ## 11. Browser call simulator
 
-- [x] 11.1 Serve a dependency-free, accessible call page from `backend/serverwebsock/` at `/call` — responsive desktop/mobile Chrome render smoke checks pass
+- [x] 11.1 Serve a dependency-free, accessible ClinicReflow call page from `backend/serverwebsock/` at `/call` — responsive desktop/mobile Chrome render smoke checks pass
 - [x] 11.2 Add `/ws/demo` using the production pipeline and Twilio wire format while preventing all Prosper submissions — route-owned context guard and endpoint tests
 - [x] 11.3 Capture microphone PCM, resample and encode 8kHz mu-law in 20ms frames; decode agent audio and honor `clear` — AudioWorklet plus bounded playback/network queues
 - [x] 11.4 Cover page serving, demo isolation and no-submission behavior; document local and deployed use — full suite 414 passed, 1 skipped

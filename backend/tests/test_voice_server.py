@@ -120,7 +120,7 @@ def test_browser_call_page_and_assets_are_served(client):
     page = client.get("/call")
 
     assert page.status_code == 200
-    assert "Call the scheduling agent" in page.text
+    assert "Prueba una llamada de recepción." in page.text
     assert 'id="call-button"' in page.text
     assert client.get("/call/app.js").status_code == 200
     assert client.get("/call/mic-worklet.js").status_code == 200

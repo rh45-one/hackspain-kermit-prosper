@@ -31,7 +31,7 @@ function setPhase(nextPhase, message, tone = "neutral") {
   const inCall = !["idle", "stopping"].includes(nextPhase);
   button.setAttribute("aria-pressed", String(inCall));
   button.disabled = nextPhase === "stopping";
-  label.textContent = inCall ? "Hang up" : "Call";
+  label.textContent = inCall ? "Colgar" : "Iniciar llamada";
   status.textContent = message;
   status.dataset.tone = tone;
 }
@@ -49,15 +49,15 @@ function websocketUrl() {
 
 function permissionError(error) {
   if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
-    return "Microphone access was denied. Allow it in your browser settings and try again.";
+    return "Se denegó el micrófono. Actívalo en el navegador e inténtalo de nuevo.";
   }
   if (error?.name === "NotFoundError") {
-    return "No microphone was found. Connect one and try again.";
+    return "No se detectó ningún micrófono. Conecta uno e inténtalo de nuevo.";
   }
   if (error?.name === "NotReadableError") {
-    return "Your microphone is being used by another application.";
+    return "Otra aplicación está usando el micrófono.";
   }
-  return "The call could not start. Check your microphone and connection, then try again.";
+  return "No se pudo iniciar la llamada. Comprueba el micrófono y la conexión.";
 }
 
 function bytesToBase64(bytes) {
@@ -142,7 +142,7 @@ function sendMicrophoneFrame(buffer) {
     return;
   }
   if (socket.bufferedAmount > MAX_SOCKET_BUFFER_BYTES) {
-    void endCall("The connection became too slow. Please try the call again.", "error");
+    void endCall("La conexión es demasiado lenta. Vuelve a intentarlo.", "error");
     return;
   }
 
@@ -294,12 +294,12 @@ async function handleRemoteClose(version) {
   sessionVersion += 1;
   intentionalClose = true;
   const pendingStart = startPromise;
-  setPhase("stopping", "Call ended by the agent");
+  setPhase("stopping", "El agente ha cerrado la llamada");
   await releaseResources();
   if (pendingStart) {
     await pendingStart;
   }
-  setPhase("idle", "Call ended by the agent. Ready to call again.");
+  setPhase("idle", "El agente ha cerrado la llamada. Línea disponible.");
 }
 
 async function startCall() {
@@ -307,13 +307,13 @@ async function startCall() {
     return;
   }
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) {
-    setPhase("idle", "Microphone calls require HTTPS or localhost in a modern browser.", "error");
+    setPhase("idle", "Las llamadas requieren HTTPS o localhost en un navegador actualizado.", "error");
     return;
   }
 
   const version = ++sessionVersion;
   intentionalClose = false;
-  setPhase("requesting", "Allow microphone access to continue");
+  setPhase("requesting", "Autoriza el micrófono para continuar");
 
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -348,7 +348,7 @@ async function startCall() {
     captureNode.connect(silentGain);
     silentGain.connect(audioContext.destination);
 
-    setPhase("connecting", "Connecting to the agent");
+    setPhase("connecting", "Conectando con recepción");
     socket = new WebSocket(websocketUrl());
     socket.addEventListener("message", handleSocketMessage);
     socket.addEventListener("close", () => void handleRemoteClose(version));
@@ -362,7 +362,7 @@ async function startCall() {
     streamSid = newId("SM-browser");
     sendStart();
     playbackCursor = audioContext.currentTime + PLAYBACK_LEAD_SECONDS;
-    setPhase("active", "Connected. You can speak now.", "active");
+    setPhase("active", "En línea. Ya puedes hablar.", "active");
   } catch (error) {
     if (version !== sessionVersion) {
       return;
@@ -374,14 +374,14 @@ async function startCall() {
   }
 }
 
-async function endCall(message = "Call ended. Ready to call again.", tone = "neutral") {
+async function endCall(message = "Llamada finalizada. Línea disponible.", tone = "neutral") {
   if (phase === "idle" || phase === "stopping") {
     return;
   }
   sessionVersion += 1;
   intentionalClose = true;
   const pendingStart = startPromise;
-  setPhase("stopping", "Ending call");
+  setPhase("stopping", "Finalizando llamada");
   sendStop();
   await releaseResources();
   if (pendingStart) {
@@ -408,3 +408,22 @@ window.addEventListener("pagehide", () => {
     void releaseResources();
   }
 });
+
+function revealSections() {
+  const sections = document.querySelectorAll("[data-reveal]");
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) {
+    for (const section of sections) section.classList.add("is-visible");
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      }
+    }
+  }, {threshold: 0.08, rootMargin: "0px 0px -8%"});
+  for (const section of sections) observer.observe(section);
+}
+
+revealSections();

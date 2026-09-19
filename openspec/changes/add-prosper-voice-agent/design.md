@@ -168,6 +168,13 @@ Web Audio; `clear` immediately discards queued playback. The client bounds
 network and playback queues, derives `ws`/`wss` from the page origin, and tears
 down every media track, audio node and socket on hangup or failure.
 
+The page follows the ClinicReflow visual system: a light editorial operations
+surface with warm paper, graphite controls, brass metadata and ember reserved
+for active/error states. It uses a sticky clinic header, Spanish operational
+copy, a kicker/title/lead page header, an ash well containing the call document,
+and accessible brass focus rings. The interface remains dependency-free and
+uses reduced-motion-safe section reveals.
+
 ## Risks / Trade-offs
 
 - [pipecat version churn] → pin exact version, smoke-test with wscat before
