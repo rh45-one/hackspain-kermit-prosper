@@ -129,6 +129,9 @@ class Person:
     opening: str = ""
     may_ask: tuple[str, ...] = ()
     must_not_ask: tuple[str, ...] = ()
+    # Whose absence this person covers. The dependency the clinic runs on and
+    # the one thing no catalogue has ever known.
+    covers_for: str = ""
     active: bool = True
     source: str = "configured"
 
@@ -172,6 +175,14 @@ def _split(raw: str | None) -> tuple[str, ...]:
     return tuple(part.strip() for part in text.split(separator) if part.strip())
 
 
+def _optional(row: sqlite3.Row, column: str) -> str:
+    """A column that may predate the migration that added it."""
+    try:
+        return str(row[column] or "")
+    except (IndexError, KeyError):
+        return ""
+
+
 def _person_row(row: sqlite3.Row) -> Person:
     return Person(
         slug=row["slug"],
@@ -185,6 +196,7 @@ def _person_row(row: sqlite3.Row) -> Person:
         opening=row["opening"],
         may_ask=_split(row["may_ask"]),
         must_not_ask=_split(row["must_not_ask"]),
+        covers_for=_optional(row, "covers_for"),
         active=bool(row["active"]),
     )
 
@@ -315,14 +327,16 @@ class Store:
             db.execute(
                 """INSERT INTO people (id, org_id, slug, name, role, detail, languages,
                                        provider_id, phone, email, opening, may_ask,
-                                       must_not_ask, active, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       must_not_ask, covers_for, active, created_at,
+                                       updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(org_id, slug) DO UPDATE SET
                        name = excluded.name, role = excluded.role,
                        detail = excluded.detail, languages = excluded.languages,
                        provider_id = excluded.provider_id, phone = excluded.phone,
                        email = excluded.email, opening = excluded.opening,
                        may_ask = excluded.may_ask, must_not_ask = excluded.must_not_ask,
+                       covers_for = excluded.covers_for,
                        active = excluded.active, updated_at = excluded.updated_at""",
                 (
                     uuid.uuid4().hex,
@@ -338,6 +352,7 @@ class Store:
                     person.opening.strip(),
                     "\n".join(person.may_ask),
                     "\n".join(person.must_not_ask),
+                    person.covers_for.strip(),
                     1 if person.active else 0,
                     stamp,
                     stamp,

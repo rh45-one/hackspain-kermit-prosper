@@ -51,11 +51,14 @@ from agent.decision.models import (
     TurnIntent,
 )
 from agent.decision.questions import (
+    COVER_KEY,
+    COVER_UNCLEAR,
     INTENT_KEY,
     MEDICAL_EMERGENCY_KEY,
     NEEDS_CLARIFICATION_KEY,
     PLAN_KEY,
     PLAN_UNCLEAR,
+    build_cover_question,
     build_plan_question,
     build_questions,
     intent_choice_labels,
@@ -269,6 +272,54 @@ class JevClient:
         if answer.confidence < self._min_confidence:
             return None
         return chosen
+
+    async def classify_cover(
+        self,
+        situation: str,
+        people: Mapping[str, str],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> str | None:
+        """Who to ring about an uncovered shift, or None to fall back.
+
+        The options are the clinic's own rota, so this never chooses somebody
+        who does not work there. None means "ask the configured route" and it
+        is returned for an abstention, for low confidence, for the explicit
+        'unclear' answer and for any failure — every road out of here that is
+        not a colleague this clinic can actually ring.
+        """
+        started = self._clock()
+        if not situation.strip() or not people or not self._api_key:
+            return None
+        payload: dict[str, JsonValue] = {
+            "state": {"what_happened": situation.strip()},
+            "model": self._model,
+            "questions": build_cover_question(people),
+        }
+        try:
+            response = await self._post_with_controls(payload, None, timeout_seconds)
+        except (_CancelledError, TimeoutError, httpx.HTTPError, httpx.TransportError):
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            parsed = SystemOneResponse.model_validate(response.json())
+        except (ValidationError, ValueError):
+            return None
+        answer = parsed.answers.get(COVER_KEY)
+        if not isinstance(answer, ChoiceAnswer):
+            return None
+        self._logger.info(
+            "jev cover choice=%s confidence=%.2f latency_ms=%.0f",
+            answer.choice,
+            answer.confidence,
+            self._latency_ms(started),
+        )
+        if answer.choice == COVER_UNCLEAR or answer.choice not in people:
+            return None
+        if answer.confidence < self._min_confidence:
+            return None
+        return answer.choice
 
     # ---- transport --------------------------------------------------------
     async def _post_with_controls(
