@@ -108,6 +108,13 @@ def _fold_plain(text: str) -> str:
 # Refusals that are only true for the plan on file. A second plan the caller
 # holds can overturn every one of them, so none may be sent before they have
 # been asked.
+def _dump_restriction(entry: Any) -> str:
+    """The restriction name off a blocked entry, however it is typed."""
+    if isinstance(entry, dict):
+        return str(entry.get("restriction"))
+    return str(getattr(entry, "restriction", entry))
+
+
 def _restrictions(blocked: list[dict[str, Any]]) -> set[str]:
     """The distinct restriction names in a blocked list."""
     return {str(b.get("restriction")) for b in blocked}
@@ -645,6 +652,12 @@ class ToolBox:
                 "asked": when_phrase,
                 **{k: str(v) for k, v in kwargs.items() if k != "patient_id"},
                 "slots": len(slots),
+                # WHY there is nothing, not just that there is nothing. The API
+                # names the rule that stopped each provider and we were dropping
+                # it on the floor: a caller told "no appointments" when the
+                # truth is "your plan does not cover that site" is a different
+                # answer, and it is the one the case is scored on.
+                "blocked": sorted({str(_dump_restriction(b)) for b in result.blocked}),
             },
         )
 
