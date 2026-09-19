@@ -117,7 +117,7 @@ async function describeCall() {
   const query = window.location.search || "";
   if (!query.includes("reason=")) return;
   try {
-    const response = await fetch(`/call/context${query}`, { cache: "no-store" });
+    const response = await fetch(`/call-context${query}`, { cache: "no-store" });
     if (!response.ok) return;
     const call = await response.json();
     if (!call?.who) return;

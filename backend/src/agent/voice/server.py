@@ -86,7 +86,10 @@ async def voice_ws(websocket: WebSocket) -> None:
     await _run_voice_socket(websocket, submit_actions=True)
 
 
-@app.get("/call/context")
+# Fuera de `/call` a propósito: `app.mount("/call", StaticFiles(...))` se
+# traga TODO lo que cuelgue de ese prefijo, registre uno la ruta antes o
+# después, así que `/call/context` devolvía 404 aunque la función existiera.
+@app.get("/call-context")
 async def call_context(request: Request) -> dict[str, str]:
     """A quién llama esta llamada y para qué, para la propia página de llamada.
 
