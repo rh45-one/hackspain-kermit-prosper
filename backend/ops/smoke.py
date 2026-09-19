@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
+import urllib.error
 import urllib.request
 
 HEALTH_ATTEMPTS = 30
@@ -24,9 +26,17 @@ def _schemes(host: str) -> tuple[str, str]:
     return ("http", "ws") if local else ("https", "wss")
 
 
-def _get(url: str, timeout: float = 10.0) -> tuple[int, str]:
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
-        return resp.status, resp.read().decode("utf-8", "replace")
+def _get(url: str, timeout: float = 10.0, token: str = "") -> tuple[int, str]:
+    request = urllib.request.Request(url)
+    if token:
+        request.add_header("X-Ops-Token", token)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as refused:
+        # A refusal is an answer here: the ops door returning 401 or 403 to a
+        # request with no token is the behaviour being checked, not an error.
+        return refused.code, refused.read().decode("utf-8", "replace")
 
 
 def wait_healthy(host: str) -> None:
@@ -47,14 +57,33 @@ def wait_healthy(host: str) -> None:
 
 
 def check_ops(host: str) -> None:
+    """The ops surface answers, and answers only to whoever holds the token.
+
+    These views serve whole call transcripts, so a deployed host refuses
+    everything until OPS_TOKEN is set. That makes an unauthenticated 401 or
+    403 here the CORRECT answer, not a failure — and a 200 without a token
+    means the door is open to the internet, which is the one outcome this
+    smoke must never let through.
+    """
     http, _ = _schemes(host)
+    token = os.environ.get("OPS_TOKEN", "")
+
     status, _ = _get(f"{http}://{host}/ops")
+    if not token:
+        if status in (401, 403):
+            print(f"ops closed to strangers ({status}) - set OPS_TOKEN to read it")
+            return
+        raise SystemExit(f"/ops answered {status} with no token: the door is open")
+    if status not in (401, 403):
+        raise SystemExit(f"/ops answered {status} without a token; it must refuse")
+
+    status, body = _get(f"{http}://{host}/ops", token=token)
     if status != 200:
-        raise SystemExit(f"/ops returned {status}")
-    status, body = _get(f"{http}://{host}/ops/api/calls")
+        raise SystemExit(f"/ops returned {status} with the token")
+    status, body = _get(f"{http}://{host}/ops/api/calls", token=token)
     if status != 200:
-        raise SystemExit(f"/ops/api/calls returned {status}")
-    print(f"ops ok ({len(json.loads(body))} call(s) on disk)")
+        raise SystemExit(f"/ops/api/calls returned {status} with the token")
+    print(f"ops ok, and shut to strangers ({len(json.loads(body))} call(s) on disk)")
 
 
 async def check_ws(host: str) -> None:
