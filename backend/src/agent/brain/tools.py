@@ -312,13 +312,30 @@ class ToolBox:
             national_id: DNI or NIE exactly as dictated, if given.
             date_of_birth: The caller's date of birth, ISO yyyy-mm-dd, if given.
         """
+        self.ctx.confirmed_patient = None
+        self.ctx.patient_candidates = []
+        self.ctx.slot_registry.clear()
+        self.ctx.appointment_registry.clear()
         if self.client is None:
             await params.result_callback({"error": "clinic layer unavailable"})
             return
         kwargs: dict[str, Any] = {"name": name}
         if national_id:
+            valid, national_id = deps.validate_national_id(national_id)
+            if not valid:
+                await params.result_callback({"error": "national id check letter does not match; ask again"})
+                return
             kwargs["national_id"] = national_id
         if date_of_birth:
+            try:
+                birthday = date.fromisoformat(str(date_of_birth).strip())
+            except ValueError:
+                await params.result_callback({"error": "date_of_birth must be a complete valid date; ask for yyyy-mm-dd"})
+                return
+            if birthday > datetime.now(MADRID).date():
+                await params.result_callback({"error": "date_of_birth cannot be in the future; ask for the correct year"})
+                return
+            date_of_birth = birthday.isoformat()
             kwargs["date_of_birth"] = date_of_birth
 
         # The directory refuses a bare given name, and that refusal costs a
@@ -340,26 +357,43 @@ class ToolBox:
         if self._is_error(result):
             await params.result_callback(result)
             return
-        matches = [self._safe_patient(m) for m in result.matches]
+        matches = []
+        for candidate in result.matches:
+            raw = self._dump(candidate)
+            match = self._safe_patient(raw)
+            checks = []
+            if national_id:
+                valid, candidate_id = deps.validate_national_id(str(raw.get("national_id") or ""))
+                checks.append(valid and candidate_id == national_id)
+            if date_of_birth:
+                checks.append(raw.get("date_of_birth") == date_of_birth)
+            match["identity_verified"] = bool(checks) and all(checks)
+            matches.append(match)
+        verified_ids = {m.get("patient_id") for m in matches if m["identity_verified"]}
+        if len(verified_ids) != 1:
+            verified_ids.clear()
+            for match in matches:
+                match["identity_verified"] = False
         self.ctx.patient_candidates = matches
         summary = [
             {
                 "patient_id": m.get("patient_id"),
                 "name": f"{m.get('given_name')} {m.get('first_surname')} {m.get('second_surname')}",
-                "date_of_birth": m.get("date_of_birth"),
-                "insurer": m.get("insurer"),
-                "has_visited_before": m.get("has_visited_before"),
+                "date_of_birth": m.get("date_of_birth") if m["identity_verified"] else None,
+                "insurer": m.get("insurer") if m["identity_verified"] else None,
+                "has_visited_before": m.get("has_visited_before") if m["identity_verified"] else None,
                 # The referrals decide whether a referral-gated specialty is a
                 # booking or a refusal, and the note is what lets a receptionist
                 # sound like they know the person. Both were being dropped on
                 # the floor here while the API returned them every time.
-                "referrals": m.get("referrals") or [],
-                "note": m.get("note"),
+                "referrals": (m.get("referrals") or []) if m["identity_verified"] else None,
+                "note": m.get("note") if m["identity_verified"] else None,
                 # WHICH fields matched. Some ids differ from another
                 # patient's by a single digit, so a misheard one returns a
                 # confidently wrong person; seeing that only the name matched
                 # is what tells you to confirm on something else.
                 "matched_on": m.get("matched_fields") or [],
+                "can_confirm": m["identity_verified"] and len(verified_ids) == 1,
             }
             for m in matches
         ]
@@ -374,8 +408,9 @@ class ToolBox:
                 "count": len(summary),
                 "with_dob": bool(date_of_birth),
                 "with_national_id": bool(national_id),
+                "verified_count": len(verified_ids),
                 "exact_dob_matches": sum(
-                    1 for m in summary if date_of_birth and m.get("date_of_birth") == date_of_birth
+                    1 for m in matches if date_of_birth and m.get("date_of_birth") == date_of_birth
                 ),
             },
         )
@@ -387,9 +422,22 @@ class ToolBox:
         Args:
             patient_id: A patient_id returned by lookup_patient in this call.
         """
+        self.ctx.confirmed_patient = None
         match = next((m for m in self.ctx.patient_candidates if m.get("patient_id") == patient_id), None)
         if match is None:
             await params.result_callback({"error": "patient_id not among lookup results"})
+            return
+        verified_ids = {
+            m.get("patient_id") for m in self.ctx.patient_candidates if m.get("identity_verified")
+        }
+        if not match.get("identity_verified") or len(verified_ids) != 1:
+            await params.result_callback({
+                "error": (
+                    "Identity is not uniquely verified. Use lookup_patient with an exact "
+                    "date of birth or national id supplied by the caller before confirming. "
+                    "Ask for the identifier only if the caller has not already provided it."
+                )
+            })
             return
         self.ctx.confirmed_patient = match
         self.ctx.audit("identity_confirmed", {"patient_id": patient_id})
@@ -454,10 +502,15 @@ class ToolBox:
         date_to: date | None = None
         today = datetime.now(MADRID).date()
         if self.resolver is not None:
+            from agent.scheduling.dates import InvalidAppointmentDate
+
             try:
                 res = self.resolver.resolve_relative(when_phrase, datetime.now(MADRID))
                 resolved.update({"date": res.date.isoformat(), "part_of_day": res.part_of_day})
                 date_from, date_to = res.date, res.date
+            except InvalidAppointmentDate as exc:
+                await params.result_callback({"error": f"{exc}. Ask for a valid future appointment date."})
+                return
             except Exception as exc:  # noqa: BLE001
                 resolved["warning"] = f"could not resolve phrase: {exc}"
         if date_from is None:
@@ -489,7 +542,14 @@ class ToolBox:
                     if other.id != prov.id
                 ]
             else:
-                await params.result_callback({"error": f"no provider named {provider_name!r} in the clinic"})
+                await params.result_callback({
+                    "error": f"no provider named {provider_name!r} in the clinic",
+                    "suggestions": [
+                        {"provider_id": p.id, "name": p.name, "specialty": p.specialty_name}
+                        for p in self.cache.providers_sounding_like(provider_name)
+                    ],
+                    "specialties": self._known_specialties(),
+                })
                 return
         if specialty_name and self.cache is not None and "provider_id" not in kwargs:
             spec = self.cache.specialty_by_name(specialty_name)
@@ -511,8 +571,17 @@ class ToolBox:
                 return
         if location_name and self.cache is not None:
             loc = self.cache.location_by_name(location_name)
-            if loc is not None:
-                kwargs["location_id"] = loc.id
+            if loc is None:
+                short = " ".join(p for p in location_name.split() if _fold_plain(p) != "arenal")
+                if short and short != location_name:
+                    loc = self.cache.location_by_name(short)
+            if loc is None:
+                await params.result_callback({
+                    "error": f"no site named {location_name!r}; ask which clinic site the caller means",
+                    "sites": sorted(site.name for site in self.cache.locations_by_id.values()),
+                })
+                return
+            kwargs["location_id"] = loc.id
         patient_id = (self.ctx.confirmed_patient or {}).get("patient_id")
         if patient_id:
             kwargs["patient_id"] = patient_id

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timedelta
 from typing import Any
+from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -132,12 +133,113 @@ async def test_confirm_accepts_only_lookup_results(box):
     assert box.ctx.confirmed_patient["patient_id"] == "P00042"
 
 
+@pytest.mark.parametrize("patient_id", ["P00042", "P00043"])
+async def test_name_alone_cannot_confirm_a_patient(box, patient_id):
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez")
+    await box.confirm_patient(params, patient_id=patient_id)
+    assert "error" in params.result
+    assert box.ctx.confirmed_patient is None
+
+
+@pytest.mark.parametrize("identifier", [
+    {"date_of_birth": "1988-03-14"}, {"national_id": "12345678Z"},
+])
+async def test_a_returned_homonym_with_a_different_identifier_cannot_be_confirmed(box, identifier):
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez", **identifier)
+    await box.confirm_patient(params, patient_id="P00043")
+    assert "error" in params.result
+    assert box.ctx.confirmed_patient is None
+
+
+async def test_normalized_document_can_confirm_without_a_spoken_surname(box):
+    params = FakeParams()
+    await box.lookup_patient(params, name="", national_id="12 345 678-z")
+    await box.confirm_patient(params, patient_id="P00042")
+    assert params.result["confirmed"] is True
+    assert box.ctx.confirmed_patient["patient_id"] == "P00042"
+    assert "national_id" not in box.ctx.confirmed_patient
+
+
+@pytest.mark.parametrize("patient_id", ["P00042", "P00043"])
+async def test_conflicting_exact_identifiers_cannot_confirm_either_patient(box, patient_id):
+    params = FakeParams()
+    await box.lookup_patient(
+        params, name="Marta Ruiz Gómez", national_id="12345678Z", date_of_birth="1992-07-02"
+    )
+    await box.confirm_patient(params, patient_id=patient_id)
+    assert "error" in params.result
+    assert box.ctx.confirmed_patient is None
+
+
+async def test_a_shared_birth_date_requires_another_identifier(box):
+    response = DirectoryResponse.model_validate(load_fixture("directory"))
+    response.matches[1].date_of_birth = response.matches[0].date_of_birth
+    box.client.search_directory = AsyncMock(return_value=response)
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez", date_of_birth="1988-03-14")
+    await box.confirm_patient(params, patient_id="P00042")
+    assert "error" in params.result
+    assert box.ctx.confirmed_patient is None
+    await box.lookup_patient(
+        params, name="Marta Ruiz Gómez", date_of_birth="1988-03-14", national_id="12345678Z"
+    )
+    await box.confirm_patient(params, patient_id="P00042")
+    assert params.result["confirmed"] is True
+
+
+@pytest.mark.parametrize("dob", ["1985", "28 November 20", "1988-13-01", "1988-02-31", "2026-09-20"])
+async def test_invalid_birth_dates_are_rejected_before_directory_access(box, frozen_madrid_clock, dob):
+    frozen_madrid_clock(datetime(2026, 9, 19, 12, 0, tzinfo=MADRID))
+    box.client.search_directory = AsyncMock()
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez", date_of_birth=dob)
+    assert "date_of_birth" in params.result["error"]
+    box.client.search_directory.assert_not_awaited()
+
+
+async def test_invalid_document_is_rejected_before_directory_access(box):
+    box.client.search_directory = AsyncMock()
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez", national_id="12345678A")
+    assert "error" in params.result
+    box.client.search_directory.assert_not_awaited()
+
+
+async def test_a_failed_new_lookup_clears_identity_and_handles_but_preserves_queued_actions(box):
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
+    token = params.result["slots"][0]["token"]
+    await box.list_my_appointments(params)
+    await box.book_appointment(params, slot_token=token)
+    queued = list(box.ctx.queued_actions)
+    assert box.ctx.slot_registry and box.ctx.appointment_registry
+    await box.lookup_patient(params, name="Otro Paciente", date_of_birth="1985")
+    assert "error" in params.result
+    assert box.ctx.confirmed_patient is None
+    assert box.ctx.patient_candidates == []
+    assert box.ctx.slot_registry == {}
+    assert box.ctx.appointment_registry == {}
+    assert box.ctx.queued_actions == queued
+
+
 async def test_candidates_store_no_protected_fields(box, ctx):
     params = FakeParams()
     await box.lookup_patient(params, name="Marta Ruiz Gómez", date_of_birth="1988-03-14")
     for candidate in ctx.patient_candidates:
         assert "national_id" not in candidate
         assert "phone" not in candidate
+
+
+@pytest.mark.parametrize("birthday", [None, "1988-03-14"])
+async def test_unverified_chart_details_are_not_exposed_for_self_confirmation(box, birthday):
+    params = FakeParams()
+    await box.lookup_patient(params, name="Marta Ruiz Gómez", date_of_birth=birthday)
+    for match in params.result["matches"]:
+        if not match["can_confirm"]:
+            for field in ("date_of_birth", "insurer", "has_visited_before", "referrals", "note"):
+                assert match[field] is None
 
 
 async def test_no_protected_fields_in_any_tool_result(box):
@@ -214,6 +316,35 @@ async def test_slot_registries_are_per_call_context(tmp_path, cache):
 
 
 # ---- availability behaviour ----------------------------------------------
+@pytest.mark.parametrize("location", ["Arenal Sur", "arenal sur", "Sur"])
+async def test_spoken_site_alias_preserves_the_site_filter(box, location):
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="tomorrow", specialty_name="General practice", location_name=location
+    )
+    assert box.client.availability_calls[-1]["location_id"] == "sur"
+
+
+@pytest.mark.parametrize("location", ["Arenal", "Atlantis"])
+async def test_unknown_site_does_not_silently_search_other_sites(box, location):
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="tomorrow", specialty_name="General practice", location_name=location
+    )
+    assert "error" in params.result
+    assert set(params.result["sites"]) == {"Centro", "Norte", "Sur"}
+    assert box.client.availability_calls == []
+
+
+async def test_unknown_doctor_returns_catalogue_suggestions(box):
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase="tomorrow", provider_name="Sáenz")
+    assert "error" in params.result
+    assert [p["name"] for p in params.result["suggestions"]] == ["Dra. Ana Sáez"]
+    assert "General practice" in params.result["specialties"]
+    assert box.client.availability_calls == []
+
+
 async def test_availability_passes_patient_id(box):
     params = await confirm_marta(box)
     await box.find_availability(params, when_phrase="tomorrow", specialty_name="General practice")
@@ -267,6 +398,28 @@ async def test_a_surname_shared_by_two_doctors_is_flagged_not_guessed(box):
     params = await confirm_marta(box)
     await box.find_availability(params, when_phrase="tomorrow", provider_name="Álvaro Cid")
     assert params.result["name_could_also_be"] == []
+
+
+async def test_iso_date_is_preserved_in_availability_query(box, frozen_madrid_clock):
+    frozen_madrid_clock(datetime(2026, 9, 19, 12, 0, tzinfo=MADRID))
+    params = await confirm_marta(box)
+    await box.find_availability(
+        params, when_phrase="2026-09-24", specialty_name="General practice"
+    )
+    query = box.client.availability_calls[-1]
+    assert query["date_from"] == query["date_to"] == date(2026, 9, 24)
+
+
+@pytest.mark.parametrize("phrase", [
+    "2026-02-30", "Monday 31 February", "2026-09-19", "2026-09-18", "September 18 2026",
+])
+async def test_invalid_date_does_not_fall_back_to_unrelated_slots(box, frozen_madrid_clock, phrase):
+    frozen_madrid_clock(datetime(2026, 9, 19, 12, 0, tzinfo=MADRID))
+    params = await confirm_marta(box)
+    await box.find_availability(params, when_phrase=phrase, specialty_name="General practice")
+    assert "error" in params.result
+    assert box.client.availability_calls == []
+    assert box.ctx.slot_registry == {}
 
 
 async def test_unresolved_phrase_searches_from_tomorrow(box):

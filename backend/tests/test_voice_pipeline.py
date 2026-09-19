@@ -96,6 +96,15 @@ def test_greeting_never_contains_the_caller_number():
     assert "+34612345678" not in message
 
 
+def test_greeting_starts_in_english_without_locking_the_call_language():
+    for ctx in (HintCtx(), hinted_ctx(), HintCtx({"patient_id": "P00042"})):
+        message = phone_hint_greeting(ctx)
+        assert "Start in English" in message
+        assert "Good morning, Clínica Arenal. How can I help?" in message
+        assert "switch to the caller's language" in message
+        assert "let them say what they want first" in message
+
+
 def test_noise_suppression_is_off_unless_asked_for():
     """Ten concurrent calls cannot afford it, so it never turns itself on.
 

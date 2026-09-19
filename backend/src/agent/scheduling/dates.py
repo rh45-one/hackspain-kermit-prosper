@@ -30,6 +30,15 @@ WEEKDAYS = {
     "friday": 4,
     "saturday": 5,
     "sunday": 6,
+    "lunes": 0,
+    "martes": 1,
+    "miércoles": 2,
+    "miercoles": 2,
+    "jueves": 3,
+    "viernes": 4,
+    "sábado": 5,
+    "sabado": 5,
+    "domingo": 6,
 }
 
 _MONTHS = {
@@ -45,6 +54,19 @@ _MONTHS = {
     "october": 10,
     "november": 11,
     "december": 12,
+    "enero": 1,
+    "febrero": 2,
+    "marzo": 3,
+    "abril": 4,
+    "mayo": 5,
+    "junio": 6,
+    "julio": 7,
+    "agosto": 8,
+    "septiembre": 9,
+    "setiembre": 9,
+    "octubre": 10,
+    "noviembre": 11,
+    "diciembre": 12,
 }
 
 _ORDINALS = {
@@ -98,6 +120,10 @@ _FIXED_OFFSETS = {
 _ORDINAL_SUFFIX = re.compile(r"^(\d+)(?:st|nd|rd|th)$")
 
 
+class InvalidAppointmentDate(ValueError):
+    pass
+
+
 @dataclass
 class Resolution:
     """A resolved date plus the part of day the caller asked for."""
@@ -143,14 +169,25 @@ class MadridDateResolver:
         today = _as_madrid(now).date()
         low = _normalize(phrase)
         part = _part_of_day(low)
+        date_phrase = " ".join(re.sub(
+            r"\b(?:in the morning|in the afternoon|morning|afternoon|first thing|"
+            r"por la mañana|por la tarde)\b", "", low,
+        ).split())
 
-        offset = _FIXED_OFFSETS.get(low)
+        offset = _FIXED_OFFSETS.get(date_phrase)
         if offset is not None:
             return self._resolution(today + timedelta(days=offset), part, phrase)
 
-        explicit = self._parse_explicit(low, today)
+        iso = re.fullmatch(r"(?:on |el )?(\d{4}-\d{2}-\d{2})", date_phrase)
+        try:
+            explicit = date.fromisoformat(iso[1]) if iso else self._parse_explicit(low, today)
+        except ValueError as exc:
+            raise InvalidAppointmentDate(str(exc)) from exc
         if explicit is not None:
-            return self._resolution(explicit, part, phrase)
+            result = self._resolution(explicit, part, phrase)
+            if result.date <= today:
+                raise InvalidAppointmentDate("appointments must be after the day of the call")
+            return result
 
         weekday = _find_weekday(low)
         if weekday is not None:
@@ -191,10 +228,11 @@ class MadridDateResolver:
                 day_num = number
         if day_num is None:
             return None
-        candidate = _safe_date(today.year, month_num, day_num)
+        year = next((int(token) for token in tokens if re.fullmatch(r"\d{4}", token)), None)
+        candidate = _safe_date(today.year if year is None else year, month_num, day_num)
         if candidate is None:
-            return None
-        if candidate < today:
+            raise ValueError(f"invalid calendar date: {low!r}")
+        if candidate < today and year is None:
             candidate = _safe_date(today.year + 1, month_num, day_num)
         return candidate
 

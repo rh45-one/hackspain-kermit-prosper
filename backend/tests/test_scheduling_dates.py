@@ -123,6 +123,38 @@ def test_unresolvable_raises(resolver: MadridDateResolver) -> None:
         resolver.resolve_relative("sometime soon-ish", dt(2026, 9, 18))
 
 
+@pytest.mark.parametrize("phrase,expected,part", [
+    ("2026-09-24", date(2026, 9, 24), None),
+    ("on 2026-09-24 in the morning", date(2026, 9, 24), "morning"),
+    ("2026-10-12", date(2026, 10, 13), None),
+    ("September 24 2027", date(2027, 9, 24), None),
+    ("24 September 2027", date(2027, 9, 24), None),
+    ("tomorrow morning", date(2026, 9, 21), "morning"),
+    ("the day after tomorrow in the afternoon", date(2026, 9, 21), "afternoon"),
+    ("a week from today in the afternoon", date(2026, 9, 26), "afternoon"),
+    ("in a fortnight in the morning", date(2026, 10, 3), "morning"),
+    ("first thing tomorrow", date(2026, 9, 21), "morning"),
+    ("el jueves", date(2026, 9, 24), None),
+    ("el miércoles por la tarde", date(2026, 9, 23), "afternoon"),
+    ("mañana por la mañana", date(2026, 9, 21), "morning"),
+    ("el 24 de septiembre", date(2026, 9, 24), None),
+    ("el 12 de octubre", date(2026, 10, 13), None),
+])
+def test_explicit_and_qualified_dates_keep_the_requested_day(resolver, phrase, expected, part):
+    result = resolver.resolve_relative(phrase, dt(2026, 9, 19))
+    assert result.date == expected
+    assert result.part_of_day == part
+
+
+@pytest.mark.parametrize("phrase", [
+    "2026-02-30", "Monday 31 February", "el lunes 31 de febrero",
+    "2026-09-19", "2026-09-18", "September 18 2026",
+])
+def test_invalid_or_non_future_explicit_dates_are_not_silently_changed(resolver, phrase):
+    with pytest.raises(ValueError):
+        resolver.resolve_relative(phrase, dt(2026, 9, 19))
+
+
 # ---- the published phrase vocabulary (problems.md #5) ----------------------
 
 
