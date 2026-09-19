@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -49,8 +49,68 @@ class AppointmentView(Appointment):
     action: Literal["BOOK"] = "BOOK"
 
 
+async def _warm_catalogue() -> Any | None:
+    """The shared catalogue cache, warmed once if nobody has warmed it yet.
+
+    Inside `agent.serve` the server's lifespan has already warmed this exact
+    object, so this fetches nothing at all. `live.py` does the same thing for
+    the same reason.
+    """
+    try:
+        from agent.brain import deps
+
+        cache = deps.try_catalogue_cache()
+        if cache is None:
+            return None
+        if not cache.warmed:
+            client = deps.try_clinic_client(settings())
+            if client is not None:
+                await cache.warm(client)
+        return cache
+    except Exception:  # noqa: BLE001 - a cold cache degrades to ids, never a 500
+        return None
+
+
+def _names(cache: Any | None, kind: str) -> dict[str, str]:
+    """id -> display name, or an empty map when the cache is cold."""
+    index = getattr(cache, f"{kind}_by_id", None) if cache is not None else None
+    return {key: getattr(item, "name", key) for key, item in (index or {}).items()}
+
+
+class PatientCard(BaseModel):
+    """A patient as a person at a front desk needs to see them.
+
+    Deliberately not `PatientMatch`, which carries `national_id` and `phone`
+    in clear. This panel is published, so serving those would put a patient's
+    id one URL and one token away from the internet — and the sibling module
+    `live.py` redacts exactly those two from transcripts on purpose. Two views
+    of the same data cannot disagree about it.
+
+    The name stays, because it is how a person knows who they are looking at
+    and the challenge's privacy rules protect the id and the telephone, never
+    the name. The date of birth stays with it: two patients share a name often
+    enough that without it the card identifies nobody, and it is what the
+    agent itself asks for on the line.
+    """
+
+    patient_id: str
+    given_name: str
+    first_surname: str
+    second_surname: str
+    date_of_birth: str
+    sex: str
+    has_visited_before: bool
+    insurer: str
+    referrals: list[str] = []
+    note: str = ""
+
+    @classmethod
+    def of(cls, match: PatientMatch) -> PatientCard:
+        return cls(**match.model_dump(include=set(cls.model_fields)))
+
+
 class ClinicView(BaseModel):
-    patients: list[PatientMatch]
+    patients: list[PatientCard]
     appointments: list[AppointmentView]
 
 
@@ -125,13 +185,19 @@ async def clinic(
     client = ProsperClient(config)
     try:
         async with asyncio.timeout(25):
-            catalogue, directory = await asyncio.gather(
-                client.get_clinic(),
-                client.search_directory(name=name or None, national_id=national_id or None),
+            # The catalogue is NOT fetched here. It was, once per request: 30 KB
+            # off the challenge API to build three id-to-name dictionaries that
+            # are already indexed in the process-wide cache, warmed at startup
+            # and immutable for the life of the event. A panel that polls would
+            # have made a round trip to Prosper on every poll. Only the
+            # directory search is live, because only it can change.
+            directory = await client.search_directory(
+                name=name or None, national_id=national_id or None
             )
-            providers = {item.id: item.name for item in catalogue.providers}
-            locations = {item.id: item.name for item in catalogue.locations}
-            types = {item.id: item.name for item in catalogue.appointment_types}
+            cache = await _warm_catalogue()
+            providers = _names(cache, "providers")
+            locations = _names(cache, "locations")
+            types = _names(cache, "types")
             semaphore = asyncio.Semaphore(4)
 
             async def appointments_for(patient: PatientMatch) -> list[AppointmentView]:
@@ -151,7 +217,7 @@ async def clinic(
 
             groups = await asyncio.gather(*(appointments_for(p) for p in directory.matches))
             return ClinicView(
-                patients=directory.matches,
+                patients=[PatientCard.of(m) for m in directory.matches],
                 appointments=[item for group in groups for item in group],
             )
     except ClinicValidationError as exc:

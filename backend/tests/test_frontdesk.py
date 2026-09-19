@@ -1,4 +1,5 @@
 """FrontDesk must not confuse audit data, fixtures and accepted submissions."""
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -19,6 +20,7 @@ def _ops_door(monkeypatch):
     monkeypatch.setattr(console, "settings", lambda: type("S", (), {"ops_token": OPS_TOKEN})())
 
 from agent.clinic.client import ProsperClient
+from agent.clinic.models import PatientMatch
 from agent.config import Settings
 from agent.ops import frontdesk
 from agent.ops.console import app
@@ -70,7 +72,31 @@ def test_old_unclosed_logs_are_not_live_calls(config):
     assert frontdesk.calls()[0].status == "unknown"
 
 
+def _warm(monkeypatch, **indexes):
+    """Give the route a warm catalogue, the way agent.serve's lifespan does.
+
+    The ids-to-names no longer come off a per-request fetch, so a test that
+    wants names has to supply the cache rather than a fake HTTP response.
+    """
+    cache = type("C", (), {f"{kind}_by_id": value for kind, value in indexes.items()})()
+
+    async def _warmed() -> object:
+        return cache
+
+    monkeypatch.setattr(frontdesk, "_warm_catalogue", _warmed)
+
+
+def _named(name: str) -> object:
+    return type("N", (), {"name": name})()
+
+
 def test_clinic_enriches_appointments_and_keeps_key_on_server(config, monkeypatch):
+    _warm(
+        monkeypatch,
+        providers={"PR01": _named("Dra. Ana Sáez")},
+        locations={"centro": _named("Arenal Centro")},
+        types={"review": _named("Review")},
+    )
     def handle(request: httpx.Request) -> httpx.Response:
         assert request.headers["X-Api-Key"] == config.prosper_api_key
         route = request.url.path
@@ -134,3 +160,34 @@ def test_official_search_rejection_is_actionable(config, monkeypatch):
     assert response.status_code == 422
     assert "documento completo" in response.json()["detail"]
     assert "private detail" not in response.text
+
+def test_a_patient_card_carries_no_national_id_or_phone(config, monkeypatch):
+    """This panel is published; those two fields are what must never leave.
+
+    `live.py` redacts exactly these from transcripts on purpose, and two views
+    of the same patient cannot disagree about it. The name and date of birth
+    stay: they are how a person at a desk knows who they are looking at, and
+    the challenge protects the id and the telephone, never the name.
+    """
+    card = frontdesk.PatientCard.of(
+        PatientMatch(
+            patient_id="P00042",
+            given_name="Marta",
+            first_surname="Ruiz",
+            second_surname="Gómez",
+            national_id="12345678Z",
+            date_of_birth="1988-03-14",
+            phone="612345678",
+            sex="F",
+            has_visited_before=True,
+            insurer="sanitas",
+        )
+    )
+
+    served = card.model_dump()
+    assert "national_id" not in served
+    assert "phone" not in served
+    assert "12345678Z" not in json.dumps(served)
+    assert "612345678" not in json.dumps(served)
+    assert served["given_name"] == "Marta"
+    assert served["date_of_birth"] == "1988-03-14"
