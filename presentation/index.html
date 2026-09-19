@@ -3,400 +3,475 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pronto · Kermit · Prosper track</title>
+<title>Pronto · AI Healthcare Operations · KermitPanic</title>
 <link rel="icon" href="./assets/pronto-mark.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,144,500;0,144,600;1,144,500;1,144,600&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --navy: #013653;
-    --navy-deep: #091d24;
-    --cream: #f9f4ec;
-    --ink: #1c1814;
-    --taupe: #676059;
-    --coral: #ff5533;
-    --mint: #97efee;
-    --white: #ffffff;
-    --font-display: Fraunces, Georgia, serif;
-    --font: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --color-primary: #ff5533;
+    --color-primary-muted: #ffebd6;
+    --color-primary-foreground: #fafafa;
+    --color-bg: #ffffff;
+    --color-ink-strong: #212b36;
+    --color-muted-surface: #f5f5f5;
+    --color-border: #e5e5e5;
+    --color-border-strong: #d4d4d4;
+    --color-slate-900: #212b36;
+    --color-slate-700: #454f5b;
+    --color-slate-500: #637381;
+    --color-slate-400: #919eab;
+    --color-slate-100: #f4f6f8;
+    --color-success: #118d57;
+    --color-success-bg: #caefce;
+    --color-warning-strong: #b76e00;
+    --color-warning-bg: #fff8d4;
+    --color-destructive-strong: #b71d18;
+    --color-destructive-bg: #ffd6d6;
+    --color-info-bg: #e6f1f7;
+    --font-sans: "Public Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-body: "Inter", "Public Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-numeric: "Manrope", "Public Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   * { box-sizing: border-box; }
   html, body {
-    margin: 0;
-    height: 100%;
-    background: var(--navy-deep);
-    font-family: var(--font);
-    overflow: hidden;
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--color-slate-900);
+    font-family: var(--font-sans);
+    color: var(--color-ink-strong);
   }
 
   .board {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 1920px;
-    height: 1080px;
+    position: absolute; top: 50%; left: 50%;
+    width: 1920px; height: 1080px;
     margin: -540px 0 0 -960px;
     transform-origin: center center;
     overflow: hidden;
-    background: var(--cream);
-    color: var(--ink);
+    background: var(--color-bg);
   }
 
   .progress {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 8px;
-    z-index: 5;
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 6px; z-index: 5; background: var(--color-slate-100);
   }
   .progress > i {
-    display: block;
-    height: 100%;
-    width: 0;
-    background: var(--coral);
-    transition: width 200ms ease;
+    display: block; height: 100%; width: 0;
+    background: var(--color-primary);
+    transition: width 280ms var(--ease-out);
   }
 
   .stage, .slide { position: absolute; inset: 0; }
   .slide {
     display: none;
-    padding: 200px 110px 120px;
     flex-direction: column;
-    justify-content: flex-start;
-    background: var(--cream);
+    padding: 60px 100px 88px;
   }
   .slide.is-on { display: flex; }
-  .slide.is-navy { background: var(--navy); color: var(--white); }
 
   .top {
-    position: absolute;
-    top: 56px;
-    left: 110px;
-    right: 110px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px; margin-bottom: 28px; flex-shrink: 0;
   }
-  .lockup {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    color: inherit;
+  .lockup { display: flex; align-items: center; gap: 14px; }
+  .lockup .mark-box {
+    width: 56px; height: 56px; border-radius: 12px; overflow: hidden;
   }
-  .lockup .mark {
-    display: block;
-    width: 48px;
-    height: 48px;
-    flex-shrink: 0;
+  .lockup .mark-box img { display: block; width: 100%; height: 100%; }
+  .lockup .wm { height: 31px; width: auto; display: block; max-width: 190px; }
+  .eyebrow {
+    font-size: 20px; font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--color-slate-500);
   }
-  .lockup .name {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.045em;
-  }
-  .lockup img {
-    display: block;
-    height: 64px;
-    width: auto;
-  }
-  .kicker {
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--taupe);
-  }
-  .is-navy .kicker { color: rgba(255,255,255,.72); }
-
-  .display {
-    font-family: var(--font-display);
-    font-weight: 500;
-    font-style: italic;
-    letter-spacing: -0.03em;
-    line-height: 0.96;
-    margin: 0;
-  }
-  .lede {
-    margin: 28px 0 0;
-    font-size: 36px;
-    font-weight: 500;
-    line-height: 1.3;
-    color: var(--taupe);
-    max-width: 22ch;
-  }
-  .is-navy .lede { color: rgba(255,255,255,.86); }
+  .eyebrow .accent { color: var(--color-primary); }
 
   .foot {
-    position: absolute;
-    left: 110px;
-    right: 110px;
-    bottom: 44px;
-    display: flex;
-    justify-content: space-between;
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--taupe);
-    z-index: 4;
+    position: absolute; left: 100px; right: 100px; bottom: 34px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 20px; font-weight: 500; color: var(--color-slate-400); z-index: 4;
   }
-  .board.on-navy .foot { color: rgba(255,255,255,.55); }
-  .count { font-variant-numeric: tabular-nums; }
-
-  .title-grid {
-    display: grid;
-    grid-template-columns: 1.1fr 0.9fr;
-    gap: 64px;
-    align-items: center;
-    width: 100%;
+  .count {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums; font-weight: 600;
+    color: var(--color-slate-500);
   }
-  .title-grid h1 {
-    font-size: 128px;
-    font-style: italic;
-  }
-  .hero-art {
-    justify-self: end;
-    width: 480px;
-    height: 480px;
-    border-radius: 50%;
-    background: #024666;
-    border: 12px solid rgba(255,255,255,.16);
-    display: grid;
-    place-items: center;
-    position: relative;
-  }
-  .hero-art .phone,
-  .hero-art .phone svg { width: 160px; height: 160px; color: var(--white); }
-  .wave {
-    position: absolute;
-    bottom: 56px;
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    height: 72px;
-  }
-  .wave b {
-    display: block;
-    width: 12px;
-    border-radius: 8px;
-    background: var(--white);
-  }
-  .wave b:nth-child(1) { height: 40%; }
-  .wave b:nth-child(2) { height: 78%; background: var(--coral); }
-  .wave b:nth-child(3) { height: 100%; }
-  .wave b:nth-child(4) { height: 62%; background: var(--mint); }
-  .wave b:nth-child(5) { height: 46%; }
-
-  .quote h1 {
-    font-size: 92px;
-    line-height: 1.06;
-    max-width: 16ch;
-  }
-  .quote h1 em { color: var(--coral); font-style: italic; }
-  .quote .src {
-    margin-top: 40px;
-    font-size: 26px;
-    font-weight: 600;
-    color: var(--taupe);
-  }
-
-  .stack-head {
-    margin: 0 0 40px;
-    font-size: 72px;
-    max-width: 16ch;
-  }
-  .rows { display: grid; gap: 18px; }
-  .row {
-    display: grid;
-    grid-template-columns: 88px 1fr;
-    gap: 28px;
-    align-items: center;
-    background: var(--white);
-    border-radius: 28px;
-    padding: 28px 36px;
-  }
-  .tile {
-    width: 88px;
-    height: 88px;
-    border-radius: 20px;
-    display: grid;
-    place-items: center;
-  }
-  .tile svg { width: 44px; height: 44px; }
-  .tile.coral { background: #ffe3dc; color: var(--coral); }
-  .tile.mint { background: #d8f7f6; color: var(--navy); }
-  .tile.sand { background: #f3ebe0; color: var(--navy); }
-  .row h2 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 42px;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-    line-height: 1;
-  }
-  .row p {
-    margin: 6px 0 0;
-    font-size: 28px;
-    font-weight: 500;
-    color: var(--taupe);
-  }
-
-  .demo h1 { font-size: 160px; }
-
-  .flow {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 28px;
-    width: 100%;
-  }
-  .step {
-    background: var(--white);
-    border-radius: 28px;
-    padding: 40px 36px 36px;
-    min-height: 520px;
-    display: flex;
-    flex-direction: column;
-  }
-  .step .ico {
-    width: 72px;
-    height: 72px;
-    border-radius: 18px;
-    display: grid;
-    place-items: center;
-    margin-bottom: auto;
-    background: #ffe3dc;
-    color: var(--coral);
-  }
-  .step .ico svg { width: 36px; height: 36px; }
-  .step .n {
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 64px;
-    color: var(--coral);
-    line-height: 1;
-    margin: 0 0 24px;
-  }
-  .step h2 {
-    margin: 32px 0 0;
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 52px;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-    line-height: 1.05;
-  }
-  .step p {
-    margin: 14px 0 0;
-    font-size: 28px;
-    font-weight: 500;
-    color: var(--taupe);
-    max-width: 14ch;
-  }
-
-  .hits {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 36px;
-    max-width: 1400px;
-  }
-  .hit {
-    border-radius: 999px;
-    padding: 14px 24px;
-    font-size: 24px;
-    font-weight: 700;
-    background: var(--mint);
-    color: var(--navy);
-  }
-  .hit.miss { background: #ffe3dc; color: #9a3412; }
-  .hit.warn { background: #fff1c2; color: #7a4b00; }
-
-  .trio {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 24px;
-    width: 100%;
-  }
-  .stat {
-    background: var(--white);
-    border-radius: 28px;
-    padding: 36px 32px 32px;
-    min-height: 420px;
-    display: flex;
-    flex-direction: column;
-  }
-  .stat p {
-    margin: 12px 0 0;
-    font-size: 26px;
-    font-weight: 500;
-    color: var(--taupe);
-    max-width: 16ch;
-  }
-  .stat h2 {
-    margin: 28px 0 0;
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 42px;
-    font-weight: 500;
-    letter-spacing: -0.03em;
-    line-height: 1.05;
-  }
-  .stat .score {
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 72px;
-    color: var(--coral);
-    line-height: 1;
-    margin: 0 0 auto;
-    max-width: none;
-  }
-
-  .close h1 {
-    font-size: 110px;
-    max-width: 10ch;
-  }
-  .verbs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    margin-top: 40px;
-  }
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    padding: 16px 28px;
-    font-size: 28px;
-    font-weight: 700;
-    background: var(--white);
-    color: var(--navy);
-  }
-  .pill.ok { background: var(--mint); color: var(--navy); }
-  .pill.no { background: #ffe3dc; color: #9a3412; }
-  .pill.alert { background: var(--coral); color: var(--white); }
 
   .notes {
-    display: none;
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    background: var(--ink);
-    color: var(--cream);
-    padding: 22px 110px;
-    font-size: 22px;
-    line-height: 1.35;
-    z-index: 6;
+    display: none; position: absolute; left: 0; right: 0; bottom: 0;
+    background: var(--color-slate-900); color: #f4f6f8;
+    padding: 20px 100px; font-family: var(--font-body);
+    font-size: 23px; line-height: 1.35; z-index: 6;
   }
   .board.show-notes .notes { display: block; }
-  .notes b { color: var(--mint); }
+  .notes b { color: var(--color-primary); }
 
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide.is-on .anim { animation: rise 520ms var(--ease-out) both; }
+  .slide.is-on .a1 { animation-delay: 40ms; }
+  .slide.is-on .a2 { animation-delay: 110ms; }
+  .slide.is-on .a3 { animation-delay: 180ms; }
+
+  /* ── 01 Cover ── */
+  .slide.is-cover {
+    padding: 0; justify-content: center; align-items: center; text-align: center;
+    background:
+      radial-gradient(ellipse 55% 45% at 50% 38%, color-mix(in srgb, var(--color-primary) 13%, transparent), transparent 65%),
+      radial-gradient(ellipse 60% 40% at 90% 100%, var(--color-slate-100), transparent 50%),
+      var(--color-bg);
+  }
+  .cover-hero {
+    display: flex; flex-direction: column; align-items: center; gap: 40px;
+    padding: 0 110px;
+  }
+  .cover-mark {
+    width: 240px; height: 240px; border-radius: 52px; overflow: hidden;
+    box-shadow: 0 22px 56px rgb(33 43 54 / 0.16);
+  }
+  .cover-mark img { display: block; width: 100%; height: 100%; }
+  .cover-wordmark {
+    height: 178px; width: auto; display: block; max-width: 1100px;
+  }
+  .cover-slogan {
+    margin: 8px 0 0;
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 48px; line-height: 1.3; letter-spacing: -0.02em;
+    color: var(--color-slate-700); max-width: 20ch; text-wrap: balance;
+  }
+  .cover-meta {
+    margin: 4px 0 0;
+    font-size: 22px; font-weight: 500; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--color-slate-400);
+  }
+  .cover-meta em {
+    font-style: normal; color: var(--color-primary); font-weight: 600;
+  }
+
+  /* Shared titles */
+  .h-serif {
+    margin: 0 0 28px;
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 58px; line-height: 1.12; letter-spacing: -0.02em;
+    max-width: 20ch;
+  }
+  .h-serif em { font-style: italic; color: var(--color-primary); }
+
+  /* ── 02 Problem — three leak cards ── */
+  .slide.problem {
+    background: linear-gradient(180deg, #faf7f5 0%, var(--color-bg) 40%);
+  }
+  .leaks {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 22px; flex: 1;
+  }
+  .leak {
+    display: flex; flex-direction: column;
+    padding: 32px 28px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 22px;
+  }
+  .leak .metric {
+    margin: 0 0 8px;
+    font-family: var(--font-numeric); font-weight: 700;
+    font-size: 62px; line-height: 1; letter-spacing: -0.03em;
+    color: var(--color-primary);
+  }
+  .leak .metric-sub {
+    margin: 0 0 24px;
+    font-size: 22px; font-weight: 600; color: var(--color-slate-500);
+  }
+  .leak h2 {
+    margin: 0 0 12px;
+    font-size: 31px; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .leak p {
+    margin: 0; font-family: var(--font-body);
+    font-size: 26px; line-height: 1.35; color: var(--color-slate-700);
+  }
+  .leak.cost { border-top: 5px solid var(--color-primary); }
+  .leak.slots { border-top: 5px solid var(--color-warning-strong); background: var(--color-warning-bg); border-color: #f0e0a0; }
+  .leak.abandon { border-top: 5px solid var(--color-destructive-strong); background: var(--color-destructive-bg); border-color: #f0b8b8; }
+
+  /* ── 03 Solution — two halves ── */
+  .slide.solution { background: var(--color-bg); }
+  .sol-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px; flex: 1;
+  }
+  .sol-card {
+    display: flex; flex-direction: column;
+    padding: 36px 36px 40px;
+    border-radius: 24px;
+    border: 1px solid var(--color-border);
+    background: var(--color-muted-surface);
+  }
+  .sol-card.inbound {
+    background: var(--color-info-bg);
+    border-color: #c5dce8;
+  }
+  .sol-card.outbound {
+    background: var(--color-success-bg);
+    border-color: #a8d9b0;
+  }
+  .sol-card .kind {
+    font-family: var(--font-numeric); font-size: 17px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--color-primary); margin-bottom: 16px;
+  }
+  .sol-card.outbound .kind { color: var(--color-success); }
+  .sol-card h2 {
+    margin: 0 0 14px;
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 48px; line-height: 1.1; letter-spacing: -0.02em;
+  }
+  .sol-card p {
+    margin: 0; font-family: var(--font-body);
+    font-size: 29px; line-height: 1.35; color: var(--color-slate-700);
+  }
+  .sol-card ul {
+    list-style: none; margin: 24px 0 0; padding: 0;
+    display: grid; gap: 12px;
+  }
+  .sol-card li {
+    font-family: var(--font-sans); font-size: 24px; font-weight: 600;
+    color: var(--color-ink-strong);
+    padding-left: 24px; position: relative;
+  }
+  .sol-card li::before {
+    content: "";
+    position: absolute; left: 0; top: 0.55em;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--color-primary);
+  }
+  .sol-card.outbound li::before { background: var(--color-success); }
+
+  /* ── 04 ROI — comparison + recovery ── */
+  .slide.roi {
+    background: var(--color-slate-100);
+  }
+  .roi-scenario {
+    margin: -4px 0 22px;
+    font-size: 24px; font-weight: 500; color: var(--color-slate-500);
+  }
+  .roi-grid {
+    display: grid; grid-template-columns: 1.15fr 0.85fr;
+    gap: 22px; flex: 1;
+  }
+  .roi-compare {
+    display: grid; grid-template-columns: 1fr auto 1fr;
+    gap: 16px; align-items: stretch;
+    background: var(--color-bg);
+    border-radius: 24px;
+    border: 1px solid var(--color-border);
+    padding: 32px 28px;
+  }
+  .roi-col h3 {
+    margin: 0 0 16px;
+    font-size: 22px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--color-slate-500);
+  }
+  .roi-col .fig {
+    margin: 0;
+    font-family: var(--font-numeric); font-weight: 700;
+    font-size: 67px; line-height: 1; letter-spacing: -0.03em;
+  }
+  .roi-col.human .fig { color: var(--color-destructive-strong); }
+  .roi-col.pronto .fig { color: var(--color-success); }
+  .roi-col .detail {
+    margin: 12px 0 0;
+    font-family: var(--font-body); font-size: 24px;
+    line-height: 1.35; color: var(--color-slate-700);
+  }
+  .roi-vs {
+    display: grid; place-items: center;
+    font-family: var(--font-numeric); font-weight: 700;
+    font-size: 22px; color: var(--color-slate-400);
+  }
+  .roi-save {
+    margin-top: 20px; padding-top: 20px;
+    border-top: 1px solid var(--color-border);
+    grid-column: 1 / -1;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 24px;
+  }
+  .roi-save .label {
+    font-size: 26px; font-weight: 600; color: var(--color-ink-strong);
+  }
+  .roi-save .big {
+    font-family: var(--font-numeric); font-weight: 700;
+    font-size: 53px; color: var(--color-primary); letter-spacing: -0.02em;
+  }
+  .roi-outbound {
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 32px 32px 36px;
+    background: var(--color-slate-900);
+    border-radius: 24px;
+    color: var(--color-primary-foreground);
+  }
+  .roi-outbound .tag {
+    font-family: var(--font-numeric); font-size: 17px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--color-primary); margin-bottom: 14px;
+  }
+  .roi-outbound h2 {
+    margin: 0 0 14px;
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 43px; line-height: 1.15;
+  }
+  .roi-outbound p {
+    margin: 0; font-family: var(--font-body);
+    font-size: 26px; line-height: 1.35; color: rgba(255,255,255,.78);
+  }
+  .roi-outbound .recovered {
+    margin-top: 24px;
+    font-family: var(--font-numeric); font-weight: 700;
+    font-size: 67px; line-height: 1; color: var(--color-primary);
+  }
+  .roi-outbound .recovered-cap {
+    margin: 10px 0 0;
+    font-size: 22px; font-weight: 500; color: rgba(255,255,255,.6);
+  }
+  .roi-punch {
+    margin-top: 16px;
+    padding: 18px 28px;
+    background: var(--color-primary-muted);
+    border-radius: 14px;
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 34px; text-align: center;
+    color: var(--color-ink-strong);
+    grid-column: 1 / -1;
+  }
+
+  /* ── 05 Moat — vs generic LLM ── */
+  .slide.moat { background: var(--color-bg); }
+  .moat-q {
+    margin: -4px 0 24px;
+    font-family: var(--font-body); font-size: 29px;
+    color: var(--color-slate-500); font-style: italic;
+  }
+  .moat-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px; flex: 1;
+  }
+  .moat-card {
+    display: flex; flex-direction: column;
+    padding: 36px 36px;
+    border-radius: 24px;
+    border: 1px solid var(--color-border);
+  }
+  .moat-card.safety {
+    background: var(--color-destructive-bg);
+    border-color: #f0b8b8;
+  }
+  .moat-card.control {
+    background: var(--color-slate-900);
+    color: var(--color-primary-foreground);
+    border-color: transparent;
+  }
+  .moat-card .ico-label {
+    font-family: var(--font-numeric); font-size: 17px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .moat-card.safety .ico-label { color: var(--color-destructive-strong); }
+  .moat-card.control .ico-label { color: var(--color-primary); }
+  .moat-card h2 {
+    margin: 0 0 16px;
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 43px; line-height: 1.15;
+  }
+  .moat-card p {
+    margin: 0; font-family: var(--font-body);
+    font-size: 29px; line-height: 1.35;
+  }
+  .moat-card.safety p { color: var(--color-ink-strong); }
+  .moat-card.control p { color: rgba(255,255,255,.82); }
+
+  /* ── 06 Business model ── */
+  .slide.biz {
+    background:
+      radial-gradient(ellipse 50% 50% at 100% 0%, color-mix(in srgb, var(--color-primary-muted) 60%, transparent), transparent 55%),
+      var(--color-bg);
+  }
+  .biz-lead {
+    margin: -4px 0 28px;
+    font-size: 26px; font-weight: 500; color: var(--color-slate-500);
+  }
+  .pricing {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px; flex: 1;
+  }
+  .price-card {
+    display: flex; flex-direction: column;
+    padding: 36px 36px;
+    border-radius: 24px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
+  .price-card.saas {
+    border-top: 5px solid var(--color-slate-900);
+  }
+  .price-card.usage {
+    border-top: 5px solid var(--color-primary);
+    background: var(--color-primary-muted);
+    border-color: #f5d4b8;
+  }
+  .price-card .tier {
+    font-family: var(--font-numeric); font-size: 17px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--color-slate-500); margin-bottom: 12px;
+  }
+  .price-card.usage .tier { color: var(--color-primary); }
+  .price-card .amount {
+    margin: 0 0 8px;
+    font-family: var(--font-numeric); font-weight: 700;
+    font-size: 67px; line-height: 1; letter-spacing: -0.03em;
+    color: var(--color-ink-strong);
+  }
+  .price-card .amount-sub {
+    margin: 0 0 24px;
+    font-size: 24px; font-weight: 500; color: var(--color-slate-500);
+  }
+  .price-card h2 {
+    margin: 0 0 12px;
+    font-size: 34px; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .price-card p {
+    margin: 0; font-family: var(--font-body);
+    font-size: 26px; line-height: 1.35; color: var(--color-slate-700);
+  }
+  .price-card .split {
+    margin-top: 22px; display: grid; gap: 12px;
+  }
+  .price-card .split div {
+    padding: 16px 18px;
+    background: rgba(255,255,255,.7);
+    border-radius: 12px;
+    font-size: 24px; font-weight: 600; color: var(--color-ink-strong);
+  }
+  .price-card .split strong {
+    font-family: var(--font-numeric);
+    color: var(--color-primary);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .anim { animation: none !important; }
+    .progress > i { transition: none; }
+  }
   @media print {
     body { background: white; }
     .board { transform: none !important; position: static; margin: 0; }
     .notes { display: none !important; }
     .slide {
-      display: flex !important;
-      position: relative;
-      height: 1080px;
-      page-break-after: always;
+      display: flex !important; position: relative;
+      height: 1080px; page-break-after: always;
     }
   }
 </style>
@@ -406,184 +481,193 @@
     <div class="progress" aria-hidden="true"><i id="bar"></i></div>
     <div class="stage" id="stage">
 
-      <section class="slide is-navy is-on" data-notes="Somos Kermit. El agente coge el teléfono de Clínica Arenal y envía la acción a vuestra plataforma. No os vamos a vender un modelo. Os vamos a enseñar cómo rinde contra los casos que escribisteis vosotros.">
-        <div class="top">
-          <div class="lockup" aria-label="Pronto">
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-              <g transform="translate(0.31 0)">
-                <path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/>
-              </g>
-            </svg>
-            <span class="name">Pronto</span>
+      <!-- 01 Cover -->
+      <section class="slide is-cover is-on" data-notes="Portada. Pronto — AI Healthcare Operations. Dejad respirar el wordmark. Luego: mercado, ROI y moat — no el stack.">
+        <div class="cover-hero anim">
+          <div class="cover-mark" aria-hidden="true">
+            <img src="./assets/pronto-mark.svg" alt="" width="240" height="240" />
           </div>
-        </div>
-        <div class="title-grid">
-          <div>
-            <h1 class="display">Pronto</h1>
-            <p class="lede">Your cases. Our scoreboard. The phone does not improvise.</p>
-          </div>
-          <div class="hero-art" aria-hidden="true">
-            <i class="phone" data-lucide="phone-call"></i>
-            <div class="wave"><b></b><b></b><b></b><b></b><b></b></div>
-          </div>
+          <img class="cover-wordmark" src="./assets/pronto-wordmark-clean.svg" alt="Pronto" height="178" />
+          <p class="cover-slogan">AI Healthcare Operations — el agente de operaciones clínicas automatizado</p>
+          <p class="cover-meta"><em>KermitPanic</em> · HackSpain Prosper 2026</p>
         </div>
       </section>
 
-      <section class="slide" data-notes="Mejor Run All sobre los problemas 1 a 10. Siete problemas a cuatro de cuatro. Third Party va tres de cuatro. New Patient sigue a cero: ahí fallamos el REGISTER, no el razonamiento de citas. No citéis los 54 failed: son intentos, no el tablero.">
+      <!-- 02 Problem -->
+      <section class="slide problem" data-notes="Tres fugas: 4–8€/llamada humana; un día de baja = hasta 5.000€; 15% abandono en picos matinales.">
         <div class="top">
           <div class="lockup" aria-label="Pronto">
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-              <g transform="translate(0.31 0)">
-                <path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/>
-              </g>
-            </svg>
-            <span class="name">Pronto</span>
+            <span class="mark-box"><img src="./assets/pronto-mark.svg" alt="" /></span>
+            <img class="wm" src="./assets/pronto-wordmark-clean.svg" alt="Pronto" />
           </div>
-          <span class="kicker">Best Run All · problems 1–10</span>
+          <span class="eyebrow"><span class="accent">02</span> · El problema</span>
         </div>
-        <h1 class="display stack-head">Seven problems at four of four.</h1>
-        <div class="hits">
-          <span class="hit">Simple Booking</span>
-          <span class="hit">Doctor and the Site</span>
-          <span class="hit">When Exactly</span>
-          <span class="hit">The Rules</span>
-          <span class="hit">No Slot Free</span>
-          <span class="hit">Change and Cancel</span>
-          <span class="hit">Triage</span>
-          <span class="hit warn">Third Party 3/4</span>
-          <span class="hit miss">New Patient 0/4</span>
-        </div>
-      </section>
-
-      <section class="slide" data-notes="Tres que importan en una clínica real. The Rules: se niega con la razón cerrada de la clínica, no con un texto libre. When Exactly: lunes es Madrid, no el modelo. Triage: dolor de pecho es 112, no un hueco. Doctor and the Site y Change and Cancel también están a pleno: se dice si preguntan.">
-        <div class="top">
-          <div class="lockup" aria-label="Pronto">
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-              <g transform="translate(0.31 0)">
-                <path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/>
-              </g>
-            </svg>
-            <span class="name">Pronto</span>
-          </div>
-          <span class="kicker">What a perfect run means</span>
-        </div>
-        <div class="trio">
-          <article class="stat">
-            <p class="score">12/12</p>
-            <h2>The Rules</h2>
-            <p>Refuses with the clinic’s reason. Not a polite guess.</p>
+        <h1 class="h-serif anim">La fuga de capital en la <em>gestión clínica</em></h1>
+        <div class="leaks">
+          <article class="leak cost anim a1">
+            <p class="metric">4–8 €</p>
+            <p class="metric-sub">por llamada humana</p>
+            <h2>Costes operativos</h2>
+            <p>Salarios, infraestructura y tiempos muertos. Level 1 support destruye el margen de la clínica.</p>
           </article>
-          <article class="stat">
-            <p class="score">8/8</p>
-            <h2>When Exactly</h2>
-            <p>“Monday” is Europe/Madrid. Never same-day.</p>
+          <article class="leak slots anim a2">
+            <p class="metric">5.000 €</p>
+            <p class="metric-sub">perdidos / día de baja</p>
+            <h2>Empty slots</h2>
+            <p>25 pacientes × 100–200 €. Reprogramar a mano es lento: la agenda queda vacía.</p>
           </article>
-          <article class="stat">
-            <p class="score">12/12</p>
-            <h2>Triage</h2>
-            <p>Chest pain is 112. Not a slot.</p>
+          <article class="leak abandon anim a3">
+            <p class="metric">15%</p>
+            <p class="metric-sub">abandono en picos</p>
+            <h2>Pacientes perdidos</h2>
+            <p>Esperas de 5–10 min (8:00–10:00). Ese 15% acaba en la competencia.</p>
           </article>
         </div>
       </section>
 
-      <section class="slide is-navy" data-notes="Esto no es solo un mando a distancia. En /calls la tarjeta enseña a quién identificamos (nombre, documento, tipo de cita), si el POST aterrizó (envíos aceptados o fallidos, y por qué una acción vacía), y el mix BOOKED / REFUSED / DIVERTED. Alt-tab y señala entidades, la línea de diagnóstico y los gráficos. No digáis que clonamos su tabla naranja: esa es su harness. Lo nuestro es el mostrador de la llamada.">
+      <!-- 03 Solution -->
+      <section class="slide solution" data-notes="No es un bot: agente de operaciones. Inbound zero-wait + Outbound Recovery ante bajas.">
         <div class="top">
           <div class="lockup" aria-label="Pronto">
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-              <g transform="translate(0.31 0)">
-                <path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/>
-              </g>
-            </svg>
-            <span class="name">Pronto</span>
+            <span class="mark-box"><img src="./assets/pronto-mark.svg" alt="" /></span>
+            <img class="wm" src="./assets/pronto-wordmark-clean.svg" alt="Pronto" />
           </div>
-          <span class="kicker">Our desk, not only yours</span>
+          <span class="eyebrow"><span class="accent">03</span> · La solución</span>
         </div>
-        <h1 class="display stack-head">Did we identify the case?</h1>
-        <div class="trio">
-          <article class="stat">
-            <p class="score">01</p>
-            <h2>Identify</h2>
-            <p>Name, document, visit type — live on the card.</p>
+        <h1 class="h-serif anim">Pronto: agente de operaciones clínicas, no un bot</h1>
+        <div class="sol-grid">
+          <article class="sol-card inbound anim a1">
+            <span class="kind">Inbound resolutivo</span>
+            <h2>Zero wait time</h2>
+            <p>Recepción simultánea e infinita. Citas en &lt;2 min con reglas de negocio estrictas.</p>
+            <ul>
+              <li>Validación de aseguradoras (ej. DKV)</li>
+              <li>0,0% constraint violations en agenda</li>
+              <li>Sin colisiones ni promesas inventadas</li>
+            </ul>
           </article>
-          <article class="stat">
-            <p class="score">02</p>
-            <h2>Land</h2>
-            <p>Verb posted. Accepted or failed. Why it was empty.</p>
-          </article>
-          <article class="stat">
-            <p class="score">03</p>
-            <h2>Mix</h2>
-            <p>Booked, refused, diverted. Same screen as the call.</p>
+          <article class="sol-card outbound anim a2">
+            <span class="kind">Outbound Recovery</span>
+            <h2>Salvavidas de ingresos</h2>
+            <p>Ante la baja de un médico, Pronto llama a los afectados y reprograma en huecos libres.</p>
+            <ul>
+              <li>Campañas autónomas el mismo día</li>
+              <li>Rescata la facturación de la agenda</li>
+              <li>Otros doctores absorben la demanda</li>
+            </ul>
           </article>
         </div>
       </section>
 
-      <section class="slide" data-notes="New Patient es el agujero: REGISTER, DNI con letra, email al dictado. Cero de ocho. Third Party, un padre que llama por un hijo, va tres de cuatro. Lo decimos nosotros antes de que lo pregunten. No es el motor de reglas; es habla y ficha nueva.">
+      <!-- 04 ROI -->
+      <section class="slide roi" data-notes="Clínica mediana: 2.000 llamadas/mes, 1 baja/mes. Ahorro inbound +9.000€. Outbound +2.550€ por incidencia. Se paga en la primera semana.">
         <div class="top">
           <div class="lockup" aria-label="Pronto">
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-              <g transform="translate(0.31 0)">
-                <path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/>
-              </g>
-            </svg>
-            <span class="name">Pronto</span>
+            <span class="mark-box"><img src="./assets/pronto-mark.svg" alt="" /></span>
+            <img class="wm" src="./assets/pronto-wordmark-clean.svg" alt="Pronto" />
           </div>
-          <span class="kicker">What still fails</span>
+          <span class="eyebrow"><span class="accent">04</span> · Impacto &amp; ROI</span>
         </div>
-        <div class="trio">
-          <article class="stat">
-            <p class="score">0/8</p>
-            <h2>New Patient</h2>
-            <p>Register. Check letter. Email spelled aloud.</p>
+        <h1 class="h-serif anim" style="margin-bottom:8px">El caso de uso para el VC</h1>
+        <p class="roi-scenario anim">Escenario base · Clínica mediana · 2.000 llamadas/mes · 1 baja médica/mes</p>
+        <div class="roi-grid">
+          <div class="roi-compare anim a1">
+            <div class="roi-col human">
+              <h3>Humano</h3>
+              <p class="fig">10.000 €</p>
+              <p class="detail">2.000 × 5 €/llamada</p>
+            </div>
+            <div class="roi-vs">vs</div>
+            <div class="roi-col pronto">
+              <h3>Pronto</h3>
+              <p class="fig">1.000 €</p>
+              <p class="detail">2.000 × 0,50 €/llamada</p>
+            </div>
+            <div class="roi-save">
+              <span class="label">Ahorro inbound / mes (−90% Level 1)</span>
+              <span class="big">+9.000 €</span>
+            </div>
+          </div>
+          <aside class="roi-outbound anim a2">
+            <div>
+              <span class="tag">Outbound Recovery</span>
+              <h2>1 baja = 25 citas en riesgo</h2>
+              <p>70% reprogramadas con éxito → 17 pacientes salvados × 150 € ticket medio.</p>
+            </div>
+            <div>
+              <p class="recovered">+2.550 €</p>
+              <p class="recovered-cap">ingresos recuperados / incidencia</p>
+            </div>
+          </aside>
+          <p class="roi-punch anim a3">Pronto se paga solo en su primera semana de uso.</p>
+        </div>
+      </section>
+
+      <!-- 05 Moat -->
+      <section class="slide moat" data-notes="¿Por qué no ChatGPT? Triage Manchester → 112. Dashboard B2B con auditoría, PII y Outbound Recovery. Raíles clínicos, no LLM libre.">
+        <div class="top">
+          <div class="lockup" aria-label="Pronto">
+            <span class="mark-box"><img src="./assets/pronto-mark.svg" alt="" /></span>
+            <img class="wm" src="./assets/pronto-wordmark-clean.svg" alt="Pronto" />
+          </div>
+          <span class="eyebrow"><span class="accent">05</span> · Foso defensivo</span>
+        </div>
+        <h1 class="h-serif anim" style="margin-bottom:4px">Por qué Pronto y no una API genérica</h1>
+        <p class="moat-q anim">«¿Por qué no puede un hospital usar ChatGPT?»</p>
+        <div class="moat-grid">
+          <article class="moat-card safety anim a1">
+            <span class="ico-label">Clinical safety</span>
+            <h2>Triage de Manchester</h2>
+            <p>Pronto no diagnostica: enruta. Nivel I o II → desvío instantáneo al 112. Raíles clínicos estrictos frente a la alucinación de un LLM genérico.</p>
           </article>
-          <article class="stat">
-            <p class="score">9/12</p>
-            <h2>Third Party</h2>
-            <p>A parent on the line. Three of four cases.</p>
-          </article>
-          <article class="stat">
-            <p class="score">—</p>
-            <h2>Switchboard</h2>
-            <p>Diagnostic only. Run All does not score it.</p>
+          <article class="moat-card control anim a2">
+            <span class="ico-label">Executive control</span>
+            <h2>Dashboard B2B</h2>
+            <p>Auditoría en tiempo real, trazabilidad PII e historial de Outbound Recovery. Gerencia con control total — no código, métricas.</p>
           </article>
         </div>
       </section>
 
-      <section class="slide is-navy" data-notes="Por eso el modelo no escribe. Un hueco inventado no suma medio punto: el caso falla entero. Cada llamada envía un verbo, incluida una negativa correcta. Somos Kermit. Preguntad.">
+      <!-- 06 Business model -->
+      <section class="slide biz" data-notes="SaaS 299–499€/mes por clínica. Usage: 0,50€ inbound resuelto; 2€ outbound reprogramado (prima por salvar ingresos).">
         <div class="top">
           <div class="lockup" aria-label="Pronto">
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-              <g transform="translate(0.31 0)">
-                <path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/>
-              </g>
-            </svg>
-            <span class="name">Pronto</span>
+            <span class="mark-box"><img src="./assets/pronto-mark.svg" alt="" /></span>
+            <img class="wm" src="./assets/pronto-wordmark-clean.svg" alt="Pronto" />
           </div>
-          <span class="kicker">Why the board looks like that</span>
+          <span class="eyebrow"><span class="accent">06</span> · Modelo de negocio</span>
         </div>
-        <div class="close">
-          <h1 class="display">The model does not write.</h1>
-          <div class="verbs">
-            <span class="pill ok">Book</span>
-            <span class="pill">Register</span>
-            <span class="pill ok">Reschedule</span>
-            <span class="pill ok">Cancel</span>
-            <span class="pill no">No action</span>
-            <span class="pill alert">Escalate</span>
-          </div>
-          <p class="lede">Exact match after the call. No partial credit.</p>
+        <h1 class="h-serif anim" style="margin-bottom:4px">B2B SaaS + usage-based pricing</h1>
+        <p class="biz-lead anim">Go-to-market · licencia de plataforma + pago por resolución</p>
+        <div class="pricing">
+          <article class="price-card saas anim a1">
+            <span class="tier">SaaS fee mensual</span>
+            <p class="amount">299–499 €</p>
+            <p class="amount-sub">por clínica / mes</p>
+            <h2>Licencia de plataforma</h2>
+            <p>Centro de mando, directorio médico y analíticas. Acceso al Executive Dashboard.</p>
+          </article>
+          <article class="price-card usage anim a2">
+            <span class="tier">Pay-per-resolution</span>
+            <p class="amount">Uso</p>
+            <p class="amount-sub">solo cuando resuelve</p>
+            <h2>Inbound + Outbound</h2>
+            <div class="split">
+              <div><strong>0,50 €</strong> · llamada inbound gestionada con éxito</div>
+              <div><strong>2,00 €</strong> · paciente reprogramado en outbound (prima por salvar ingresos)</div>
+            </div>
+          </article>
         </div>
       </section>
     </div>
 
     <div class="foot">
-      <span>Pronto · Kermit · HackSpain 2026</span>
+      <span>Pronto · KermitPanic · HackSpain Prosper 2026</span>
       <span class="count" id="count">1 / 6</span>
     </div>
     <aside class="notes" id="notes"></aside>
   </div>
 
-  <script src="https://unpkg.com/lucide@0.456.0/dist/umd/lucide.js"></script>
   <script>
     const board = document.getElementById("board");
     const slides = [...document.querySelectorAll(".slide")];
@@ -597,18 +681,12 @@
       board.style.transform = "scale(" + s + ")";
     }
 
-    function paintIcons() {
-      if (window.lucide) window.lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
-    }
-
     function render() {
       slides.forEach((slide, idx) => slide.classList.toggle("is-on", idx === i));
-      const navy = slides[i].classList.contains("is-navy");
-      board.classList.toggle("on-navy", navy);
+      board.classList.toggle("on-cover", slides[i].classList.contains("is-cover"));
       bar.style.width = ((i + 1) / slides.length * 100) + "%";
       count.textContent = (i + 1) + " / " + slides.length;
       notes.innerHTML = "<b>Say</b> — " + (slides[i].dataset.notes || "");
-      paintIcons();
     }
 
     function go(d) {
@@ -628,8 +706,7 @@
         if (!document.fullscreenElement) document.documentElement.requestFullscreen();
         else document.exitFullscreen();
       } else if (/^[1-6]$/.test(event.key)) {
-        i = Number(event.key) - 1;
-        render();
+        i = Number(event.key) - 1; render();
       }
     });
 
@@ -639,7 +716,6 @@
     });
 
     window.addEventListener("resize", fit);
-    paintIcons();
     fit();
     render();
   </script>
