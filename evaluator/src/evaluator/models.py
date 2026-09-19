@@ -344,7 +344,9 @@ class CandidateConfig(BaseModel):
     ws_url: str | None = None  # e.g. ws://localhost:7860/ws
     text_url: str | None = None  # optional text adapter endpoint
     usage_url: str | None = None  # optional; GET {usage_url}/calls/{call_id} → {cost, usage}
-    start_command: str | None = None  # optional; runner waits for ws_url
+    start_command: str | None = None  # optional; the runner waits for ws_url
+    ready_url: str | None = None  # optional; default http://host:port/healthz from ws_url
+    ready_timeout_s: float = 30.0  # how long a started candidate may take to listen
     env: dict[str, str] = Field(default_factory=dict)
     mode: Literal["correct", "mutate", "silent"] = "correct"  # double only
     port: int | None = None  # double only

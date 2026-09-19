@@ -4,8 +4,11 @@ Commands:
     clinic    serve the local clinic + submission receiver
     double    serve the test-double agent
     run       execute an experiment config end to end
+    chat      manual tester against a live agent, typing turns by hand
     score     score a recorded submission file against a scenario, offline
     validate  check that scenarios resolve against the clinic fixture
+    diff      compare two run directories
+    compare   side-by-side of every candidate inside one run
 """
 from __future__ import annotations
 
@@ -46,6 +49,52 @@ def main() -> None:
     p.add_argument("run_a", help="results dir of run A (the baseline)")
     p.add_argument("run_b", help="results dir of run B (the candidate)")
     p.add_argument("--json", action="store_true", help="emit machine-readable diff")
+
+    p = sub.add_parser("compare", help="side-by-side of every candidate inside one run")
+    p.add_argument("run", help="results dir of the run")
+    p.add_argument("--json", action="store_true", help="emit the machine-readable summary")
+
+    p = sub.add_parser("chat", help="manual tester: type to a live agent and read its replies")
+    p.add_argument("--ws-url", default="ws://127.0.0.1:17860/ws", help="agent websocket")
+    p.add_argument("--clinic-url", default="http://127.0.0.1:18090", help="local clinic")
+    p.add_argument("--api-key", default="pk-local-eval")
+    p.add_argument("--call-id", default=None, help="default: tester-<random>")
+    p.add_argument("--from-number", default=None)
+    p.add_argument("--tts", default="espeak-ng", help="espeak-ng | pico2wave")
+    p.add_argument("--lang", default="es")
+    p.add_argument(
+        "--stt",
+        default=None,
+        help="override EVALUATOR_STT_PROVIDER (deepgram | openai-compat | none)",
+    )
+    p.add_argument("--scenario", default=None, help="score the recorded call at the end")
+    p.add_argument(
+        "--agent-audit-dir",
+        default=None,
+        help="the agent's DATA_DIR or its calls/ dir, to check whether it heard the caller",
+    )
+    p.add_argument("--save-dir", default=None, help="where WAV evidence goes")
+    p.add_argument("--reply-idle-ms", type=float, default=900.0, help="silence that ends a reply")
+    p.add_argument("--reply-max-ms", type=float, default=20000.0, help="longest reply to wait for")
+    p.add_argument(
+        "--reply-start-ms",
+        type=float,
+        default=6000.0,
+        help="how long a reply may take to start (thinking + tools)",
+    )
+    p.add_argument(
+        "--greeting-wait-ms",
+        type=float,
+        default=20000.0,
+        help="how long to wait for the greeting before the caller may speak",
+    )
+    p.add_argument(
+        "--turn-tail-ms",
+        type=float,
+        default=600.0,
+        help="caller silence after each typed turn, so the agent closes the turn",
+    )
+    p.add_argument("--no-greeting", action="store_true", help="do not wait for the agent's greeting")
 
     args = parser.parse_args()
 
@@ -111,6 +160,41 @@ def main() -> None:
             print()
         else:
             print(format_diff(result))
+    elif args.cmd == "compare":
+        from evaluator.report.side_by_side import (
+            format_side_by_side,
+            side_by_side,
+            side_by_side_json,
+        )
+
+        result = side_by_side(args.run)
+        print(side_by_side_json(result) if args.json else format_side_by_side(result))
+    elif args.cmd == "chat":
+        import asyncio
+
+        from evaluator.tester import ChatOptions, run_chat
+
+        options = ChatOptions(
+            ws_url=args.ws_url,
+            clinic_url=args.clinic_url,
+            api_key=args.api_key,
+            from_number=args.from_number,
+            tts=args.tts,
+            lang=args.lang,
+            stt_provider=args.stt,
+            scenario=args.scenario,
+            save_dir=args.save_dir,
+            agent_audit_dir=args.agent_audit_dir,
+            reply_idle_ms=args.reply_idle_ms,
+            reply_max_ms=args.reply_max_ms,
+            reply_start_ms=args.reply_start_ms,
+            greeting_wait_ms=args.greeting_wait_ms,
+            turn_tail_ms=args.turn_tail_ms,
+            greet_first=not args.no_greeting,
+        )
+        if args.call_id:
+            options.call_id = args.call_id
+        sys.exit(asyncio.run(run_chat(options)))
 
 
 if __name__ == "__main__":

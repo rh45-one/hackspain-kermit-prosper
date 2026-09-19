@@ -41,6 +41,7 @@ from evaluator.models import (
     ExperimentConfig,
     Scenario,
 )
+from evaluator.runner.readiness import Readiness, wait_for_candidate
 from evaluator.simulator.llm_patient import make_patient
 
 VERB_TO_ROUTE = {
@@ -444,6 +445,46 @@ def validate_scenario(scenario: Scenario, dataset: Dataset) -> list[str]:
     return problems
 
 
+def case_plan(
+    config: ExperimentConfig, scenarios: list[tuple[Scenario, Path]]
+) -> list[tuple[int, Scenario, Path, CandidateConfig]]:
+    """The cases to run, with the candidate varying fastest.
+
+    Interleaved on purpose. Running each candidate's block to completion lets a
+    time-varying backend (provider latency, warm caches, a deploy in the
+    middle) favour whichever candidate happened to go last, which is exactly
+    the difference an A/B is trying to measure. Repetitions stay slowest so
+    every repetition still sees every candidate.
+    """
+    return [
+        (rep, scenario, path, cand)
+        for rep in range(config.repetitions)
+        for scenario, path in scenarios
+        for cand in config.candidates
+    ]
+
+
+def _not_ready_case(
+    candidate: CandidateConfig,
+    scenario: Scenario,
+    repetition: int,
+    case_id: str,
+    readiness: Readiness,
+) -> CaseResult:
+    """A candidate that never listened is a rig failure, not a model result."""
+    return CaseResult(
+        case_id=case_id,
+        call_id=f"not-ready-{case_id}",
+        scenario_id=scenario.id,
+        problem_id=scenario.problem_id,
+        candidate=candidate.name,
+        repetition=repetition,
+        verdict="invalid_evaluation",
+        categories=["candidate_not_ready"],
+        errors=[f"candidate never answered: {readiness.describe()}"],
+    )
+
+
 def run_experiment(config_path: str, out_root: str | None = None) -> Path:
     """Run one experiment end to end; returns the results directory."""
     config_path_obj = Path(config_path).resolve()
@@ -490,32 +531,42 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
                     subprocess.Popen(cand.start_command, shell=True, env=env, cwd=config_dir)
                 )
 
+        startup: dict[str, Readiness] = {
+            cand.name: wait_for_candidate(cand)
+            for cand in config.candidates
+            if cand.start_command
+        }
+        not_ready = {name for name, readiness in startup.items() if not readiness.ready}
+
         results: list[CaseResult] = []
-        for cand in config.candidates:
-            for rep in range(config.repetitions):
-                for scenario, path in scenarios:
-                    case_id = f"{cand.name}/{scenario.id}/r{rep}"
-                    result = asyncio.run(
-                        _run_case(
-                            scenario,
-                            path,
-                            cand,
-                            rep,
-                            clinic_url,
-                            config.submit_key,
-                            cand.port,
-                            case_id,
-                            evidence_dir=evidence_dir,
-                            tts_command=config.tts_command,
-                        )
-                    )
-                    results.append(result)
+        for rep, scenario, path, cand in case_plan(config, scenarios):
+            case_id = f"{cand.name}/{scenario.id}/r{rep}"
+            if cand.name in not_ready:
+                results.append(_not_ready_case(cand, scenario, rep, case_id, startup[cand.name]))
+                continue
+            result = asyncio.run(
+                _run_case(
+                    scenario,
+                    path,
+                    cand,
+                    rep,
+                    clinic_url,
+                    config.submit_key,
+                    cand.port,
+                    case_id,
+                    evidence_dir=evidence_dir,
+                    tts_command=config.tts_command,
+                )
+            )
+            results.append(result)
 
         # Switchboard diagnostic (problem 2): N simultaneous calls, one
         # scenario each, to expose state contamination between sessions.
         if config.switchboard is not None:
             n = config.switchboard.concurrency
             for cand in config.candidates:
+                if cand.name in not_ready:
+                    continue
                 pool = scenarios[:n] or scenarios
                 calls = [
                     _run_case(
@@ -545,6 +596,7 @@ def run_experiment(config_path: str, out_root: str | None = None) -> Path:
             "budget": config.budget,
             "started_at": datetime.now(UTC).isoformat(),
             "candidates": [c.model_dump(exclude={"start_command"}) for c in config.candidates],
+            "startup": {name: readiness.as_manifest() for name, readiness in startup.items()},
             "scenarios": [
                 {"id": s.id, "problem_id": s.problem_id, "version": s.version, "split": s.split}
                 for s, _ in scenarios
