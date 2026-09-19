@@ -24,22 +24,22 @@
         </span>
       </div>
 
-      <nav class="tabs" id="tabs" aria-label="Secciones">
-        <button data-tab="bench" class="on">
+        <nav class="tabs" id="tabs" aria-label="Secciones">
+        <button data-tab="overview" class="on">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/></svg>
-          Benchmarks
+          Resumen
         </button>
-        <button data-tab="metrics">
+        <button data-tab="calls">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          Métricas
+          Llamadas
+        </button>
+        <button data-tab="experiments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M13 6h8M13 18h8M9 6l4 12"/></svg>
+          Experimentos
         </button>
         <button data-tab="compare">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M13 6h8M13 18h8M9 6l4 12"/></svg>
-          Comparar
-        </button>
-        <button data-tab="real">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          Llamadas reales
+          Comparar
         </button>
         <button data-tab="chat">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>
@@ -65,10 +65,10 @@
     <main>
       <p id="error" class="error" hidden></p>
 
-      <section id="tab-bench" class="panel">
+      <section id="tab-overview" class="panel">
         <header class="page-head">
           <p class="kicker">Observatorio local</p>
-          <h1 id="bench-title">Corrida</h1>
+          <h1 id="bench-title">Laboratorio local</h1>
           <p class="lead">
             Cada cifra trae su numerador y denominador; <code>n/d</code> significa que el
             dato no existe, nunca cero.
@@ -76,7 +76,7 @@
           <div class="facts" id="bench-facts"></div>
         </header>
 
-        <h2>Resumen por candidato</h2>
+          <h2>Resumen por candidato</h2>
         <div id="bench-cards" class="cards"></div>
 
         <h2>Matriz por problema</h2>
@@ -87,23 +87,52 @@
         <div id="matrix" class="tablewrap"></div>
       </section>
 
-      <section id="tab-metrics" class="panel" hidden>
+      <section id="tab-calls" class="panel" hidden>
         <header class="page-head">
-          <p class="kicker">Lectura por candidato</p>
-          <h1>Métricas de la corrida</h1>
+          <p class="kicker">Evidencia de conversación</p>
+          <h1>Histórico de llamadas</h1>
           <p class="lead">
-            Agregados de la misma corrida que ves en Benchmarks, en detalle: audio, coste,
-            turnos, errores por tipo y estabilidad.
+            Reales, simuladas y manuales se distinguen siempre. Los filtros no convierten
+            evidencia ausente en cero ni una conversación parcial en una completa.
           </p>
         </header>
-        <div id="metrics"></div>
+        <form id="call-filters" class="filterbar">
+          <label class="field">origen<select id="call-origin"><option value="">todos</option><option value="real">reales</option><option value="simulated">simuladas</option><option value="manual">manuales</option></select></label>
+          <label class="field">resultado<select id="call-result"><option value="">todos</option><option value="pass">correcta</option><option value="fail">incorrecta</option><option value="invalid_evaluation">no evaluable</option><option value="informative">informativa</option></select></label>
+          <label class="field">perfil / candidato<input id="call-profile" type="search" placeholder="Filtrar" /></label>
+          <label class="field">escenario<input id="call-scenario" type="search" placeholder="Filtrar" /></label>
+          <button type="reset">Limpiar</button>
+        </form>
+        <p id="calls-status" class="hint" role="status"></p>
+        <div id="calls-list"></div>
+        <div id="call-pagination" class="pagination" hidden>
+          <button id="calls-prev" type="button">Anterior</button>
+          <span id="calls-page" class="meta"></span>
+          <button id="calls-next" type="button">Siguiente</button>
+        </div>
+        <aside id="call-detail" class="detail-panel" hidden aria-live="polite"></aside>
+      </section>
 
-        <h2>Errores registrados</h2>
-        <p class="hint">
-          El rig y el modelo no se mezclan: un error del banco de pruebas no es un fallo
-          del agente.
-        </p>
-        <pre id="metrics-errors" class="log"></pre>
+      <section id="tab-experiments" class="panel" hidden>
+        <header class="page-head">
+          <p class="kicker">Ejecuciones controladas</p>
+          <h1>Experimentos</h1>
+          <p class="lead">Seleccioná perfiles y escenarios, comprobá la configuración y seguí la evidencia parcial de cada ejecución.</p>
+        </header>
+        <div id="experiment-contract" class="banner quiet">
+          La creación, progreso y cancelación necesitan el contrato de trabajos del evaluador. Esta interfaz no enviará una petición hasta que ese contrato esté integrado.
+        </div>
+        <form id="experiment-form" class="well experiment-form" aria-describedby="experiment-contract">
+          <div class="grid">
+            <label class="field">perfiles disponibles<select id="experiment-profiles" multiple size="4" disabled></select></label>
+            <label class="field">escenarios disponibles<select id="experiment-scenarios" multiple size="4" disabled></select></label>
+            <label class="field">modalidad<select id="experiment-mode" disabled><option>texto</option><option>voz</option></select></label>
+            <label class="field">repeticiones<input id="experiment-repetitions" type="number" min="1" value="3" disabled /></label>
+          </div>
+          <div class="row"><button id="experiment-create" class="primary" type="submit" disabled>Crear experimento</button><span class="meta">Sin contrato no se crean ejecuciones locales ni remotas.</span></div>
+        </form>
+        <h2>Corridas disponibles</h2>
+        <div id="experiment-runs"></div>
       </section>
 
       <section id="tab-compare" class="panel" hidden>
@@ -135,18 +164,6 @@
           <button id="diff-run" class="primary">Comparar</button>
         </div>
         <div id="diff"></div>
-      </section>
-
-      <section id="tab-real" class="panel" hidden>
-        <header class="page-head">
-          <p class="kicker">Observador post-hoc</p>
-          <h1>Llamadas reales</h1>
-          <p class="lead">
-            Llamadas que el backend ya atendió, reconstruidas desde su propio audit. Las
-            etiquetadas con un oráculo se puntúan; el resto queda como evidencia.
-          </p>
-        </header>
-        <div id="real"></div>
       </section>
 
       <section id="tab-chat" class="panel" hidden>
@@ -199,6 +216,7 @@
       </section>
     </main>
 
+    <script src="/static/api.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>
