@@ -285,6 +285,26 @@ export const MOCK_LIVE_CALLS: LiveCall[] = [
         text: "Miércoles 24 a las 16:30 con Dra. Iglesias en Centro. ¿Se lo dejo?",
         turn: "speaking",
       },
+      {
+        role: "caller",
+        text: "Quería confirmar si el miércoles por la tarde me podríais dejar con la doctora Iglesias en Centro, aunque si no hay hueco el jueves también me vale, es que el viernes viajo y no quiero perder la revisión de dermatología que llevo aplazando desde junio.",
+        turn: "listening",
+      },
+      {
+        role: "agent",
+        text: "El miércoles 24 a las 16:30 sigue libre. Si viaja el viernes, ese hueco es el que mejor encaja.",
+        turn: "speaking",
+      },
+      {
+        role: "caller",
+        text: "Perfecto, déjemelo.",
+        turn: "listening",
+      },
+      {
+        role: "agent",
+        text: "Queda anotado. Recibirá confirmación en el teléfono de la ficha.",
+        turn: "speaking",
+      },
     ],
   },
   {
@@ -337,13 +357,51 @@ export const MOCK_LIVE_CALLS: LiveCall[] = [
       },
     ],
   },
+  {
+    callId: "CA0c11aa77ee55b201",
+    socketId: "sock-02",
+    virtualPhone: "+34 911 220 009",
+    status: "ended",
+    turn: "listening",
+    startedAt: "2026-09-18T23:41:40+02:00",
+    outcome: "DIVERTED",
+    action: "ESCALATE",
+    reason: "medical_emergency",
+    entities: {
+      name: "María del Carmen Fernández de la Torre",
+      nationalId: "11111111H",
+    },
+    transcript: [
+      {
+        role: "agent",
+        text: "Clínica Arenal, dígame.",
+        turn: "speaking",
+      },
+      {
+        role: "caller",
+        text: "Soy María del Carmen Fernández de la Torre. Necesito a alguien ahora.",
+        turn: "listening",
+      },
+      {
+        role: "agent",
+        text: "Le paso con recepción. Un momento.",
+        turn: "speaking",
+      },
+    ],
+    script: [],
+  },
 ];
 
 export function cloneLiveCalls(): LiveCall[] {
-  return MOCK_LIVE_CALLS.map((call) => ({
+  const now = Date.now();
+  return MOCK_LIVE_CALLS.map((call, index) => ({
     ...call,
-    transcript: [],
-    entities: {},
+    startedAt: new Date(now - (index + 1) * 81_000).toISOString(),
+    transcript:
+      call.status === "ended"
+        ? call.transcript.map((line) => ({ ...line, entities: { ...line.entities } }))
+        : [],
+    entities: call.status === "ended" ? { ...call.entities } : {},
     script: call.script.map((line) => ({ ...line, entities: { ...line.entities } })),
   }));
 }

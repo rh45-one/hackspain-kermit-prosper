@@ -19,11 +19,12 @@ import {
 import type {
   AgentSettings,
   Appointment,
+  CallControlState,
   KnowledgeSource,
   LiveCall,
   Patient,
 } from "@/lib/types";
-import { CALL_CAPACITY } from "@/lib/types";
+import { CALL_CAPACITY, DEFAULT_CALL_CONTROL } from "@/lib/types";
 
 const SETTINGS_KEY = "frontdesk.settings";
 
@@ -43,6 +44,14 @@ type FrontdeskContextValue = {
   capacityLabel: string;
   tunnelConfigured: boolean;
   takeControl: (callId: string) => void;
+  controlFor: (callId: string) => CallControlState;
+  takeOperatorControl: (callId: string) => void;
+  releaseOperatorControl: (callId: string) => void;
+  pauseAutomation: (callId: string, paused: boolean) => void;
+  sendOperatorMessage: (
+    callId: string,
+    text: string,
+  ) => { ok: true } | { ok: false; error: string };
   patients: Patient[];
   appointments: Appointment[];
 };
@@ -74,6 +83,7 @@ export function FrontdeskProvider({
   const [loading, setLoading] = useState(!demo);
   const [clinicLoading, setClinicLoading] = useState(false);
   const [clinicQuery, setClinicQuery] = useState<{ name?: string; national_id?: string } | null>(null);
+  const [controlByCall, setControlByCall] = useState<Record<string, CallControlState>>({});
 
   const searchPatients = useCallback((query: { name?: string; national_id?: string }) => {
     setClinicLoading(true);
@@ -182,6 +192,10 @@ export function FrontdeskProvider({
           if (call.status !== "active") {
             return call;
           }
+          const control = controlByCall[call.callId];
+          if (control?.heldByOperator || control?.automationPaused) {
+            return call;
+          }
           const nextIndex = call.transcript.length;
           const nextLine = call.script[nextIndex];
           if (!nextLine) {
@@ -197,7 +211,7 @@ export function FrontdeskProvider({
       );
     }, 1600);
     return () => window.clearInterval(timer);
-  }, [demo]);
+  }, [controlByCall, demo]);
 
   const saveSettings = useCallback((next: AgentSettings) => {
     if (!demo) return { ok: false as const, error: "Configura el agente mediante backend/.env" };
@@ -225,6 +239,10 @@ export function FrontdeskProvider({
 
   const takeControl = useCallback((callId: string) => {
     if (!demo) return;
+    setControlByCall((current) => ({
+      ...current,
+      [callId]: { heldByOperator: true, automationPaused: true },
+    }));
     setCalls((current) =>
       current.map((call) =>
         call.callId === callId
@@ -249,6 +267,48 @@ export function FrontdeskProvider({
     );
   }, [demo]);
 
+  const controlFor = useCallback(
+    (callId: string) => controlByCall[callId] ?? DEFAULT_CALL_CONTROL,
+    [controlByCall],
+  );
+
+  const takeOperatorControl = useCallback((callId: string) => {
+    setControlByCall((current) => ({
+      ...current,
+      [callId]: { heldByOperator: true, automationPaused: true },
+    }));
+  }, []);
+
+  const releaseOperatorControl = useCallback((callId: string) => {
+    setControlByCall((current) => ({
+      ...current,
+      [callId]: { heldByOperator: false, automationPaused: false },
+    }));
+  }, []);
+
+  const pauseAutomation = useCallback((callId: string, paused: boolean) => {
+    setControlByCall((current) => {
+      const previous = current[callId] ?? DEFAULT_CALL_CONTROL;
+      return {
+        ...current,
+        [callId]: { ...previous, automationPaused: paused },
+      };
+    });
+  }, []);
+
+  const sendOperatorMessage = useCallback(
+    (callId: string, text: string): { ok: true } | { ok: false; error: string } => {
+      if (!callId || !text.trim()) {
+        return { ok: false, error: "Escribe un mensaje antes de enviar." };
+      }
+      return {
+        ok: false,
+        error: "El envío manual no está conectado al agente. El borrador se conserva.",
+      };
+    },
+    [],
+  );
+
   const activeCount = calls.filter((call) => call.status === "active").length;
 
   const value = useMemo<FrontdeskContextValue>(
@@ -269,12 +329,18 @@ export function FrontdeskProvider({
         `${activeCount} llamadas abiertas en el registro`,
       tunnelConfigured: isValidTunnelUrl(settings.tunnelUrl),
       takeControl,
+      controlFor,
+      takeOperatorControl,
+      releaseOperatorControl,
+      pauseAutomation,
+      sendOperatorMessage,
       patients,
       appointments,
     }),
     [activeCount, addKnowledgeSource, calls, saveSettings, settings, takeControl,
-      demo, connectionError, clinicError, clinicLoading, clinicQuery, searchPatients,
-      loading, patients, appointments],
+      controlFor, takeOperatorControl, releaseOperatorControl, pauseAutomation,
+      sendOperatorMessage, demo, connectionError, clinicError, clinicLoading,
+      clinicQuery, searchPatients, loading, patients, appointments],
   );
 
   return (

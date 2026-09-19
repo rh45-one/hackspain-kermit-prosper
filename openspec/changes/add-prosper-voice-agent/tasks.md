@@ -53,6 +53,7 @@ module; live-gate items stay unchecked.
 - [x] 6.7 `/settings`: tunnel URL (`ws://`/`wss://` only), voice/prompt, knowledge-source uploads (CSV / SQL / API)
 - [ ] 6.8 ClinicReflow demo seam: "doctor unavailable" → affected list → negotiation call → plan delta
 - [x] 6.9 Observatory metrics on `/calls`: capacity ring, hourly load/submissions, closed outcome mix (mock-first)
+- [x] 6.10 Call management modal from "Canales de llamada" cards: full transcript, local operator-control UI, unwired composer, secondary action placeholders
 
 ## 7. Gemini Live audio host (new)
 

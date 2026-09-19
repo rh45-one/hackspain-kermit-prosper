@@ -71,6 +71,17 @@ export type LiveCall = {
   } | null;
 };
 
+/** Local FrontDesk operator state. Not returned by the live backend. */
+export type CallControlState = {
+  heldByOperator: boolean;
+  automationPaused: boolean;
+};
+
+export const DEFAULT_CALL_CONTROL: CallControlState = {
+  heldByOperator: false,
+  automationPaused: false,
+};
+
 export type Patient = {
   patient_id: string;
   given_name: string;
