@@ -219,9 +219,11 @@ class ToolBox:
         """Await a clinic call with audit + graceful failure."""
         try:
             result = await coro
+            self.ctx.mark_pipeline_stage("tool_completed")
             self.ctx.audit("tool", {"tool": tool, "ok": True})
             return result
         except Exception as exc:  # noqa: BLE001 - surfaced to the LLM
+            self.ctx.mark_pipeline_stage("tool_failed")
             self.ctx.audit("tool", {"tool": tool, "ok": False, "error": str(exc)})
             return {"error": f"{tool} failed: {exc}"}
 

@@ -6,6 +6,7 @@ from pipecat.frames.frames import (
     InterimTranscriptionFrame,
     LLMTextFrame,
     TranscriptionFrame,
+    TTSAudioRawFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -32,4 +33,18 @@ class TranscriptTap(FrameProcessor):
             # every assistant line in the audit and in Jev's snapshot. Both
             # engines emit LLMTextFrame, so this records each chunk once.
             self._ctx.add_transcript("assistant", frame.text)
+        await self.push_frame(frame, direction)
+
+
+class AudioOutputTap(FrameProcessor):
+    """Records that the agent emitted audible audio without retaining it."""
+
+    def __init__(self, ctx: CallContext) -> None:
+        super().__init__()
+        self._ctx = ctx
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TTSAudioRawFrame) and frame.audio:
+            self._ctx.mark_pipeline_stage("assistant_audio_emitted")
         await self.push_frame(frame, direction)

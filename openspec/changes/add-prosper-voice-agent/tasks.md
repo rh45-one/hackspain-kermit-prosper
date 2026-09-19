@@ -78,3 +78,6 @@ module; live-gate items stay unchecked.
 - [x] 10.2 Offline tests for the bridge, engine selection, Jev abstention and per-socket isolation — `test_gemini_live.py`, `test_integration_engine.py`, `test_brain_tools.py`
 - [x] 10.3 10-call scored concurrency plus the 20-socket diagnostic on the Gemini path — 20 lightweight concurrent sockets pass offline (`test_twenty_lightweight_concurrent_sockets_on_gemini`); the scored 10-call run is live and stays open under 10.4
 - [ ] 10.4 Live gate: one practice case, then a scored Run All; only then may `gemini_live` replace `cascade` as the default
+- [x] 10.5 Record a privacy-safe per-call pipeline-stage and empty-action diagnostic summary
+- [x] 10.6 Expose the diagnostic summary through the ops call record
+- [x] 10.7 Add offline tests for silence, tool failure and a successfully queued action

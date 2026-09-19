@@ -76,6 +76,7 @@ async def voice_ws(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         logger.info("socket closed by harness: call {}", ctx.call_id)
     except Exception as exc:  # noqa: BLE001
+        ctx.mark_pipeline_error()
         logger.exception("pipeline error on call {}: {}", ctx.call_id, exc)
     finally:
         ctx.mark_stopped()

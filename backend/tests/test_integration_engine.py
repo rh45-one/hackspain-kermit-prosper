@@ -157,7 +157,7 @@ async def test_gemini_engine_builds_bridged_pipeline(tmp_path):
     parts = FakePipeline.built[-1]
     kinds = [type(p).__name__ for p in parts]
     # input -> user aggregator -> caller tap -> input bridge -> service ->
-    # output bridge -> assistant tap -> output -> assistant aggregator.
+    # output bridge -> assistant tap -> audio tap -> output -> assistant aggregator.
     # The aggregators are required: the LLMContextFrame they emit is what
     # sets the service's _ready_for_realtime_input flag. The user aggregator
     # sits BEFORE the bridge because it owns the local VAD analyzer, which
@@ -172,6 +172,7 @@ async def test_gemini_engine_builds_bridged_pipeline(tmp_path):
         "RecordedGeminiService",
         "GeminiOutputBridge",
         "TranscriptTap",
+        "AudioOutputTap",
         "FrameProcessor",
         "LLMAssistantAggregator",
     ]

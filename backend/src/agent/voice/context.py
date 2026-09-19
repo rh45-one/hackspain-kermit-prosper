@@ -54,6 +54,12 @@ class CallContext:
     queued_actions: list[dict[str, Any]] = field(default_factory=list)
     submitted: bool = False
 
+    # Privacy-safe progress signals used to explain terminal silent calls.
+    # They never retain transcript text, tool arguments, or patient details.
+    pipeline_stages: set[str] = field(default_factory=set)
+    pipeline_error: bool = False
+    outcome_summary_emitted: bool = False
+
     # Transcript + audit
     transcript: list[dict[str, str]] = field(default_factory=list)
     _audit_path: Path | None = None
@@ -121,7 +127,64 @@ class CallContext:
             self.latest_decision = None  # the old reading describes an old turn
             if self._on_caller_turn is not None:
                 self._on_caller_turn(text)
+            self.mark_pipeline_stage("caller_transcribed")
+        elif role == "assistant":
+            self.mark_pipeline_stage("assistant_responded")
         self.audit("transcript", {"role": role, "text": text})
+
+    def mark_pipeline_stage(self, stage: str) -> None:
+        """Record a privacy-safe milestone once for the call diagnostic."""
+        if stage not in self.pipeline_stages:
+            self.pipeline_stages.add(stage)
+            self.audit("pipeline_stage", {"stage": stage})
+
+    def mark_pipeline_error(self) -> None:
+        """Remember a terminal pipeline failure without recording its payload."""
+        self.pipeline_error = True
+        self.mark_pipeline_stage("pipeline_error")
+
+    def emit_outcome_summary(
+        self,
+        *,
+        actions_before_flush: int,
+        fallback_action_added: bool,
+        submissions_succeeded: int,
+        submissions_failed: int,
+        submission_configured: bool,
+    ) -> None:
+        """Write one terminal, PII-free explanation of the call outcome."""
+        if self.outcome_summary_emitted:
+            return
+        self.outcome_summary_emitted = True
+
+        stages = sorted(self.pipeline_stages)
+        empty_action_reason: str | None = None
+        if actions_before_flush == 0:
+            if self.pipeline_error:
+                empty_action_reason = "pipeline_error"
+            elif "tool_failed" in self.pipeline_stages:
+                empty_action_reason = "tool_failure"
+            elif "caller_audio_received" not in self.pipeline_stages:
+                empty_action_reason = "no_caller_audio"
+            elif "caller_transcribed" not in self.pipeline_stages:
+                empty_action_reason = "no_caller_transcript"
+            elif "assistant_responded" not in self.pipeline_stages:
+                empty_action_reason = "no_assistant_response"
+            else:
+                empty_action_reason = "no_action_queued"
+
+        self.audit(
+            "call_outcome_summary",
+            {
+                "stages": stages,
+                "queued_action_count": actions_before_flush,
+                "fallback_action_added": fallback_action_added,
+                "empty_action_reason": empty_action_reason,
+                "submission_configured": submission_configured,
+                "submissions_succeeded": submissions_succeeded,
+                "submissions_failed": submissions_failed,
+            },
+        )
 
     # ---- registries ------------------------------------------------------
     def register_slots(self, slots: list[dict[str, Any]]) -> list[dict[str, Any]]:
