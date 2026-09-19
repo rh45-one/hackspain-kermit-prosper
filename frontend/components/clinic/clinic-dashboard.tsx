@@ -30,7 +30,7 @@ export function ClinicDashboard() {
   return (
     <div>
       <PageHeader kicker="Clínica Arenal" title="Clínica">
-        Pacientes, agenda y directorio médico en un solo sitio. Marca ausencias
+        Pacientes, directorio médico y agenda en un solo sitio. Marca ausencias
         del personal para iniciar la Recovery Campaign.
       </PageHeader>
 
@@ -53,27 +53,27 @@ export function ClinicDashboard() {
             Pacientes
           </TabsTrigger>
           <TabsTrigger
-            value="calendar"
-            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm"
-          >
-            Agenda
-          </TabsTrigger>
-          <TabsTrigger
             value="staff"
             className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm"
           >
             Personal
+          </TabsTrigger>
+          <TabsTrigger
+            value="calendar"
+            className="rounded-lg px-4 py-2 font-heading text-[14px] data-active:bg-graphite data-active:text-canvas-white data-active:shadow-sm"
+          >
+            Agenda
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="patients" className="mt-0 outline-none">
           <PatientDirectory embedded />
         </TabsContent>
-        <TabsContent value="calendar" className="mt-0 outline-none">
-          <AppointmentsCalendar embedded />
-        </TabsContent>
         <TabsContent value="staff" className="mt-0 outline-none">
           <DoctorDirectory embedded />
+        </TabsContent>
+        <TabsContent value="calendar" className="mt-0 outline-none">
+          <AppointmentsCalendar embedded />
         </TabsContent>
       </Tabs>
     </div>
