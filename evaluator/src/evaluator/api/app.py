@@ -152,12 +152,14 @@ def create_app(
     session_root: Path | str | None = None,
     profiles: ProfileCatalog | None = None,
     scenario_root: Path | str | None = None,
+    audit_root: Path | str | None = None,
 ) -> FastAPI:
     root = Path(results_root)
     web = Path(web_dir) if web_dir else None
     catalog = profiles or ProfileCatalog.builtin()
     sessions = ChatSessionManager(session_root or root / "_chat-sessions", catalog, archive_root=root)
     history = HistoryStore(root)
+    audit = Path(audit_root) if audit_root else None
     scenarios = Path(scenario_root) if scenario_root else Path(__file__).parents[3] / "scenarios"
     jobs = JobStore(root, catalog, scenarios)
     app = FastAPI(title="Pronto evaluator - developer console", docs_url="/api/docs")
@@ -218,6 +220,8 @@ def create_app(
             "verdict": verdict, "scenario_id": scenario_id, "from": from_, "to": to,
             "include_doubles": include_doubles,
         }
+        if audit:
+            history.import_backend_audits(audit)
         rows = history.calls(filters)
         start = (page - 1) * page_size
         return {
@@ -227,6 +231,8 @@ def create_app(
 
     @app.get("/api/history/calls/{record_id}")
     def history_call(record_id: str) -> dict[str, Any]:
+        if audit:
+            history.import_backend_audits(audit)
         row = history.call(record_id)
         if row is None:
             raise HTTPException(404, "llamada desconocida")
@@ -243,6 +249,8 @@ def create_app(
         to: str | None = None,
         include_doubles: bool = False,
     ) -> dict[str, Any]:
+        if audit:
+            history.import_backend_audits(audit)
         rows = history.calls({
             "origin": origin, "candidate": candidate, "candidate_version": version,
             "verdict": verdict, "scenario_id": scenario_id, "from": from_, "to": to,

@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from evaluator.models import CaseResult
+from evaluator.observer.backend_calls import load_backend_calls
+from evaluator.observer.run import _real_call_row
 from evaluator.report.side_by_side import load_cases
 
 
@@ -82,6 +84,10 @@ class HistoryStore:
                 row = self._case_row(case, directory.name, versions, kinds, manifest)
                 calls[row["id"]] = row
                 seen.add(row["id"])
+            for raw in _read_jsonl(directory / "real_calls.jsonl"):
+                row = self._real_row(raw, directory.name, manifest)
+                calls[row["id"]] = row
+                seen.add(row["id"])
         for path in sorted((self.root / "_manual-calls").glob("*.json")) if (self.root / "_manual-calls").is_dir() else []:
             try:
                 raw = json.loads(path.read_text(encoding="utf-8"))
@@ -92,22 +98,37 @@ class HistoryStore:
             row = self._manual_row(raw)
             calls[row["id"]] = row
             seen.add(row["id"])
-            for raw in _read_jsonl(directory / "real_calls.jsonl"):
-                row = self._real_row(raw, directory.name, manifest)
-                calls[row["id"]] = row
-                seen.add(row["id"])
         # Remove stale entries only when their source is an evaluator run that
         # has disappeared. This prevents an interrupted write from multiplying
         # a call, while preserving a current partial run on the next import.
         calls = {
             key: value for key, value in calls.items()
-            if value.get("origin") == "manual" or value.get("run_id") in self._run_ids()
+            if value.get("origin") == "manual"
+            or value.get("run_id") == "live-backend"
+            or value.get("run_id") in self._run_ids()
         }
         created = sum(1 for key in calls if key not in before)
         updated = sum(1 for key in calls if key in before and calls[key] != before[key])
         skipped = sum(1 for key in seen if key in before and calls.get(key) == before[key])
         self._save(calls)
         return {"indexed": len(calls), "created": created, "updated": updated, "skipped": skipped}
+
+    def import_backend_audits(self, data_dir: Path | str) -> dict[str, int]:
+        """Synchronize live backend audits without creating a static report."""
+        try:
+            backend_calls = load_backend_calls(data_dir)
+        except FileNotFoundError:
+            return {"indexed": 0, "created": 0, "updated": 0, "skipped": 0}
+        calls = self._load()
+        before = dict(calls)
+        for call in backend_calls:
+            raw = _real_call_row(call, None, None, [])
+            row = self._real_row(raw, "live-backend", {})
+            calls[row["id"]] = row
+        self._save(calls)
+        created = sum(1 for key in calls if key not in before)
+        updated = sum(1 for key in calls if key in before and calls[key] != before[key])
+        return {"indexed": len(calls), "created": created, "updated": updated, "skipped": len(backend_calls) - updated}
 
     def _run_ids(self) -> set[str]:
         if not self.root.is_dir():

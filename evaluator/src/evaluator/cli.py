@@ -80,11 +80,12 @@ def main() -> None:
     p.add_argument("--out", default="evaluator/experiments/results", help="results root")
     p.add_argument("--run-id", default=None, help="default: timestamp + short hash")
 
-    p = sub.add_parser("dev", help="developer console: read-only API plus a live chat")
+    p = sub.add_parser("dev", help="live evaluator console plus a live chat")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8099)
     p.add_argument("--results", default="evaluator/experiments/results")
     p.add_argument("--web", default="evaluator/web")
+    p.add_argument("--audit-data", default=None, help="backend DATA_DIR or its calls/ directory")
 
     p = sub.add_parser("chat", help="manual tester: type to a live agent and read its replies")
     p.add_argument(
@@ -224,7 +225,7 @@ def main() -> None:
 
         from evaluator.api.app import create_app
 
-        console = create_app(args.results, args.web)
+        console = create_app(args.results, args.web, audit_root=args.audit_data)
         print(f"consola de developer: http://{args.host}:{args.port}/  (API en /api/docs)")
         print(f"corridas leídas de: {args.results}")
         uvicorn.run(console, host=args.host, port=args.port, log_level="warning")

@@ -659,13 +659,18 @@ Cinco pestañas:
 | Probar el agente | la llamada en vivo, tipeada o **hablada** (ver micrófono), contra el **perfil** que elijas del catálogo del servidor |
 
 ```sh
-uv run --project evaluator python -m evaluator.cli dev --port 8099
+uv run --project evaluator python -m evaluator.cli dev \
+  --port 8099 \
+  --audit-data backend/data
 # → http://127.0.0.1:8099/          consola
 # → http://127.0.0.1:8099/api/docs  API documentada
 ```
 
 Opciones: `--results` (dónde lee las corridas, por defecto
-`evaluator/experiments/results`) y `--web` (la carpeta de la consola).
+`evaluator/experiments/results`), `--web` (la carpeta de la consola) y
+`--audit-data` (el `DATA_DIR` del backend). Con `--audit-data`, el histórico se
+sincroniza desde `DATA_DIR/calls/*.jsonl` en cada consulta y no hace falta
+ejecutar `observe` ni generar un informe HTML para ver las llamadas nuevas.
 
 La API conserva las corridas como evidencia inmutable y añade dos escrituras
 controladas: reconstruir un índice local de historial desde esos artefactos y

@@ -64,3 +64,19 @@ def test_jobs_refuse_client_destinations_and_unknown_scenarios(tmp_path: Path):
     assert rejected.status_code == 400
     assert "ws_url" in rejected.json()["detail"]
     assert "secret" not in rejected.text
+
+
+def test_live_audit_root_is_read_directly_without_an_observer_run(tmp_path: Path):
+    audit = tmp_path / "calls"
+    audit.mkdir()
+    (audit / "call-1.jsonl").write_text(
+        '{"ts":"2026-09-20T10:00:00Z","event":"engine_selected","data":{"engine":"cascade"}}\n'
+        '{"ts":"2026-09-20T10:00:01Z","event":"transcript","data":{"role":"caller","text":"hola"}}\n'
+        '{"ts":"2026-09-20T10:00:02Z","event":"call_ended","data":{"elapsed_s":2}}\n',
+        encoding="utf-8",
+    )
+    client = TestClient(create_app(tmp_path / "results", audit_root=audit))
+    response = client.get("/api/history/calls", params={"include_doubles": "true"})
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert not (tmp_path / "results" / "live-backend").exists()
