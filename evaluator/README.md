@@ -84,7 +84,9 @@ Prosper. No apuntes nunca el banco ahí ni arranques nada en ese puerto.
 | Normalización | `src/evaluator/normalize.py` | La tabla de tolerancia del scorer: DNI/NIE, nombres (NFKD, ñ→n), teléfonos, emails, slots en `Europe/Madrid` al minuto, enums. |
 | Escenarios | `scenarios/**/*.yaml` | Casos versionados con esquema `caller`/`oracle`/`limits` del plan, `split` (development/holdout) y `leak_check`. |
 | Experimentos | `experiments/*.yaml` | Candidatos (configuración del agente), set de escenarios, repeticiones. |
-| Informe | `results/<run_id>/` | `manifest.json` (config + versión de reglas + hash del dataset), `cases.jsonl`, `report.html` con puntos locales por peso de problema, cobertura y latencias. |
+| Informe | `results/<run_id>/` | `manifest.json` (config + versión de reglas + hash del dataset), `cases.jsonl`, `metrics.json` (los mismos agregados que la consola, en máquina) y `report.html` con puntos locales por peso de problema, cobertura, latencias, audio, barge-ins y errores por tipo. |
+| Observador post-hoc | `src/evaluator/observer/` | Convierte las llamadas **reales** que el backend ya atendió (`DATA_DIR/calls/*.jsonl`) en una corrida: transcripts, acciones encoladas con su payload completo y submissions. Puntúa solo las llamadas etiquetadas en un mapa de oráculos; el resto queda informativo. No cambia el backend. |
+| Métricas | `src/evaluator/report/metrics.py` | Agregados por corrida y candidato: aciertos, no evaluables, errores por tipo, turnos, primera respuesta p50/p95, latencia por turno, submissions, audio por dirección, barge-ins, coste, estabilidad. Cada uno con numerador y denominador; `n/d` cuando el dato no existe. |
 
 ## Quickstart
 
@@ -410,6 +412,42 @@ uv run --project evaluator python -m evaluator.cli validate \
 
 ## Novedades de esta iteración
 
+**Llamadas reales del backend (observador post-hoc).** El backend ya deja un
+audit por llamada en `DATA_DIR/calls/<call_id>.jsonl` con el transcript de los
+dos lados, la acción encolada **con su payload completo** y el flush de
+submissions. El evaluador lo lee y lo convierte en una corrida, sin tocar el
+backend ni la red:
+
+```sh
+uv run --project evaluator python -m evaluator.cli observe \
+    --data-dir backend/data                       # todas informativas
+uv run --project evaluator python -m evaluator.cli observe \
+    --data-dir backend/data --map evaluator/experiments/oracle-map.yaml
+```
+
+El mapa de oráculos es un YAML con `call_id` (o un prefijo inequívoco) contra el
+escenario que esa llamada estaba jugando:
+
+```yaml
+calls:
+  060b5378: evaluator/scenarios/simple_booking/sb-001.yaml
+  2d154827: evaluator/scenarios/the_rules/rules-001.yaml
+```
+
+Las llamadas etiquetadas se puntúan con el **mismo comparador** de siempre
+(normalización campo por campo, `forbidden_actions`) y, como el audit trae
+transcript del agente, también corre la **comprobación de fuga del problema
+14**, que la vía de voz no puede hacer. Las no etiquetadas no inventan
+veredicto: se muestran como evidencia (qué acción se envió, si se confirmó la
+identidad, qué se dijo) en el informe y en la pestaña «Llamadas reales». El
+resultado es una corrida normal (`manifest.json`, `cases.jsonl`,
+`metrics.json`, `report.html` + `real_calls.jsonl`), así que `metrics`, `diff`
+y la consola funcionan igual.
+
+Un prefijo que coincide con dos entradas del mapa es un error, no una
+adivinanza: puntuar la llamada equivocada en silencio es peor que parar. Los
+transcripts quedan solo bajo `results/`, que Git ignora.
+
 **Evidencia de audio.** Cada caso WS guarda `evidence/<case>.caller.wav` y
 `<case>.agent.wav` (lo que realmente fue por el socket, en ambos sentidos)
 y el informe los enlaza en la columna «evidencia». Los `interrupts[]`
@@ -457,7 +495,39 @@ uv run --project evaluator python -m evaluator.cli diff A B --json
 ```
 
 Reporta nuevos aciertos/fallos, cambios de veredicto, cambios de categoría
-de fallo, casos solo presentes en un run y deltas de latencia/coste.
+de fallo, casos solo presentes en un run, deltas de latencia/coste y una tabla
+de **deltas de métricas** (aciertos, no evaluables, primera respuesta, audio,
+barge-ins, estabilidad…), con `n/d` cuando alguno de los dos lados no midió.
+
+**Pareo entre candidatos de corridas distintas.** El diff también responde «¿el
+candidato B de la corrida Y le ganó al candidato A de la corrida X?»:
+
+```sh
+uv run --project evaluator python -m evaluator.cli diff \
+    results/<run_X> results/<run_Y> --candidate-a viejo --candidate-b nuevo
+```
+
+En ese modo las claves pasan a ser (escenario, repetición) y no (candidato,
+escenario, repetición): los casos se parean por lo que se corrió, no por cómo se
+llamaba la configuración. Con varios candidatos por lado hay que decir cuál
+(la CLI y la API lo exigen); con uno solo se resuelve solo.
+
+**Matriz declarativa de variantes.** Un candidato puede declarar variantes de
+entorno y el runner las expande en un candidato por variante, con el nombre
+`<candidato>-<sufijo>` y el `env` base sobrescrito por el de la variante:
+
+```yaml
+candidates:
+  - name: agent
+    ws_url: ws://127.0.0.1:17860/ws
+    env: { PROSPER_API_BASE_URL: "http://127.0.0.1:18090" }
+    variants:
+      sin-memoria: { PROMPT_VARIANT: none }
+      con-memoria: { PROMPT_VARIANT: history }
+```
+
+Dos configuraciones que no se pueden distinguir en un informe son peor que un
+YAML que no carga: nombres duplicados tras expandir son un error.
 
 **Alternativas dentro de un mismo run (side-by-side).** Un experimento ya corre
 cada candidato sobre cada escenario, así que comparar alternativas es renderizar
@@ -500,7 +570,19 @@ Lo que el evaluador necesita del agente (ver plan, §6):
 El front-desk y el developer son usuarios distintos: la consola de developer es
 para quien prueba el agente, mira métricas y compara alternativas, y vive dentro
 de este paquete. No tiene build, ni npm, ni CDN: el propio evaluador sirve el
-HTML, el JS y el CSS.
+HTML, el JS, el CSS y las fuentes (Inter e Inter Tight, variables y con licencia
+OFL, en `web/fonts/`). El lenguaje visual es ClinicReflow: papel cálido, tinta
+grafito, latón para los metadatos y brasa solo cuando algo está vivo o roto.
+
+Cinco pestañas:
+
+| Pestaña | Qué muestra |
+|---|---|
+| Benchmarks | hechos de la corrida (dataset, reglas, repeticiones), una tarjeta por candidato y la matriz de aciertos por familia de problema |
+| Métricas | el detalle por candidato: cada agregado con su numerador/denominador, el desglose de errores por tipo y la lista de errores registrados |
+| Comparar | alternativas de la misma corrida, lado a lado, y el diff entre dos corridas con pareo de candidatos |
+| Llamadas reales | el observador post-hoc: qué llamadas reales vio esta corrida, con acción enviada, identidad confirmada, veredicto de las etiquetadas y el transcript plegado |
+| Probar el agente | la llamada en vivo, tipeada o **hablada** (ver micrófono) |
 
 ```sh
 uv run --project evaluator python -m evaluator.cli dev --port 8099
@@ -526,8 +608,14 @@ y un archivo de evidencia tiene que resolver dentro de su corrida.
 | `GET /api/runs/{id}/report` | el `report.html` de esa corrida |
 | `GET /api/runs/{id}/evidence/{stream}?case_id=` | el WAV de audio de un caso |
 | `POST /api/chat` | abre una llamada real contra el agente |
-| `POST /api/chat/{sid}/say` | dice un turno y devuelve el audio del agente |
+| `GET /api/runs/{id}/real-calls` | las llamadas reales que observó esa corrida (vacío si no es una corrida del observador) |
+| `POST /api/chat/{sid}/say` | dice un turno (TTS del servidor) y devuelve el audio del agente |
+| `POST /api/chat/{sid}/say-audio` | dice un turno con **audio µ-law** del micrófono del navegador |
 | `POST /api/chat/{sid}/close` | cierra, lee submissions y diagnostica |
+
+`GET /api/diff` acepta `candidate_a` y `candidate_b` para parear dos candidatos
+de corridas distintas; con varios candidatos por lado el pareo es obligatorio y
+la API responde 400 si falta, en vez de elegir uno.
 
 La pestaña de chat usa el mismo `CallSession`, la misma clínica local y el mismo
 receptor que las corridas automáticas: lo que se ve ahí es lo que un experimento
@@ -537,9 +625,20 @@ rechazadas, y —con `--agent-audit-dir`— el diagnóstico de si el agente escu
 al caller. Sin ruta de auditoría el diagnóstico dice `unavailable`, nunca culpa
 al modelo.
 
-Límites: la API no lanza corridas ni acepta comandos; el micrófono queda para
-una segunda iteración (el chat es tipeado, con TTS local en el servidor), y
-`OPS_TOKEN` no aplica acá porque la consola se ata a `127.0.0.1`.
+**Micrófono (push-to-talk).** El botón «Hablar» captura del micrófono con un
+`AudioWorklet` que codifica µ-law a 8 kHz en frames de 160 bytes (20 ms), el
+mismo patrón que el demo del propio backend (`backend/serverwebsock/`) y el
+mismo sobre el que habla el `wsclient`. Los frames suben a
+`POST /api/chat/{sid}/say-audio` en base64 y el rig los manda al agente tal
+cual: nada se decodifica ni se re-sintetiza en el servidor, así que el agente
+oye exactamente lo que capturó el navegador. El botón sólo aparece si el
+navegador puede capturar (`isSecureContext`, `getUserMedia`,
+`AudioWorkletNode`); si hay STT, el log muestra la transcripción de lo que
+dijiste. El último frame se rellena con silencio µ-law (`0xff`) para no mandar
+un frame corto, y hay un tope de 60 s por subida.
+
+Límites: la API no lanza corridas ni acepta comandos; `OPS_TOKEN` no aplica acá
+porque la consola se ata a `127.0.0.1`.
 
 ## Estado y límites conocidos
 
@@ -556,13 +655,14 @@ una segunda iteración (el chat es tipeado, con TTS local en el servidor), y
   agente oye y reacciona, no la calidad del reconocimiento. El ruido por
   defecto es sintético determinista — las texturas oficiales
   (calle/TV/coche) irían como assets `noise.file` cuando existan.
-- **El check de fuga (problema 14) solo se evalúa en la vía de texto.** Por
+- **El check de fuga (problema 14) no se evalúa en la vía de voz.** Por
   WebSocket no hay transcripción porque el evaluador no hace STT, así que
   no puede comprobar si el agente dijo un DNI en voz alta. En ese caso el
   resultado marca `checks_not_run: ["leak_check"]` y el informe lo imprime:
   un caso puede pasar con la comprobación de privacidad sin ejecutar, y eso
-  tiene que verse. Para cubrir el problema 14 de verdad, corre ese
-  escenario por texto.
+  tiene que verse. Sí se evalúa en la vía de texto y en **las llamadas
+  reales observadas**, porque ahí el audit del backend trae el transcript
+  del agente.
 - El dataset local es una miniatura inventada (6 pacientes, 7 médicos, 3
   sedes, 4 planes, 8 tipos de cita) frente a la clínica real (~3.000
   pacientes, 12 médicos, 10 planes, 11 tipos). `report.html` abre con ese
@@ -574,6 +674,10 @@ una segunda iteración (el chat es tipeado, con TTS local en el servidor), y
 - `evaluator validate` comprueba que cada escenario resuelve contra su
   fixture (ids, slots dentro del calendario, letra de DNI).
 - `evaluator score --scenario X --record Y` puntúa un record guardado sin
-  llamar a nadie; `evaluator diff A B` compara dos runs.
+  llamar a nadie; `evaluator diff A B` compara dos runs (con
+  `--candidate-a/--candidate-b` para parear candidatos distintos);
+  `evaluator metrics <run>` imprime la tabla de agregados de una corrida
+  (`--json` para máquina) y `evaluator observe` convierte el audit real del
+  backend en una corrida.
 - Coste: `desconocido` hasta que el agente exponga consumo vía
   `usage_url` (plan §13: nunca mostrar cero).
