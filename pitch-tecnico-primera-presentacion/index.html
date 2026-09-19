@@ -85,6 +85,7 @@
     z-index: 5; display: flex; justify-content: space-between;
     font-size: 22px; font-weight: 500; color: var(--quiet);
   }
+  .print-foot { display: none; }
   .count { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
   .notes {
     display: none; position: absolute; inset: auto 0 0; z-index: 12;
@@ -369,10 +370,33 @@
     .progress i { transition: none; }
   }
   @media print {
-    body { background: white; }
-    .board { position: static; margin: 0; transform: none !important; }
-    .slide { display: flex !important; position: relative; height: 1080px; page-break-after: always; }
-    .notes { display: none !important; }
+    @page { size: 16in 9in; margin: 0; }
+    html, body {
+      width: auto; height: auto; overflow: visible;
+      background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact;
+    }
+    .board {
+      position: static; width: 1920px; height: auto;
+      margin: 0; overflow: visible; transform: none !important;
+    }
+    .stage { position: static; }
+    .slide {
+      display: flex !important; position: relative; inset: auto;
+      width: 1920px; height: 1080px; overflow: hidden;
+      page-break-after: always; break-after: page;
+    }
+    .slide:last-child { page-break-after: auto; break-after: auto; }
+    .anim { animation: none !important; opacity: 1 !important; transform: none !important; }
+    .progress, .foot, .notes { display: none !important; }
+    .print-foot {
+      display: flex; position: absolute;
+      left: 100px; right: 100px; bottom: 32px;
+      justify-content: space-between; align-items: center;
+      color: var(--quiet); font-size: 22px; font-weight: 500;
+    }
+    .print-foot span:last-child {
+      color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums;
+    }
   }
 </style>
 </head>
@@ -648,6 +672,13 @@
   const count = document.getElementById("count");
   const notes = document.getElementById("notes");
   let i = 0;
+
+  slides.forEach((slide, index) => {
+    const footer = document.createElement("footer");
+    footer.className = "print-foot";
+    footer.innerHTML = `<span>Pronto · KermitPanic · HackSpain 2026</span><span>${index + 1} / ${slides.length}</span>`;
+    slide.appendChild(footer);
+  });
 
   function fit() {
     const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
