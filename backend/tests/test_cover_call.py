@@ -194,3 +194,44 @@ def test_the_prompt_renders_the_profile(accounts_db):
     rendered = system_prompt_for(Ctx())
     assert "Qué hace en la clínica" in rendered
     assert "La situación, en concreto: Ana está de baja" in rendered
+
+
+# ---- no todas las llamadas salientes son la misma llamada ------------------
+def test_an_emergency_is_not_a_favour_being_asked():
+    """Todas usaban el guion de "¿te ves cubriéndolo?", incluida ésta."""
+    from agent.accounts.directory import cover_brief
+
+    brief = cover_brief(DEFAULT_ORG_ID, "medical_emergency")
+
+    assert "urgencia médica" in brief["purpose"]
+    assert "Ni bromas" in brief["purpose"]
+
+
+def test_the_role_decides_over_the_reason(accounts_db):
+    """Un médico de guardia lo es le llames por lo que le llames."""
+    from agent.accounts.directory import cover_brief
+    from agent.accounts.store import Person, Store
+
+    Store(accounts_db).upsert_person(
+        DEFAULT_ORG_ID, Person(slug="on_call", name="Guardia", role="Guardia")
+    )
+
+    brief = cover_brief(DEFAULT_ORG_ID, "provider_on_leave", person_slug="on_call")
+
+    assert "de guardia" in brief["purpose"]
+    assert "cubra una agenda" in brief["purpose"]
+
+
+def test_the_purpose_outranks_the_tone_in_the_prompt(accounts_db):
+    """Va arriba y lo dice: manda sobre lo que acaba de pedir COVER_PROMPT."""
+    from agent.accounts.directory import cover_brief
+    from agent.voice.pipeline import system_prompt_for
+
+    built = cover_brief(DEFAULT_ORG_ID, "medical_emergency")
+
+    class Ctx:
+        cover_brief = built
+
+    rendered = system_prompt_for(Ctx())
+    assert "PARA QUÉ LLAMAS, y esto manda sobre todo lo anterior:" in rendered
+    assert rendered.index("PARA QUÉ LLAMAS") < rendered.index("LO QUE HA PASADO")

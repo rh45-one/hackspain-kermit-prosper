@@ -137,6 +137,120 @@ def _specialties(cache: Any) -> list[Node]:
     ]
 
 
+# Del cargo a la disciplina. Las reglas cubren casi todo el cuadro médico y
+# el diccionario está para lo que no se deja: un jefe de servicio no es una
+# especialidad llamada "Jefe de Ginecología".
+_DISCIPLINE_OF: dict[str, str] = {
+    "jefe de ginecologia": "Ginecología",
+    "ginecologo jr.": "Ginecología",
+    "medicina general": "Medicina general",
+    "guardia": "Guardia",
+    "mostrador": "Recepción",
+    "coordinacion": "Coordinación",
+    "urgencias": "Urgencias",
+    "intensivos": "Medicina intensiva",
+    "matrona": "Obstetricia",
+    "enfermeria": "Enfermería",
+    "farmacia": "Farmacia",
+    "administracion": "Administración",
+    "trabajo social": "Trabajo social",
+    "analisis clinicos": "Análisis clínicos",
+    "nutricionista": "Nutrición",
+    # Las que ninguna regla acierta. "Fisioterapeuta" con la regla de `-euta`
+    # sale "Fisioterapapia", que no es una palabra y además no casa con la
+    # "Fisioterapia" que ya publica el catálogo — o sea que además de fea
+    # habría duplicado la disciplina.
+    "fisioterapeuta": "Fisioterapia",
+    "anestesista": "Anestesia",
+    "digestiva": "Aparato digestivo",
+    "digestivo": "Aparato digestivo",
+    "endocrino": "Endocrinología",
+    "endocrina": "Endocrinología",
+}
+
+
+def _discipline_name(role: str) -> str:
+    """"Otorrinolaringólogo" -> "Otorrinolaringología". Una persona no es una
+    disciplina, y la columna de la derecha es de disciplinas.
+
+    Las tres reglas cubren el castellano médico casi entero: `-ólogo/-óloga`
+    da `-ología`, `-iatra` da `-iatría` y `-euta` da `-apia`. Lo que no encaja
+    en ninguna sale tal cual, que es mejor que una palabra inventada.
+    """
+    from agent.clinic.cache import _fold
+
+    key = _fold(role)
+    if key in _DISCIPLINE_OF:
+        return _DISCIPLINE_OF[key]
+    lowered = role.strip()
+    for ending, replacement in (("ólogo", "ología"), ("óloga", "ología"),
+                                ("iatra", "iatría"), ("terapeuta", "terapia")):
+        if lowered.lower().endswith(ending):
+            return lowered[: -len(ending)] + replacement
+    return lowered
+
+
+def _staff(org_id: str, cache: Any) -> tuple[list[Node], list[Edge]]:
+    """La plantilla de la clínica, en el mismo mapa que el catálogo.
+
+    El catálogo que publica Prosper tiene doce profesionales y es de Prosper:
+    no se le pueden añadir personas. Pero la clínica tiene las suyas, con su
+    cargo escrito, y hasta ahora sólo salían en la capa de escalados — así
+    que "la clínica entera de un vistazo" enseñaba doce médicos de una
+    plantilla de cuarenta y dos, y de los compañeros de uno, ninguno.
+
+    Se dibujan como profesionales, porque eso es lo que son, con
+    `meta.source = "plantilla"` para que el panel pueda distinguirlos de los
+    que vienen del catálogo. Su disciplina sale de su cargo, y cuando esa
+    disciplina ya existe en el catálogo se reutiliza el nodo en vez de crear
+    uno al lado con el mismo nombre.
+    """
+    from agent.clinic.cache import _fold
+
+    catalogue_specialties = {
+        _fold(getattr(sp, "name", "")): f"sp:{sp.id}"
+        for sp in (getattr(cache, "specialties_by_id", {}) or {}).values()
+    }
+    nodes: list[Node] = []
+    edges: list[Edge] = []
+    invented: dict[str, Node] = {}
+
+    for person in directory.people_for(org_id):
+        # Los cuatro declarados a mano ya son nodos de la capa de escalados, y
+        # su "cargo" es su propio identificador. 112 no es un profesional.
+        if getattr(person, "source", "") == "default":
+            continue
+        # Quien ya está en el catálogo sale de ahí, con sus sedes y su semana.
+        # Dibujarlo otra vez sería la misma persona dos veces.
+        if person.provider_id:
+            continue
+        discipline = _discipline_name(person.role)
+        key = _fold(discipline)
+        target = catalogue_specialties.get(key)
+        if target is None:
+            target = f"sp:plantilla:{key.replace(' ', '-')}"
+            if key not in invented:
+                invented[key] = Node(id=target, kind="specialty", label=discipline)
+        nodes.append(
+            Node(
+                id=f"staff:{person.slug}",
+                kind="provider",
+                label=person.name,
+                detail=person.role,
+                meta={
+                    "languages": list(person.languages or ()),
+                    "specialty_id": target.removeprefix("sp:"),
+                    # De dónde sale esta persona. El panel lo usa para no
+                    # decir que el catálogo publica a alguien que no publica.
+                    "source": "plantilla",
+                    "slug": person.slug,
+                },
+            )
+        )
+        edges.append(Edge(f"staff:{person.slug}", target, "covers"))
+    return nodes + list(invented.values()), edges
+
+
 def _roles(org_id: str) -> list[Node]:
     """The people who answer, from this organisation's directory.
 
@@ -205,6 +319,11 @@ def build(cache: Any, org_id: str = "") -> dict[str, Any]:
     if cache is not None and getattr(cache, "warmed", False):
         nodes = _providers(cache) + _sites(cache) + _specialties(cache) + nodes
         edges = _edges(cache)
+    # La plantilla se dibuja haya catálogo o no: es de la clínica, no de la
+    # API, así que un catálogo frío no es motivo para esconder a su gente.
+    staff_nodes, staff_edges = _staff(org_id, cache)
+    nodes = staff_nodes + nodes
+    edges = edges + staff_edges
 
     escalations = [
         Escalation(reason=reason, target=target, urgency=urgency, detail=detail)

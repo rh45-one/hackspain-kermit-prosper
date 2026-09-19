@@ -165,7 +165,14 @@ def system_prompt_for(ctx: CallContext) -> str:
     brief = getattr(ctx, "cover_brief", None)
     if not brief:
         return prompts.SYSTEM_PROMPT
-    lines = [prompts.COVER_PROMPT, "", "LO QUE HA PASADO, para esta llamada:"]
+    lines = [prompts.COVER_PROMPT, ""]
+    # El propósito va arriba del todo y separado, porque manda sobre el tono
+    # que acaba de describir el prompt: con una urgencia médica, la gracia
+    # que pide COVER_PROMPT es justo lo que no toca.
+    purpose = brief.get("purpose")
+    if purpose:
+        lines += ["PARA QUÉ LLAMAS, y esto manda sobre todo lo anterior:", purpose, ""]
+    lines.append("LO QUE HA PASADO, para esta llamada:")
     for label, key in (
         ("A quién llama", "who"),
         # Quién es esa persona. Sin esto la llamada trataba igual a una

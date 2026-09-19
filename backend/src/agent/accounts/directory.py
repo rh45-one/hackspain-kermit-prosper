@@ -44,6 +44,90 @@ from typing import Any
 from agent.accounts.store import Person, Route, store
 from agent.orgs import normalize_org_id
 
+# PARA QUÉ llama esta llamada.
+#
+# Todas las llamadas salientes usaban el mismo guion: "se ha roto la agenda,
+# ¿te ves cubriéndolo?". Eso está bien cuando falta un ginecólogo el lunes y
+# está mal en todo lo demás — avisar a urgencias de que hay una emergencia no
+# es pedirle un favor a nadie, y preguntarle con guasa si "se ve cubriéndolo"
+# es exactamente la llamada que no hay que hacer.
+#
+# El propósito sale de dos cosas que ya están en los datos: por qué se llama,
+# y qué hace quien descuelga. El cargo manda sobre el motivo, porque un
+# médico de guardia es un médico de guardia le llames por lo que le llames.
+_PURPOSE_BY_ROLE: dict[str, str] = {
+    "guardia": (
+        "Llamas a quien está de guardia. No le pides que cubra una agenda: le pasas "
+        "algo que no aguanta a mañana. Sé breve, di qué pasa y qué necesitas, y "
+        "cuelga pronto. Puede estar con alguien delante."
+    ),
+    "urgencias": (
+        "Llamas a Urgencias. Esto no va de agenda: va de un paciente ahora. Di qué "
+        "pasa en una frase, sin rodeos y sin gracia ninguna, y escucha lo que te "
+        "digan que hay que hacer."
+    ),
+    "coordinación": (
+        "Llamas a quien reparte el trabajo. No le pides que atienda a nadie: le pides "
+        "una decisión. Dile qué ha pasado, qué opciones hay y qué necesitas que "
+        "decida. Va al grano y agradece que tú también vayas."
+    ),
+    "mostrador": (
+        "Llamas al mostrador. Es un encargo, no un favor: di qué hay que hacer, con "
+        "quién y para cuándo, y confirma que queda apuntado."
+    ),
+    "administración": (
+        "Llamas a administración. Es papeleo: pólizas, volantes, facturación. Nada "
+        "clínico, y nada que tenga que decidir un médico."
+    ),
+    "trabajo social": (
+        "Llamas a trabajo social. Va de la situación de una persona, no de una "
+        "agenda. Cuenta el caso con cuidado y pregunta qué se puede hacer."
+    ),
+}
+
+_PURPOSE_BY_REASON: dict[str, str] = {
+    "medical_emergency": (
+        "Esto es una urgencia médica. No estás pidiendo un favor ni negociando una "
+        "agenda: estás avisando. Una frase con qué ha pasado, dónde y quién, y "
+        "después callas y escuchas. Ni bromas, ni cortesías largas, ni ofrecer citas."
+    ),
+    "provider_on_leave": (
+        "Falta un médico y su agenda se queda sin cubrir. Le preguntas a esta "
+        "persona si puede cogerla. Un no es un no a la primera."
+    ),
+    "no_availability": (
+        "No hay hueco para lo que pide un paciente. Le llamas para que decida: abrir "
+        "agenda, doblar una consulta o derivar. No decides tú."
+    ),
+    "caller_not_authorised": (
+        "Alguien ha pedido datos de otra persona y no le tocan. Le cuentas lo que ha "
+        "pasado para que decida qué se le dice. No le des datos del paciente que no "
+        "necesite para decidir."
+    ),
+    "patient_history": (
+        "El historial impide lo que se pedía y hace falta criterio médico. Expón el "
+        "caso y deja que decida."
+    ),
+    "referral_required": "Hace falta un volante. Es gestión, no criterio clínico.",
+    "insurer_referral_required": "La aseguradora exige volante. Es gestión con el paciente.",
+    "allowance_exhausted": "Al paciente se le han agotado las visitas del plan. Es gestión.",
+    "specialty_not_covered": "El plan del paciente no cubre esa especialidad. Es gestión.",
+    "location_not_covered": "El plan del paciente no cubre esa sede. Es gestión.",
+    "provider_not_in_network": "Ese médico no acepta el plan del paciente. Es gestión.",
+    "clinic_closed": "La clínica estaba cerrada cuando llamaron. Hay que recuperar a esa persona.",
+}
+
+
+def _purpose(reason: str, role: str) -> str:
+    """Qué es esta llamada. El cargo manda sobre el motivo."""
+    from agent.clinic.cache import _fold
+
+    by_role = _PURPOSE_BY_ROLE.get(_fold(role)) if role else None
+    if by_role:
+        return by_role
+    return _PURPOSE_BY_REASON.get(reason, "")
+
+
 # Cuánto corre, dicho como lo diría una persona.
 _URGENCY_SAID = {
     "now": "ahora mismo, interrumpe lo que esté haciendo",
@@ -319,6 +403,10 @@ def cover_brief(
 
     brief = {
         "reason": reason,
+        # Lo primero del informe, porque decide todo lo demás: avisar a
+        # urgencias y pedirle a un compañero que doble una mañana son dos
+        # llamadas distintas, y hasta ahora eran la misma.
+        "purpose": _purpose(reason, person.role if person else ""),
         "who": who or (person.name if person else "") or (route.person_slug if route else ""),
         # What this person does, and whatever the clinic wrote down about
         # them. Without it the call treats a coordinator, a podiatrist and
