@@ -21,7 +21,7 @@
  * literales. Un `*` aquí serviría cualquier ruta futura de `/ops/api/live/`
  * sin que nadie lo decidiera.
  */
-const ALLOWED = new Set(["calls", "clinic", "agent"]);
+const ALLOWED = new Set(["calls", "clinic", "agent", "incidents"]);
 
 export async function GET(
   request: Request,

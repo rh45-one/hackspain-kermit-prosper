@@ -10,6 +10,7 @@ import {
   Share2,
   Trophy,
   Users,
+  TriangleAlert,
 } from "lucide-react";
 
 import { ProntoMark } from "@/components/brand/pronto-mark";
@@ -42,6 +43,7 @@ const NAV = [
   // The clinic drawn: who covers what, and which of the eighteen endings a
   // call can have reaches which person. It was reachable only by typing the
   // URL, which for the screen most worth showing is the same as not existing.
+  { href: "/incidencias", label: "Incidents", icon: TriangleAlert, match: (path: string) => path === "/incidencias" || path.startsWith("/incidencias/") },
   { href: "/grafo", label: "Map", icon: Share2, match: (path: string) => path === "/grafo" || path.startsWith("/grafo/") },
   // Who answers and how the agent speaks to them. The graph draws the same
   // routes; this is where they are edited.
