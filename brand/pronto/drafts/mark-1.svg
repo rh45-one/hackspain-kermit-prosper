@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) -->
+  <rect id="background" width="64" height="64" fill="#FFFEFB" />
+  <g id="monogram" fill="#1b211e" stroke="#111713" stroke-linejoin="round" stroke-width="4">
+    <path id="stem-and-upper-curve" d="m13.81 57.38 0.125-32.19c0-10.06 8-18.31 18-18.44 9.688-0.5 17.31 6.438 18.31 16.81h-7.438c-0.5-5.125-4.812-9.125-10.12-9.25-5.812-0.1875-10.38 4.312-10.62 9.938-0.125 2.25 0.5625 4.812 0.5625 7.25v25.88z" fill="#1D211F" stroke="#1D211F" />
+    <path id="lower-curve" d="m26.25 34.38c1.938 1.062 3.875 1.5 5.875 1.438 5.188-0.0625 9.375-3.5 10.62-8.562h7.438c-1.188 8.938-8.688 15.81-17.56 15.81-2.375 0-4.562-0.4375-6.375-1.25z" fill="#1D211F" stroke="#1D211F" />
+  </g>
+</svg>

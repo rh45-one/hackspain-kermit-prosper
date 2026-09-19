@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { BrowserCallPanel } from "@/components/calls/browser-call-panel";
 import { CallManagementDialog } from "@/components/calls/call-management-dialog";
 import { TranscriptThread } from "@/components/calls/transcript-thread";
 import { useFrontdesk } from "@/components/frontdesk-provider";
@@ -165,6 +166,7 @@ export function CallMonitor() {
         Ahora mismo hay {activeCount}{" "}
         {activeCount === 1 ? "llamada abierta" : "llamadas abiertas"}.
       </PageHeader>
+      <BrowserCallPanel />
       <div className="mb-[var(--section-gap)]">
         <ObservatoryCharts />
       </div>

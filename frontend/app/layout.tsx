@@ -17,9 +17,9 @@ const interTight = Inter_Tight({
 });
 
 export const metadata: Metadata = {
-  title: "FrontDesk · Clínica Arenal",
+  title: "Pronto · Clínica Arenal",
   description:
-    "Panel de control del agente de IA para recepción de Clínica Arenal.",
+    "Panel de Pronto para la recepción de Clínica Arenal.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

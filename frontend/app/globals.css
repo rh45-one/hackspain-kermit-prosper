@@ -177,6 +177,32 @@
   box-shadow: var(--shadow-sm);
 }
 
+@keyframes status-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(47 158 68 / 0.55), 0 0 6px rgb(47 158 68 / 0.7);
+  }
+  50% {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 7px rgb(47 158 68 / 0), 0 0 10px rgb(47 158 68 / 0.55);
+  }
+}
+
+.status-dot-online {
+  background: #2f9e44;
+  animation: status-breathe 1.8s ease-in-out infinite;
+}
+
+.status-dot-offline {
+  background: #e31c3d;
+  box-shadow: 0 0 0 2px rgb(227 28 61 / 0.22), 0 0 10px rgb(227 28 61 / 0.85);
+}
+
+#llamar {
+  scroll-margin-top: 10rem;
+}
+
 @keyframes chart-line-draw {
   from {
     stroke-dashoffset: 1;
@@ -300,5 +326,10 @@
 
   [data-chart-ring] {
     stroke-dashoffset: var(--ring-offset) !important;
+  }
+
+  .status-dot-online {
+    animation: none;
+    box-shadow: 0 0 0 2px rgb(47 158 68 / 0.22), 0 0 8px rgb(47 158 68 / 0.7);
   }
 }

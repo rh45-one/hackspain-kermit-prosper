@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import Link from "next/link";
+
 import { PageHeader } from "@/components/layout/page-header";
 import {
   clockTime,
@@ -170,7 +172,10 @@ export function LiveBoard() {
     <div>
       <PageHeader kicker="Clínica Arenal" title="Llamadas en directo">
         {ongoing === 1 ? "1 llamada ahora mismo." : `${ongoing} llamadas ahora mismo.`}{" "}
-        Se actualiza sola cada tres segundos. Última comprobación: {updatedAt}.
+        Se actualiza sola cada tres segundos. Última comprobación: {updatedAt}.{" "}
+        <Link href="/calls#llamar" className="ember-underline">
+          Probar una llamada
+        </Link>
       </PageHeader>
 
       {error ? (

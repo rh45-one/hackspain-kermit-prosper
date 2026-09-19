@@ -58,14 +58,17 @@ def require_ops_access(request: Request) -> None:
         "ops console is loopback-only until OPS_TOKEN is set",
     )
 
-app = FastAPI(title="ClinicReflow ops", docs_url=None, redoc_url=None)
+app = FastAPI(title="Pronto ops", docs_url=None, redoc_url=None)
 
-_INDEX = """<!doctype html><html><head><title>ClinicReflow — ops</title>
+_INDEX = """<!doctype html><html><head><title>Pronto — ops</title>
 <meta charset="utf-8">
 <style>
 body{font-family:-apple-system,Inter,sans-serif;margin:0;background:#0e1116;color:#e6e8ee}
-header{padding:18px 24px;border-bottom:1px solid #232a35;display:flex;justify-content:space-between;align-items:center}
-h1{font-size:17px;margin:0} .pill{background:#1d2634;border-radius:99px;padding:4px 12px;font-size:12px;color:#9fb0c3}
+header{padding:18px 24px;border-bottom:1px solid #232a35;display:flex;justify-content:space-between;align-items:center;gap:16px}
+h1{font-size:17px;margin:0;display:flex;align-items:center;gap:10px;letter-spacing:-.03em}
+h1 svg{width:20px;height:20px;flex-shrink:0}
+h1 .clinic{font-weight:500;color:#9fb0c3;letter-spacing:0;font-size:13px}
+.pill{background:#1d2634;border-radius:99px;padding:4px 12px;font-size:12px;color:#9fb0c3}
 main{padding:24px;display:grid;gap:20px;grid-template-columns:1fr 1fr}
 .card{background:#151b24;border:1px solid #232a35;border-radius:12px;padding:16px}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#9fb0c3;margin:0 0 10px}
@@ -74,7 +77,7 @@ main{padding:24px;display:grid;gap:20px;grid-template-columns:1fr 1fr}
 #timeline{font-family:ui-monospace,monospace;font-size:12px;max-height:340px;overflow:auto;line-height:1.7}
 metrics span{margin-right:14px}
 </style></head><body>
-<header><h1>🏠 Clínica Arenal — ClinicReflow</h1><span class="pill" id="clock"></span></header>
+<header><h1><svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(0.31 0)"><path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/></g></svg>Pronto <span class="clinic">Clínica Arenal</span></h1><span class="pill" id="clock"></span></header>
 <main>
 <div class="card"><h2>Reflow plan — médico no disponible</h2><div id="reflow">—</div>
 <div style="margin-top:12px"><b style="font-size:22px" id="recovered">—</b> <span style="color:#9fb0c3">citas recuperadas</span></div></div>

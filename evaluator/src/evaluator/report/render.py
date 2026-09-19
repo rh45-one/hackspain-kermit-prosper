@@ -443,7 +443,7 @@ def render_report(run_dir: str | Path) -> Path:
 
     page = f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
-<title>Evaluador local - {_esc(manifest['experiment'])}</title>
+<title>Pronto · evaluador local — {_esc(manifest['experiment'])}</title>
 <style>
 body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #222; }}
 table {{ border-collapse: collapse; margin: 1rem 0; }}
@@ -456,7 +456,7 @@ th {{ background: #f3f3f3; }}
            margin: 1rem 0; border-radius: 6px; }}
 .banner table {{ margin: .6rem 0 .2rem; }}
 </style></head><body>
-<h1>Resultado local — {_esc(manifest['experiment'])}</h1>
+<h1>Pronto · resultado local — {_esc(manifest['experiment'])}</h1>
 {_fixture_banner(manifest)}
 <p class="meta">
 run_id <code>{_esc(manifest['run_id'])}</code> ·

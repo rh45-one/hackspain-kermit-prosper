@@ -39,7 +39,8 @@ code, pre, .log { font-family: var(--mono); }
 }
 
 .brand { display: flex; align-items: center; gap: 8px; }
-.brand strong { letter-spacing: 0.02em; }
+.brand strong { letter-spacing: -0.04em; font-size: 15px; }
+.brand .mark { width: 18px; height: 18px; display: block; flex-shrink: 0; }
 .dot {
   width: 10px; height: 10px; border-radius: 50%;
   background: var(--accent);

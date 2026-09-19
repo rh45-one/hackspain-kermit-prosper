@@ -72,7 +72,11 @@ button { font: inherit; }
   background: var(--graphite);
 }
 
-.brand-mark svg,
+.brand-mark svg {
+  width: 22px;
+  height: 22px;
+}
+
 .call-button svg {
   width: 16px;
   height: 16px;
@@ -97,34 +101,67 @@ button { font: inherit; }
 .clinic-name { margin: 0; }
 
 .product-name {
-  color: var(--brass);
-  font-size: 10px;
+  color: var(--graphite);
+  font-size: 15px;
   font-weight: 500;
-  letter-spacing: 0.08em;
+  letter-spacing: -0.04em;
   line-height: 1.1;
-  text-transform: uppercase;
 }
 
 .clinic-name {
   margin-top: 3px;
-  font-size: 15px;
+  color: var(--steel);
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.04em;
   line-height: 1;
 }
 
 .header-status {
-  gap: 7px;
+  gap: 8px;
   margin: 0;
   color: var(--quiet);
   font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
-.header-status span {
-  width: 6px;
-  height: 6px;
+.header-status-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
-  background: var(--brass);
+}
+
+.header-status[data-state="offline"] {
+  color: #b42318;
+}
+
+.header-status[data-state="offline"] .header-status-dot {
+  background: #e31c3d;
+  box-shadow: 0 0 0 2px rgb(227 28 61 / 0.22), 0 0 10px rgb(227 28 61 / 0.85);
+}
+
+.header-status[data-state="online"] {
+  color: #1f7a3a;
+}
+
+.header-status[data-state="online"] .header-status-dot {
+  background: #2f9e44;
+  box-shadow: 0 0 0 0 rgb(47 158 68 / 0.55);
+  animation: status-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes status-breathe {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(47 158 68 / 0.55), 0 0 6px rgb(47 158 68 / 0.7);
+  }
+  50% {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 7px rgb(47 158 68 / 0), 0 0 10px rgb(47 158 68 / 0.55);
+  }
 }
 
 .call-shell {
@@ -247,8 +284,8 @@ h1 {
 
 @media (max-width: 520px) {
   .call-shell { padding-top: 48px; }
-  .header-status { font-size: 0; }
-  .header-status span { width: 7px; height: 7px; }
+  .header-status { font-size: 11px; }
+  .header-status-dot { width: 8px; height: 8px; }
   .call-button { width: 100%; }
   .status { display: block; margin: 14px 0 0; }
 }
@@ -258,5 +295,9 @@ h1 {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+  .header-status[data-state="online"] .header-status-dot {
+    animation: none;
+    box-shadow: 0 0 0 2px rgb(47 158 68 / 0.22), 0 0 8px rgb(47 158 68 / 0.7);
   }
 }

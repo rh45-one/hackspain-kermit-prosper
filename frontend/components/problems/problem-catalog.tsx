@@ -34,12 +34,12 @@ export function ProblemCatalog({
       {!embedded ? (
         <PageHeader kicker="Ensayo" title="Problemas">
           Dieciocho problemas, diecisiete puntuados. Esta pantalla es la hoja de
-          ruta: los cerrados se leen, no se marcan. FrontDesk no llama al harness.
+          ruta: los cerrados se leen, no se marcan. Pronto no llama al harness.
         </PageHeader>
       ) : (
         <p className="mb-6 max-w-2xl text-[14px] leading-relaxed text-steel sm:mb-8">
           Dieciocho problemas, diecisiete puntuados. Hoja de ruta del harness:
-          los cerrados se leen, no se marcan. FrontDesk no llama al harness.
+          los cerrados se leen, no se marcan. Pronto no llama al harness.
         </p>
       )}
 

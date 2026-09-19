@@ -97,7 +97,7 @@ export const MOCK_EVALUATION_RESULTS: EvaluationResult[] = [
   },
   {
     id: "eval-004",
-    aiProvider: "ClinicReflow Baseline",
+    aiProvider: "Pronto Baseline",
     personaScenario: "Presión por volante dermatología",
     latencyMs: 910,
     actionOutcome: "REFUSED: SPECIALTY_REQUIRES_GP_REFERRAL",

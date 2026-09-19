@@ -8,23 +8,31 @@
       content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     >
     <meta name="theme-color" content="#f6f6f2">
-    <title>ClinicReflow | Llamada de prueba</title>
+    <title>Pronto | Llamada de prueba</title>
+    <link rel="icon" href="./mark.svg">
     <link rel="stylesheet" href="./styles.css">
     <script src="./app.js" defer></script>
   </head>
   <body>
     <header class="app-header">
       <div class="header-inner">
-        <div class="brand-lockup" aria-label="ClinicReflow, Clínica Arenal">
+        <div class="brand-lockup" aria-label="Pronto, Clínica Arenal">
           <div class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg>
+            <svg viewBox="0 0 64 64">
+              <g transform="translate(0.31 0)">
+                <path fill="currentColor" d="M14 56V26A18 18 0 0 1 49.386665 21.341257L41.659258 23.41181A10 10 0 1 0 41.659258 28.58819L49.386665 30.658743A18 18 0 0 1 24.8 42.497273A2 2 0 0 0 22 44.330303V56Z"/>
+              </g>
+            </svg>
           </div>
           <div>
-            <p class="product-name">ClinicReflow</p>
+            <p class="product-name">Pronto</p>
             <p class="clinic-name">Clínica Arenal</p>
           </div>
         </div>
-        <p class="header-status" role="status"><span aria-hidden="true"></span> Prueba local</p>
+        <p class="header-status" id="link-status" data-state="offline" role="status" aria-live="polite">
+          <span class="header-status-dot" aria-hidden="true"></span>
+          <span class="header-status-label">Offline</span>
+        </p>
       </div>
     </header>
 

@@ -87,7 +87,7 @@ def create_app(
     root = Path(results_root)
     web = Path(web_dir) if web_dir else None
     sessions = ChatSessionManager(session_root or root / "_chat-sessions")
-    app = FastAPI(title="Prosper evaluator - developer console", docs_url="/api/docs")
+    app = FastAPI(title="Pronto evaluator - developer console", docs_url="/api/docs")
     app.include_router(create_chat_router(sessions))
 
     @app.get("/healthz")

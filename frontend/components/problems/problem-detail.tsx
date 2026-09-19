@@ -18,7 +18,7 @@ function publicCaseEmptyCopy(problem: ProblemBrief): string {
   if (problem.diagnostic) {
     return "The Switchboard no tiene casos propios: el burst público son cinco líneas del problema 1. No se inventan respuestas aquí.";
   }
-  return `Los ${problem.publicCaseCount} casos públicos oficiales no están vendored. No se inventan respuestas. Este problema no se marca desde FrontDesk.`;
+  return `Los ${problem.publicCaseCount} casos públicos oficiales no están vendored. No se inventan respuestas. Este problema no se marca desde Pronto.`;
 }
 
 export function ProblemDetail({ problem }: { problem: ProblemBrief }) {

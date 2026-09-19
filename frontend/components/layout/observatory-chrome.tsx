@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Activity,
   ContactRound,
   Radio,
   SlidersHorizontal,
   Trophy,
 } from "lucide-react";
 
+import { ProntoMark } from "@/components/brand/pronto-mark";
 import { useFrontdesk } from "@/components/frontdesk-provider";
 import { formatMadrid } from "@/lib/timezone";
 import { CALL_CAPACITY } from "@/lib/types";
@@ -72,16 +72,16 @@ export function ObservatoryChrome() {
         <Link
           href="/calls"
           className="group flex shrink-0 items-center gap-3 rounded-lg outline-none active:scale-[0.99]"
-          aria-label="ClinicReflow, ir al monitor"
+          aria-label="Pronto, ir al monitor"
         >
           <span className="grid size-9 place-items-center rounded-[10px] bg-graphite text-canvas-white shadow-sm transition-transform duration-200 ease-out group-hover:-translate-y-0.5 group-active:translate-y-0">
-            <Activity className="size-4" strokeWidth={1.8} />
+            <ProntoMark className="size-[22px]" />
           </span>
           <span>
-            <span className="block font-heading text-[11px] leading-none tracking-[0.04em] text-brass uppercase">
-              ClinicReflow
+            <span className="block font-heading text-[15px] leading-none tracking-[-0.04em] text-graphite">
+              Pronto
             </span>
-            <span className="mt-1.5 block font-heading text-[15px] leading-none text-graphite">
+            <span className="mt-1.5 block font-heading text-[11px] leading-none tracking-[0.04em] text-steel">
               Clínica Arenal
             </span>
           </span>

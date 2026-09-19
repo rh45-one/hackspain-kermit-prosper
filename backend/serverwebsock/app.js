@@ -8,6 +8,12 @@ const PLAYBACK_LEAD_SECONDS = 0.035;
 const button = document.querySelector("#call-button");
 const label = document.querySelector("#call-label");
 const status = document.querySelector("#call-status");
+const linkStatus = document.querySelector("#link-status");
+const linkLabel = document.querySelector(".header-status-label");
+
+const HEALTH_URL = "/healthz";
+const HEALTH_POLL_MS = 4000;
+const HEALTH_TIMEOUT_MS = 2500;
 
 let phase = "idle";
 let sessionVersion = 0;
@@ -34,6 +40,36 @@ function setPhase(nextPhase, message, tone = "neutral") {
   label.textContent = inCall ? "Colgar" : "Iniciar llamada";
   status.textContent = message;
   status.dataset.tone = tone;
+  if (inCall) {
+    setLinkState(true);
+  }
+}
+
+function setLinkState(online) {
+  const state = online ? "online" : "offline";
+  linkStatus.dataset.state = state;
+  linkLabel.textContent = online ? "Online" : "Offline";
+}
+
+async function probeLink() {
+  if (!navigator.onLine) {
+    setLinkState(false);
+    return;
+  }
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    setLinkState(true);
+    return;
+  }
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(HEALTH_URL, {cache: "no-store", signal: controller.signal});
+    setLinkState(response.ok);
+  } catch {
+    setLinkState(false);
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 function newId(prefix) {
@@ -408,3 +444,8 @@ window.addEventListener("pagehide", () => {
     void releaseResources();
   }
 });
+
+void probeLink();
+window.setInterval(() => void probeLink(), HEALTH_POLL_MS);
+window.addEventListener("online", () => void probeLink());
+window.addEventListener("offline", () => setLinkState(false));
