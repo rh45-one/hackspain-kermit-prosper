@@ -1,8 +1,12 @@
-# Guión — Presentación VC (Pronto)
+# Guión — Presentación finalistas (Pronto)
 
 Narrativa para inversores: **TAM / ROI / Moat** — no el stack.
 
-Deck: [`index.html`](index.html) · 6 slides · `F` fullscreen · `N` notas · `1`–`6` saltar
+Deck: [`presentacion-finalistas.html`](presentacion-finalistas.html) · 6 slides · `F` fullscreen · `N` notas · `1`–`6` saltar.
+
+Tipografía: **Inter Tight** (la misma familia en títulos, cuerpo y cifras).
+Papel `#FFFEFB`, tinta `#1D211F`, coral `#FF5533` — identidad Pronto, no el
+manual de Prosper.
 
 | # | Slide | Mensaje |
 |---|---|---|

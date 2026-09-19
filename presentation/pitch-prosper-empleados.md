@@ -9,13 +9,14 @@ Hay **tres piezas**, no una:
   problem solving, craft). **Sin demo dentro.**
 - Demo jugable, junto al vídeo: `wss://…/ws` + FrontDesk `/calls` + un caso
   público de The Rules o Triage. Que lo marquen ellos.
-- Finalistas, en sala: **este** documento + [`index.html`](index.html).
+- Finalistas, en sala: **este** documento +
+  [`presentacion-finalistas.html`](presentacion-finalistas.html).
   Quien esté delante ya vio el vídeo: no lo recitéis. Tablero, FrontDesk en
   vivo, preguntas.
 
 Audiencia en sala: gente que ya opera voz en clínicas. No les expliquéis qué es un EHR.
 Idioma: español. Si la sala pide inglés, usad el cierre bilingüe del final.
-Deck: abrir [`index.html`](index.html) a pantalla completa
+Deck: abrir [`presentacion-finalistas.html`](presentacion-finalistas.html) a pantalla completa
 (`F`). Flechas para pasar. `N` enseña las notas del guión. El design system de
 Prosper ya está aplicado a las seis slides. FrontDesk no se re-brandéa.
 
@@ -50,7 +51,7 @@ Si se comen el reloj: saltad la 5 (el miss) y dejadlo para Q&A. No salteis el ta
 
 ## Diapositivas
 
-Seis, en [`index.html`](index.html). Números del mejor Run All
+Seis, en [`presentacion-finalistas.html`](presentacion-finalistas.html). Números del mejor Run All
 sobre los problemas 1–10 (captura del 19 Sep). Si el tablero se mueve, se
 actualiza la slide 2.
 
