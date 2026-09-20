@@ -26,6 +26,7 @@ from agent.orgs import DEFAULT_ORG_ID
 TEAM: tuple[dict[str, Any], ...] = (
     {
         "slug": "gines-martinez",
+        "voice": "Fenrir",
         "name": "Ginés Martínez Ruiz",
         "role": "Jefe de Ginecología",
         "detail": "Lleva el servicio y decide cuando ninguna regla decide.",
@@ -37,6 +38,7 @@ TEAM: tuple[dict[str, Any], ...] = (
     },
     {
         "slug": "german-padua",
+        "voice": "Puck",
         "name": "Germán Padua",
         "role": "Ginecólogo Jr.",
         "detail": "Cubre el servicio cuando falta el jefe.",
@@ -48,6 +50,7 @@ TEAM: tuple[dict[str, Any], ...] = (
     },
     {
         "slug": "marina-vicens",
+        "voice": "Aoede",
         "name": "Marina Vicens",
         "role": "Psiquiatra",
         "detail": "Salud mental. Fuera del circuito de ginecología.",
@@ -59,6 +62,7 @@ TEAM: tuple[dict[str, Any], ...] = (
     },
     {
         "slug": "hugo-rodriguez",
+        "voice": "Orus",
         "name": "Hugo Rodríguez",
         "role": "Otorrinolaringólogo",
         "detail": "ORL.",
@@ -70,6 +74,7 @@ TEAM: tuple[dict[str, Any], ...] = (
     },
     {
         "slug": "jose-antunez",
+        "voice": "Kore",
         "name": "Jose Antúnez",
         "role": "Podólogo",
         "detail": "Podología.",
@@ -288,6 +293,7 @@ def seed(path: str, org_id: str = DEFAULT_ORG_ID, *, prune: bool = True) -> tupl
                 provider_id=person.get("provider_id"),
                 phone=person.get("phone", ""),
                 covers_for=person.get("covers_for", ""),
+                voice=person.get("voice", ""),
                 opening=person.get("opening", ""),
                 may_ask=tuple(x for x in [person.get("may_ask", "")] if x),
                 must_not_ask=tuple(x for x in [person.get("must_not_ask", "")] if x),

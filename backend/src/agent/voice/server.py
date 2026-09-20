@@ -162,6 +162,7 @@ async def demo_voice_ws(websocket: WebSocket) -> None:
             person_slug=query.get("person") or "",
             missing=query.get("missing") or "",
             situation=query.get("situation") or "",
+            incident=query.get("incident") or "",
             config=app_settings,
         )
         # What shift is actually uncovered, and whether the colleague we are

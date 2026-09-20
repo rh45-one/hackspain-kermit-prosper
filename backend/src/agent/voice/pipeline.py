@@ -292,6 +292,10 @@ def build_worker(
             toolbox,
             service_cls=gemini_service_factory,
             system_instruction=system_prompt_for(ctx),
+            # La voz de la persona a la que se llama. En una entrante no hay
+            # informe, así que queda vacía y suena la del despliegue: la de
+            # recepción, que es la misma de siempre.
+            voice=(getattr(ctx, "cover_brief", None) or {}).get("voice", ""),
         )
         if service is None:  # pragma: no cover - resolve_voice_engine already gated this
             raise RuntimeError("Gemini Live service could not be created for an accepted engine")

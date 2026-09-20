@@ -508,3 +508,57 @@ def test_the_call_profile_screen_shows_what_the_call_would_open_with(platform, c
     # The contact detail is on the person, for a human, and not in the brief.
     assert body["person"]["phone"] == "600111222"
     assert "600111222" not in str(body["brief"])
+
+
+# ---- una voz por persona --------------------------------------------------
+def test_each_person_can_have_their_own_voice(tmp_path):
+    """Cuarenta y dos personas y una sola voz es un agente disfrazado de 42."""
+    from agent.accounts import db
+    from agent.accounts.store import Person, Store
+
+    path = str(tmp_path / "platform.db")
+    db.migrate(path)
+    shop = Store(path)
+    shop.upsert_person(
+        DEFAULT_ORG_ID, Person(slug="hugo", name="Hugo", role="ORL", voice="Aoede")
+    )
+
+    assert shop.get_person(DEFAULT_ORG_ID, "hugo").voice == "Aoede"
+
+
+def test_an_invented_voice_never_reaches_the_engine():
+    """Un nombre inventado en una fila tiraría el socket al abrirlo.
+
+    Y eso convierte un error de configuración en una llamada que no suena, que
+    es el peor sitio donde puede aparecer.
+    """
+    from agent.voice.gemini_live import _gemini_voice_id
+
+    class S:
+        gemini_voice_id = "Charon"
+
+    assert _gemini_voice_id(S(), "Aoede") == "Aoede"
+    assert _gemini_voice_id(S(), "Pepito") == "Charon"
+    assert _gemini_voice_id(S(), "") == "Charon"
+
+
+def test_the_voice_travels_in_the_brief(tmp_path, monkeypatch):
+    """El informe es lo que viaja de la ficha de una persona a la llamada."""
+    from agent.accounts import db
+    from agent.accounts import directory as accounts_directory
+    from agent.accounts import store as accounts_store
+    from agent.accounts.store import Person, Route, Store, _store_at
+
+    path = str(tmp_path / "platform.db")
+    db.migrate(path)
+    monkeypatch.setattr(accounts_store, "store", lambda config=None: _store_at(path))
+    monkeypatch.setattr(accounts_directory, "store", lambda config=None: _store_at(path))
+    shop = Store(path)
+    shop.upsert_person(
+        DEFAULT_ORG_ID, Person(slug="hugo", name="Hugo", role="ORL", voice="Leda")
+    )
+    shop.upsert_route(
+        DEFAULT_ORG_ID, Route(reason="provider_on_leave", person_slug="hugo", urgency="today")
+    )
+
+    assert accounts_directory.cover_brief(DEFAULT_ORG_ID, "provider_on_leave")["voice"] == "Leda"

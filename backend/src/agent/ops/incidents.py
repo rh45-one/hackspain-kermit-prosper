@@ -137,6 +137,38 @@ async def list_incidents(
     }
 
 
+@router.get("/shifts")
+async def cover_shifts(
+    request: Request,
+    org_id: str = DEFAULT_ORG_ID,
+    _: None = Depends(_access),
+) -> dict[str, Any]:
+    """Los turnos que alguien se ha comprometido a cubrir, por teléfono.
+
+    Lo que una incidencia cerrada no dice: quién está el martes por la mañana.
+    """
+    platform = accounts_store.store()
+    if not platform.exists:
+        return {"shifts": []}
+    return {
+        "shifts": [
+            {
+                "id": row.id,
+                "person_slug": row.person_slug,
+                "person_name": row.person_name,
+                "covers_when": row.covers_when,
+                "site": row.site,
+                "instead_of": row.instead_of,
+                "reason": row.reason,
+                "incident_id": row.incident_id,
+                "note": row.note,
+                "created_at": row.created_at,
+            }
+            for row in platform.list_cover_shifts(org_id)
+        ]
+    }
+
+
 @router.post("/incidents")
 async def open_incident(
     request: Request,

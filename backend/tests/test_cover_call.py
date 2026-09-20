@@ -331,3 +331,126 @@ def test_an_inbound_call_still_answers_the_phone():
 
     assert first_turn_context(Ctx()) == phone_hint_greeting(Ctx())
     assert "The phone is ringing" in first_turn_context(Ctx())
+
+
+# ---- lo que conteste vuelve a la incidencia -------------------------------
+def _settings():
+    """Lo mínimo que `ToolBox` mira al construirse."""
+    from agent.config import settings
+
+    return settings()
+
+
+def _settling(accounts_db, answer: str, **kwargs):
+    """Una incidencia abierta, una llamada contestada, y lo que queda."""
+    from agent.accounts import directory
+    from agent.accounts.store import Incident, Person, Route, Store
+    from agent.brain.tools import ToolBox
+    from agent.voice.context import CallContext
+
+    shop = Store(accounts_db)
+    shop.upsert_person(DEFAULT_ORG_ID, Person(slug="hugo", name="Hugo", role="ORL"))
+    shop.upsert_person(
+        DEFAULT_ORG_ID,
+        Person(slug="andres", name="Andrés Vila", role="ORL", covers_for="hugo"),
+    )
+    shop.upsert_person(
+        DEFAULT_ORG_ID,
+        Person(slug="lucia", name="Lucía Serrano", role="ORL", covers_for="andres"),
+    )
+    shop.upsert_route(
+        DEFAULT_ORG_ID, Route(reason="provider_on_leave", person_slug="andres", urgency="today")
+    )
+    opened = shop.open_incident(
+        DEFAULT_ORG_ID,
+        Incident(id="", reason="provider_on_leave", summary="Hugo de vacaciones", assigned_to="andres"),
+    )
+    brief = dict(directory.cover_brief(DEFAULT_ORG_ID, "provider_on_leave", incident=opened.id))
+
+    ctx = CallContext(org_id=DEFAULT_ORG_ID)
+    ctx.cover_brief = brief
+    box = ToolBox(ctx, _settings())
+    box._settle_incident(brief, answer, kwargs.get("when"), kwargs.get("note"))
+    return shop.list_incidents(DEFAULT_ORG_ID)[0]
+
+
+def test_a_yes_closes_the_incident(accounts_db):
+    """La llamada se hacía y en el panel el hueco seguía abierto."""
+    row = _settling(accounts_db, "yes")
+
+    assert row.status == "closed"
+    assert "lo cubre" in row.note
+
+
+def test_a_maybe_leaves_it_acknowledged_with_the_callback(accounts_db):
+    row = _settling(accounts_db, "will_check", when="a las seis")
+
+    assert row.status == "acknowledged"
+    assert "a las seis" in row.note
+
+
+def test_a_no_hands_it_to_whoever_covers_them(accounts_db):
+    """Para esto existe `covers_for`: el no de uno es la llamada del siguiente."""
+    row = _settling(accounts_db, "no", note="está fuera de Madrid")
+
+    assert row.status == "open"
+    assert row.assigned_to == "lucia"
+    assert "no puede" in row.note
+    assert "Lucía Serrano" in row.note
+    assert "está fuera de Madrid" in row.note
+
+
+def test_a_call_with_no_incident_behind_it_settles_nothing(accounts_db):
+    """El QR del grafo abre llamadas sin incidencia, y eso no puede romperse."""
+    from agent.brain.tools import ToolBox
+    from agent.voice.context import CallContext
+
+    ctx = CallContext(org_id=DEFAULT_ORG_ID)
+    box = ToolBox(ctx, _settings())
+
+    assert box._settle_incident({"who": "Andrés"}, "yes", None, None) is False
+
+
+def test_a_yes_also_writes_the_shift_down(accounts_db):
+    """La incidencia cerrada no dice quién está el martes por la mañana."""
+    from agent.accounts import directory
+    from agent.accounts.store import Incident, Person, Route, Store
+    from agent.brain.tools import ToolBox
+    from agent.voice.context import CallContext
+
+    shop = Store(accounts_db)
+    shop.upsert_person(DEFAULT_ORG_ID, Person(slug="hugo", name="Hugo Rodríguez", role="ORL"))
+    shop.upsert_person(
+        DEFAULT_ORG_ID, Person(slug="andres", name="Andrés Vila", role="ORL", covers_for="hugo")
+    )
+    shop.upsert_route(
+        DEFAULT_ORG_ID, Route(reason="provider_on_leave", person_slug="andres", urgency="today")
+    )
+    opened = shop.open_incident(
+        DEFAULT_ORG_ID, Incident(id="", reason="provider_on_leave", assigned_to="andres")
+    )
+    brief = dict(directory.cover_brief(DEFAULT_ORG_ID, "provider_on_leave", incident=opened.id))
+
+    ctx = CallContext(org_id=DEFAULT_ORG_ID)
+    ctx.cover_brief = brief
+    box = ToolBox(ctx, _settings())
+    box._write_the_shift_down(brief, "yes", "el martes de nueve a dos", None)
+
+    shifts = shop.list_cover_shifts(DEFAULT_ORG_ID)
+    assert len(shifts) == 1
+    assert shifts[0].person_name == "Andrés Vila"
+    assert shifts[0].covers_when == "el martes de nueve a dos"
+    assert shifts[0].instead_of == "Hugo Rodríguez"
+    assert shifts[0].incident_id == opened.id
+
+
+def test_only_a_yes_puts_anybody_on_a_shift(accounts_db):
+    """Un "lo miro" no es alguien en el mostrador el martes."""
+    from agent.accounts.store import Store
+    from agent.brain.tools import ToolBox
+    from agent.voice.context import CallContext
+
+    box = ToolBox(CallContext(org_id=DEFAULT_ORG_ID), _settings())
+    for answer in ("no", "will_check"):
+        assert box._write_the_shift_down({"who": "Andrés"}, answer, "el martes", None) is False
+    assert Store(accounts_db).list_cover_shifts(DEFAULT_ORG_ID) == []

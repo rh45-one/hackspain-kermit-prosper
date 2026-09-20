@@ -27,6 +27,7 @@ import {
   slugify,
   type Brief,
   type CallProfile,
+  VOICES,
   type Person,
   type PersonDraft,
   type RouteRow,
@@ -324,6 +325,29 @@ export function PersonEditor({
               placeholder="Hola Dra. Ortiz, soy el recepcionista de Arenal. Es por un hueco de mañana."
               onChange={(event) => patch({ opening: event.target.value })}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="person-voice" className="font-heading text-[12.5px] text-quiet">
+              Con qué voz se le llama
+            </Label>
+            <select
+              id="person-voice"
+              value={draft.voice}
+              onChange={(event) => patch({ voice: event.target.value })}
+              className="h-10 w-full rounded-[10px] border border-mist bg-canvas-white px-3 text-[14px] text-graphite outline-none focus-visible:border-graphite"
+            >
+              <option value="">La del despliegue (recepción)</option>
+              {VOICES.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  {voice.id} — {voice.detail}
+                </option>
+              ))}
+            </select>
+            <p className="text-[12px] leading-[1.5] text-quiet">
+              La voz es lo primero que reconoce quien descuelga, antes que el nombre. Una sola
+              para toda la plantilla es un único agente disfrazado de cuarenta y dos.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

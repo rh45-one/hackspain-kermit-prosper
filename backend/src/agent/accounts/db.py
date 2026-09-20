@@ -60,7 +60,7 @@ from agent.orgs import DEFAULT_ORG_ID
 
 # Bumped by appending to _MIGRATIONS. Never by editing one in place: the
 # volume already holds a database that has run the old ones.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
     (
@@ -229,6 +229,58 @@ _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
             )
             """,
             "CREATE INDEX IF NOT EXISTS idx_incidents_org ON incidents(org_id, status, created_at)",
+        ),
+    ),
+    (
+        5,
+        (
+            # La voz con la que la clínica llama a ESTA persona.
+            #
+            # Hasta ahora había una voz para todo el despliegue, en
+            # `GEMINI_VOICE_ID`. Cuarenta y dos personas y una sola voz es un
+            # único agente disfrazado de cuarenta y dos; la voz es lo primero
+            # que reconoce quien descuelga, antes que el nombre.
+            #
+            # Vacío significa "la del despliegue", que es como se comportaba
+            # antes de existir esta columna.
+            "ALTER TABLE people ADD COLUMN voice TEXT NOT NULL DEFAULT ''",
+        ),
+    ),
+    (
+        6,
+        (
+            # El turno que alguien se ha comprometido a cubrir.
+            #
+            # Una incidencia cerrada dice que el hueco está resuelto y no dice
+            # QUIÉN está el martes por la mañana. Eso es lo que hay que poder
+            # mirar el lunes, y hasta ahora se quedaba dentro de la nota de
+            # una fila cerrada — es decir, en ningún sitio.
+            #
+            # No es una cita: una cita es de un paciente y vive en la API de
+            # Prosper. Esto es de la clínica y de su gente, y por eso vive
+            # aquí, al lado del turno del que salió.
+            """
+            CREATE TABLE IF NOT EXISTS cover_shifts (
+                id          TEXT PRIMARY KEY,
+                org_id      TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                person_slug TEXT NOT NULL,
+                person_name TEXT NOT NULL DEFAULT '',
+                -- Cuándo, con las palabras con las que se acordó. Texto y no
+                -- una fecha a propósito: lo que se dice por teléfono es "el
+                -- martes por la mañana", y convertirlo en un timestamp aquí
+                -- sería inventarse una hora que nadie ha dicho.
+                covers_when TEXT NOT NULL DEFAULT '',
+                site        TEXT NOT NULL DEFAULT '',
+                -- A quién sustituye, y por qué se le llamó.
+                instead_of  TEXT NOT NULL DEFAULT '',
+                reason      TEXT NOT NULL DEFAULT '',
+                incident_id TEXT NOT NULL DEFAULT '',
+                call_id     TEXT NOT NULL DEFAULT '',
+                note        TEXT NOT NULL DEFAULT '',
+                created_at  TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_shifts_org ON cover_shifts(org_id, created_at)",
         ),
     ),
 ]
