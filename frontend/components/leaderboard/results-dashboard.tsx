@@ -35,6 +35,183 @@ export type RealCall = {
   medical_emergency?: boolean;
 };
 
+
+/* --------------------------------------------------------------- gráficas */
+/*
+ * SVG a mano y no una librería de gráficas.
+ *
+ * Son tres formas sencillas sobre treinta puntos: una librería serían
+ * doscientos kilobytes en el paquete para dibujar rectángulos, y además
+ * traería su propia paleta peleándose con la de la casa. Aquí los colores
+ * son los mismos tokens que usa el grafo, así que las dos pantallas se
+ * parecen porque están hechas de lo mismo, no porque alguien las igualó.
+ */
+
+const INK = {
+  booked: "#4c8c78",
+  plain: "#b4b9b5",
+  failed: "#e76432",
+  line: "#b08b3a",
+};
+
+/** Un anillo con la proporción de llamadas que acaban en cita. */
+function OutcomeRing({ booked, failed, total }: { booked: number; failed: number; total: number }) {
+  const size = 132;
+  const stroke = 16;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const safe = Math.max(total, 1);
+  const bookedArc = (booked / safe) * circumference;
+  const failedArc = (failed / safe) * circumference;
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img"
+         aria-label={`${booked} de ${total} llamadas acabaron en cita`}>
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={INK.plain}
+              strokeWidth={stroke} opacity={0.35} />
+      <circle
+        cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={INK.booked}
+        strokeWidth={stroke} strokeLinecap="round"
+        strokeDasharray={`${bookedArc} ${circumference - bookedArc}`}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dasharray 600ms cubic-bezier(0.16,1,0.3,1)" }}
+      />
+      {failed > 0 ? (
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={INK.failed}
+          strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={`${failedArc} ${circumference - failedArc}`}
+          transform={`rotate(${-90 + (booked / safe) * 360} ${size / 2} ${size / 2})`}
+        />
+      ) : null}
+      <text x="50%" y="47%" textAnchor="middle" className="fill-graphite"
+            style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.04em" }}>
+        {total ? Math.round((booked / total) * 100) : 0}%
+      </text>
+      <text x="50%" y="63%" textAnchor="middle" className="fill-quiet" style={{ fontSize: 10.5 }}>
+        acaban en cita
+      </text>
+    </svg>
+  );
+}
+
+/** Cuántas llamadas por hora. Las horas vacías se dibujan, que también dicen algo. */
+function HourlyBars({ calls }: { calls: RealCall[] }) {
+  const byHour = new Map<string, { total: number; booked: number }>();
+  for (const call of calls) {
+    const hour = (call.started_at ?? "").slice(11, 13);
+    if (!hour) continue;
+    const cell = byHour.get(hour) ?? { total: 0, booked: 0 };
+    cell.total += 1;
+    if ((call.submissions_ok ?? 0) > 0) cell.booked += 1;
+    byHour.set(hour, cell);
+  }
+  const hours = [...byHour.entries()].sort(([a], [b]) => a.localeCompare(b));
+  if (hours.length === 0) return null;
+  const peak = Math.max(...hours.map(([, cell]) => cell.total));
+  const width = 100;
+  const height = 74;
+  const gap = 3;
+  const barWidth = Math.max(4, (width - gap * (hours.length - 1)) / hours.length);
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height + 12}`} className="w-full" role="img"
+           aria-label="Llamadas por hora">
+        {hours.map(([hour, cell], index) => {
+          const x = index * (barWidth + gap);
+          const total = (cell.total / peak) * height;
+          const booked = (cell.booked / peak) * height;
+          return (
+            <g key={hour}>
+              <rect x={x} y={height - total} width={barWidth} height={total} rx={1.5}
+                    fill={INK.plain} opacity={0.5} />
+              {booked > 0 ? (
+                <rect x={x} y={height - booked} width={barWidth} height={booked} rx={1.5}
+                      fill={INK.booked} />
+              ) : null}
+              <text x={x + barWidth / 2} y={height + 9} textAnchor="middle"
+                    className="fill-quiet" style={{ fontSize: 4.5 }}>
+                {hour}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * Turnos contra duración. Cada punto es una llamada.
+ *
+ * Es la gráfica que más dice de las tres, porque la nube tiene forma: las
+ * llamadas que acaban en cita están arriba a la derecha —más turnos, más
+ * tiempo— y las que se caen pronto se amontonan en la esquina. Un paciente
+ * identificado y una cita cerrada cuestan minuto y medio, y eso no se ve en
+ * ninguna media.
+ */
+function TurnsAgainstTime({ calls }: { calls: RealCall[] }) {
+  const points = calls.filter((c) => (c.turns ?? 0) > 0 && (c.duration_seconds ?? 0) > 0);
+  if (points.length < 2) return null;
+  const maxTurns = Math.max(...points.map((c) => c.turns ?? 0));
+  const maxSeconds = Math.max(...points.map((c) => c.duration_seconds ?? 0));
+  const width = 100;
+  const height = 74;
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img"
+         aria-label="Turnos contra duración de cada llamada">
+      {[0.25, 0.5, 0.75].map((fraction) => (
+        <line key={fraction} x1={0} x2={width} y1={height * fraction} y2={height * fraction}
+              stroke={INK.plain} strokeWidth={0.3} opacity={0.4} />
+      ))}
+      {points.map((call) => {
+        const x = ((call.duration_seconds ?? 0) / maxSeconds) * (width - 4) + 2;
+        const y = height - ((call.turns ?? 0) / maxTurns) * (height - 4) - 2;
+        const ok = (call.submissions_ok ?? 0) > 0;
+        const bad = (call.submissions_failed ?? 0) > 0;
+        return (
+          <circle
+            key={call.call_id}
+            cx={x}
+            cy={y}
+            r={ok ? 2.4 : 1.8}
+            fill={bad ? INK.failed : ok ? INK.booked : INK.plain}
+            opacity={ok || bad ? 0.95 : 0.55}
+          >
+            <title>
+              {`${call.turns} turnos · ${Math.round(call.duration_seconds ?? 0)} s · ${
+                ok ? "cita creada" : "sin cita"
+              }`}
+            </title>
+          </circle>
+        );
+      })}
+    </svg>
+  );
+}
+
+function Panel({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-[14px] border border-mist bg-canvas-white p-4 shadow-[var(--shadow-sm)]">
+      <p className="font-heading text-[11px] leading-none tracking-[0.07em] text-brass uppercase">
+        {title}
+      </p>
+      <p className="mt-1.5 mb-3 text-[12px] leading-[1.4] text-quiet">{note}</p>
+      {children}
+    </div>
+  );
+}
+
 function Stat({
   value,
   label,
@@ -168,6 +345,23 @@ export function ResultsDashboard() {
         />
       </div>
 
+      <div className="mb-10 grid gap-3 lg:grid-cols-3">
+        <Panel title="En qué acaban" note={`${booked.length} con cita · ${calls.length - booked.length} sin ella`}>
+          <div className="flex items-center justify-center py-1">
+            <OutcomeRing booked={booked.length} failed={failed.length} total={calls.length} />
+          </div>
+        </Panel>
+        <Panel title="A qué horas llaman" note="en verde, las que acabaron en cita">
+          <HourlyBars calls={calls} />
+        </Panel>
+        <Panel
+          title="Turnos contra duración"
+          note="cada punto una llamada; las de cita se van arriba a la derecha"
+        >
+          <TurnsAgainstTime calls={calls} />
+        </Panel>
+      </div>
+
       {failed.length > 0 ? (
         <p className="mb-8 rounded-xl border border-mist bg-fog px-4 py-3 text-[13px] text-steel">
           {failed.length}{" "}
@@ -208,8 +402,17 @@ export function ResultsDashboard() {
                   <span className="font-mono text-[11px] tabular-nums text-quiet">
                     {(call.started_at ?? "").slice(11, 16) || "—"}
                   </span>
-                  <span className="text-[14px] text-graphite">
-                    {call.headline || "Sin resumen"}
+                  <span
+                    className={cn(
+                      "text-[14px]",
+                      call.headline && !call.headline.startsWith("Todavía sin")
+                        ? "text-graphite"
+                        : "text-quiet",
+                    )}
+                  >
+                    {call.headline && !call.headline.startsWith("Todavía sin")
+                      ? call.headline
+                      : "sin decisión registrada"}
                   </span>
                   {call.patient ? (
                     <span className="text-[13px] text-steel">{call.patient}</span>
