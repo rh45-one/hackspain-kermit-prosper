@@ -3,7 +3,14 @@ import json
 import httpx
 import pytest
 
-from evaluator.api.judge import KEY_ENV_VARS, Judge, JudgeError, evidence
+from evaluator.api.judge import (
+    KEY_ENV_VARS,
+    Judge,
+    JudgeError,
+    QualityScores,
+    calibrated_quality,
+    evidence,
+)
 
 SCORES = {"task_completion": 3, "conversation": 3, "efficiency": 3,
           "safety": 3, "recovery": None}
@@ -40,6 +47,18 @@ def test_streaming_fragments_are_joined_into_turns():
     ]
 
 
+def test_global_quality_is_a_transparent_dimension_average():
+    assert calibrated_quality(QualityScores(
+        task_completion=5, conversation=5, efficiency=5, safety=5, recovery=None,
+    )) == 5
+    assert calibrated_quality(QualityScores(
+        task_completion=5, conversation=4, efficiency=4, safety=5, recovery=None,
+    )) == 4
+    assert calibrated_quality(QualityScores(
+        task_completion=None, conversation=None, efficiency=None, safety=None, recovery=None,
+    )) is None
+
+
 @pytest.mark.asyncio
 async def test_one_sided_transcript_is_not_scored(tmp_path, monkeypatch):
     clear_judge_key(monkeypatch)
@@ -47,6 +66,19 @@ async def test_one_sided_transcript_is_not_scored(tmp_path, monkeypatch):
     result = await Judge(tmp_path).evaluate(value)
     assert result["quality"] is None
     assert all(score is None for score in result["scores"].values())
+    assert result["source"] == "evidence_gate"
+
+
+@pytest.mark.asyncio
+async def test_greeting_only_exchange_is_not_scored(tmp_path, monkeypatch):
+    clear_judge_key(monkeypatch)
+    value = {"ended": True, "transcript_events": [
+        {"role": "agent", "text": "Buenos días, ¿en qué puedo ayudarle?"},
+        {"role": "caller", "text": "Hello."},
+        {"role": "agent", "text": "¿En qué puedo ayudarle?"},
+    ], "actions": []}
+    result = await Judge(tmp_path).evaluate(value)
+    assert result["quality"] is None
     assert result["source"] == "evidence_gate"
 
 
@@ -107,6 +139,6 @@ async def test_judge_discards_invented_citations(tmp_path, monkeypatch):
         return httpx.Response(200, request=httpx.Request("POST", url),
                               json={"choices": [{"message": {"content": json.dumps(content)}}]})
     monkeypatch.setattr(httpx.AsyncClient, "post", post)
-    with pytest.raises(JudgeError, match="no existen"):
+    with pytest.raises(JudgeError, match="dos intentos"):
         await Judge(tmp_path).evaluate(row())
     assert not (tmp_path / "_judgments").exists()
