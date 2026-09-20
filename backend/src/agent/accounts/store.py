@@ -591,6 +591,17 @@ class Store:
             ).fetchone()
         return _incident_row(row) if row is not None else None
 
+    def reassign_incident(self, org_id: str, incident_id: str, slug: str) -> bool:
+        """Pasa una incidencia a otra persona, sin tocar su estado ni su nota."""
+        with connect(self.path) as db:
+            return bool(
+                db.execute(
+                    "UPDATE incidents SET assigned_to = ?, updated_at = ? "
+                    "WHERE org_id = ? AND id = ?",
+                    (slug, now_iso(), normalize_org_id(org_id), incident_id),
+                ).rowcount
+            )
+
     # ---- users -----------------------------------------------------------
     def create_user(self, email: str, password: str, display_name: str = "") -> User:
         email = (email or "").strip().lower()

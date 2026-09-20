@@ -1413,10 +1413,14 @@ class ToolBox:
         ser el motivo de que una llamada puntuable falle.
         """
         try:
-            from agent.accounts.store import Incident, store
+            from agent.accounts import store as accounts_store
+            from agent.accounts.store import Incident
             from agent.orgs import normalize_org_id
 
-            platform = store(getattr(self, "settings", None))
+            # Sin `settings`: en este proceso resuelve al mismo fichero, y
+            # pasarlo hace que el nombre se enlace a la base de verdad aunque
+            # alguien haya cambiado cuál es. Ya ha pasado dos veces.
+            platform = accounts_store.store()
             if not platform.exists:
                 return
             patient = (getattr(self.ctx, "confirmed_patient", None) or {}).get("patient_id", "")
@@ -1641,10 +1645,85 @@ class ToolBox:
                 "who": brief.get("who"),
             },
         )
+        # Y la incidencia que provocó la llamada se entera de cómo ha ido.
+        #
+        # Sin esto la respuesta se quedaba en una línea de traza: la llamada
+        # se hacía, el compañero decía que sí, y en el panel el hueco seguía
+        # abierto como si nadie hubiera llamado. Quien lo mirara volvería a
+        # llamarle mañana por algo que ya había contestado.
+        closed = self._settle_incident(brief, answer, when_to_call_back, note)
+
         # No booking, no submission. This call was never about the diary; it
         # was about a person, and the record of what they said is the whole
         # output. Saying it back to them is the model's job, not this tool's.
-        await params.result_callback({"written_down": True, "can_cover": answer})
+        await params.result_callback(
+            {"written_down": True, "can_cover": answer, "incident_closed": closed}
+        )
+
+    def _settle_incident(
+        self,
+        brief: dict[str, Any],
+        answer: str,
+        when_to_call_back: str | None,
+        note: str | None,
+    ) -> bool:
+        """Deja la respuesta en la incidencia. Devuelve si ha quedado cerrada.
+
+        Un "sí" la cierra: el hueco está cubierto y no hay nada más que hacer.
+        Un "quizá" la deja reconocida, con la hora a la que pidió que le
+        volvieran a llamar. Y un "no" **la reasigna al siguiente de la
+        cadena** — que es la razón de que exista `covers_for`: si a esta
+        persona se la llamó porque sustituye a alguien, hay alguien que la
+        sustituye a ella, y esa es la siguiente llamada.
+
+        Nunca levanta. La llamada ya ha ocurrido; no apuntarla es malo, pero
+        romper el final de la llamada por no poder apuntarla es peor.
+        """
+        incident_id = str(brief.get("incident") or "")
+        if not incident_id:
+            return False
+        try:
+            from agent.accounts import directory
+            from agent.accounts import store as accounts_store
+            from agent.orgs import normalize_org_id
+
+            platform = accounts_store.store()
+            if not platform.exists:
+                return False
+            org_id = normalize_org_id(getattr(self.ctx, "org_id", "") or "")
+            who = brief.get("who") or "el compañero"
+            extra = f" — {note}" if note else ""
+
+            if answer == "yes":
+                platform.set_incident_status(
+                    org_id, incident_id, "closed", note=f"{who} lo cubre{extra}"
+                )
+                return True
+            if answer == "will_check":
+                when = f", vuelve a llamarle {when_to_call_back}" if when_to_call_back else ""
+                platform.set_incident_status(
+                    org_id, incident_id, "acknowledged", note=f"{who} lo está mirando{when}{extra}"
+                )
+                return False
+
+            # Un no. Quien sustituye a esta persona es la siguiente llamada.
+            nxt = next(
+                (
+                    p
+                    for p in directory.people_for(org_id)
+                    if p.active and p.covers_for == str(brief.get("person_slug") or "")
+                ),
+                None,
+            )
+            handover = f" Le toca a {nxt.name}." if nxt is not None else ""
+            platform.set_incident_status(
+                org_id, incident_id, "open", note=f"{who} no puede{extra}.{handover}"
+            )
+            if nxt is not None:
+                platform.reassign_incident(org_id, incident_id, nxt.slug)
+            return False
+        except Exception:  # noqa: BLE001 - nunca por delante del final de una llamada
+            return False
 
     def tools(self) -> list[Any]:
         registered = [

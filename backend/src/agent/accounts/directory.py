@@ -363,6 +363,7 @@ def cover_brief(
     person_slug: str = "",
     missing: str = "",
     situation: str = "",
+    incident: str = "",
     config: Any | None = None,
 ) -> dict[str, str]:
     """What the clinic-rings-a-colleague call needs to know before it opens.
@@ -432,6 +433,10 @@ def cover_brief(
         # route's stock sentence every time: the stock sentence is true of
         # every absence, and this call is about one of them.
         "situation": situation,
+        # La incidencia que provocó esta llamada, para que la respuesta
+        # vuelva a ella. No se lee en voz alta: es el hilo entre las dos.
+        "incident": incident,
+        "person_slug": person.slug if person else "",
         "because": because or (route.detail if route else ""),
         "urgency": urgency or (route.urgency if route else ""),
         # Dicho, no en clave. "Urgencia: today" en un informe que se lee en

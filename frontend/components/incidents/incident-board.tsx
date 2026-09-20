@@ -189,7 +189,9 @@ export function IncidentBoard({ callBase }: { callBase: string }) {
         {live.map((row) => {
           const urgency = URGENCY[row.urgency] ?? URGENCY.queue;
           const byJev = row.note.startsWith("Jev:");
-          const callUrl = `${callBase}?reason=${encodeURIComponent(row.reason)}&person=${encodeURIComponent(row.assigned_to)}&situation=${encodeURIComponent(row.summary)}`;
+          // `incident` es el hilo de vuelta: lo que conteste el compañero
+          // cierra, reconoce o reasigna ESTA fila sin que nadie la toque.
+          const callUrl = `${callBase}?reason=${encodeURIComponent(row.reason)}&person=${encodeURIComponent(row.assigned_to)}&situation=${encodeURIComponent(row.summary)}&incident=${encodeURIComponent(row.id)}`;
           return (
             <li
               key={row.id}
