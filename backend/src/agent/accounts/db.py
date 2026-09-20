@@ -60,7 +60,7 @@ from agent.orgs import DEFAULT_ORG_ID
 
 # Bumped by appending to _MIGRATIONS. Never by editing one in place: the
 # volume already holds a database that has run the old ones.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
     (
@@ -281,6 +281,50 @@ _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
             )
             """,
             "CREATE INDEX IF NOT EXISTS idx_shifts_org ON cover_shifts(org_id, created_at)",
+        ),
+    ),
+    (
+        7,
+        (
+            # Los pacientes que la clínica ha visto de verdad.
+            #
+            # Prosper no exporta pacientes: su directorio es una API de
+            # búsqueda. Así que "la tabla de pacientes" no se puede pedir —
+            # hay que construirla, y la única forma honesta es quedarse con
+            # los que pasan por el sistema: cada persona que una llamada
+            # busca o confirma, y cada resultado de una búsqueda del panel.
+            #
+            # Empieza vacía y se llena sola con el uso, que es exactamente lo
+            # que hace una clínica de verdad el primer día.
+            #
+            # NO guarda documento ni teléfono, la misma regla que sigue
+            # `PatientCard` en el panel: este fichero se copia en una copia
+            # de seguridad y acaba en sitios donde su transcripción no está.
+            """
+            CREATE TABLE IF NOT EXISTS patients (
+                patient_id        TEXT NOT NULL,
+                org_id            TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                given_name        TEXT NOT NULL DEFAULT '',
+                first_surname     TEXT NOT NULL DEFAULT '',
+                second_surname    TEXT NOT NULL DEFAULT '',
+                date_of_birth     TEXT NOT NULL DEFAULT '',
+                sex               TEXT NOT NULL DEFAULT '',
+                insurer           TEXT NOT NULL DEFAULT '',
+                has_visited_before INTEGER NOT NULL DEFAULT 0,
+                referrals         TEXT NOT NULL DEFAULT '',
+                note              TEXT NOT NULL DEFAULT '',
+                -- Lo que Jev cree que le traerá por aquí, y cuánto lo cree.
+                likely_specialty  TEXT NOT NULL DEFAULT '',
+                likely_confidence REAL NOT NULL DEFAULT 0,
+                -- Cuántas veces ha aparecido, y cuándo fue la última. Es lo
+                -- que convierte una lista en una lista útil.
+                times_seen        INTEGER NOT NULL DEFAULT 1,
+                first_seen_at     TEXT NOT NULL,
+                last_seen_at      TEXT NOT NULL,
+                PRIMARY KEY (org_id, patient_id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_patients_seen ON patients(org_id, last_seen_at)",
         ),
     ),
 ]

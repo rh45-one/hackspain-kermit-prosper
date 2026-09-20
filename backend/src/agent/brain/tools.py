@@ -515,9 +515,49 @@ class ToolBox:
                 ),
             },
         )
+        # Y la clínica se queda con quien ha visto. Prosper no exporta
+        # pacientes —su directorio es una API de búsqueda— así que la única
+        # tabla honesta es la que se llena con el uso: cada persona que una
+        # llamada busca de verdad.
+        self._remember_them(matches)
+
         await params.result_callback(
             {"matches": summary, "count": len(summary), "note": _lookup_note(summary, national_id)}
         )
+
+    def _remember_them(self, matches: list[dict[str, Any]]) -> None:
+        """Apunta a quien ha aparecido. Sin documento ni teléfono, nunca.
+
+        No levanta: una tabla del panel no puede ser el motivo de que una
+        búsqueda falle en una llamada puntuable.
+        """
+        try:
+            from agent.accounts import store as accounts_store
+            from agent.accounts.store import PatientRow
+            from agent.orgs import normalize_org_id
+
+            platform = accounts_store.store()
+            if not platform.exists:
+                return
+            org_id = normalize_org_id(getattr(self.ctx, "org_id", "") or "")
+            for match in matches:
+                platform.remember_patient(
+                    org_id,
+                    PatientRow(
+                        patient_id=str(match.get("patient_id") or ""),
+                        given_name=str(match.get("given_name") or ""),
+                        first_surname=str(match.get("first_surname") or ""),
+                        second_surname=str(match.get("second_surname") or ""),
+                        date_of_birth=str(match.get("date_of_birth") or ""),
+                        sex=str(match.get("sex") or ""),
+                        insurer=str(match.get("insurer") or ""),
+                        has_visited_before=bool(match.get("has_visited_before")),
+                        referrals=tuple(str(r) for r in (match.get("referrals") or [])),
+                        note=str(match.get("note") or ""),
+                    ),
+                )
+        except Exception:  # noqa: BLE001 - jamás por delante de una llamada
+            return
 
     async def confirm_patient(self, params: FunctionCallParams, patient_id: str) -> None:
         """Confirm the caller's identity against a patient found by lookup_patient.

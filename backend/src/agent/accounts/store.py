@@ -90,6 +90,38 @@ def _incident_row(row: Any) -> Incident:
 
 
 @dataclass(frozen=True)
+class PatientRow:
+    """Un paciente que la clínica ha visto de verdad.
+
+    Sin documento ni teléfono, la misma regla que sigue `PatientCard`: este
+    fichero acaba dentro de una copia de seguridad, y lo que no se guarda no
+    se filtra.
+    """
+
+    patient_id: str
+    given_name: str = ""
+    first_surname: str = ""
+    second_surname: str = ""
+    date_of_birth: str = ""
+    sex: str = ""
+    insurer: str = ""
+    has_visited_before: bool = False
+    referrals: tuple[str, ...] = ()
+    note: str = ""
+    likely_specialty: str = ""
+    likely_confidence: float = 0.0
+    times_seen: int = 1
+    first_seen_at: str = ""
+    last_seen_at: str = ""
+
+    @property
+    def name(self) -> str:
+        return " ".join(
+            part for part in (self.given_name, self.first_surname, self.second_surname) if part
+        )
+
+
+@dataclass(frozen=True)
 class CoverShift:
     """Un turno que alguien se ha comprometido a cubrir, por teléfono.
 
@@ -614,6 +646,106 @@ class Store:
                 (normalize_org_id(org_id), incident_id),
             ).fetchone()
         return _incident_row(row) if row is not None else None
+
+    # ---- pacientes vistos ------------------------------------------------
+    def remember_patient(self, org_id: str, row: PatientRow) -> None:
+        """Apunta que esta clínica ha visto a este paciente. Idempotente.
+
+        Un segundo encuentro no reemplaza lo que ya se sabía: suma una visita
+        y refresca la fecha. Y lo que llega vacío no borra lo que había — una
+        búsqueda por documento devuelve menos campos que una por nombre, y la
+        segunda no puede vaciar lo que trajo la primera.
+        """
+        if not row.patient_id:
+            return
+        stamp = now_iso()
+        with connect(self.path) as db:
+            db.execute(
+                """INSERT INTO patients (
+                        patient_id, org_id, given_name, first_surname, second_surname,
+                        date_of_birth, sex, insurer, has_visited_before, referrals, note,
+                        likely_specialty, likely_confidence, times_seen,
+                        first_seen_at, last_seen_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                   ON CONFLICT(org_id, patient_id) DO UPDATE SET
+                       given_name = CASE WHEN excluded.given_name = '' THEN given_name
+                                         ELSE excluded.given_name END,
+                       first_surname = CASE WHEN excluded.first_surname = '' THEN first_surname
+                                            ELSE excluded.first_surname END,
+                       second_surname = CASE WHEN excluded.second_surname = '' THEN second_surname
+                                             ELSE excluded.second_surname END,
+                       date_of_birth = CASE WHEN excluded.date_of_birth = '' THEN date_of_birth
+                                            ELSE excluded.date_of_birth END,
+                       sex = CASE WHEN excluded.sex = '' THEN sex ELSE excluded.sex END,
+                       insurer = CASE WHEN excluded.insurer = '' THEN insurer
+                                      ELSE excluded.insurer END,
+                       has_visited_before = MAX(has_visited_before, excluded.has_visited_before),
+                       referrals = CASE WHEN excluded.referrals = '' THEN referrals
+                                        ELSE excluded.referrals END,
+                       note = CASE WHEN excluded.note = '' THEN note ELSE excluded.note END,
+                       likely_specialty = CASE WHEN excluded.likely_specialty = ''
+                                               THEN likely_specialty
+                                               ELSE excluded.likely_specialty END,
+                       likely_confidence = CASE WHEN excluded.likely_specialty = ''
+                                                THEN likely_confidence
+                                                ELSE excluded.likely_confidence END,
+                       times_seen = times_seen + 1,
+                       last_seen_at = excluded.last_seen_at""",
+                (
+                    row.patient_id,
+                    normalize_org_id(org_id),
+                    row.given_name,
+                    row.first_surname,
+                    row.second_surname,
+                    row.date_of_birth,
+                    row.sex,
+                    row.insurer,
+                    1 if row.has_visited_before else 0,
+                    "\n".join(row.referrals),
+                    row.note,
+                    row.likely_specialty,
+                    float(row.likely_confidence),
+                    stamp,
+                    stamp,
+                ),
+            )
+
+    def list_patients(self, org_id: str, *, query: str = "", limit: int = 200) -> list[PatientRow]:
+        """Los vistos, el último primero. `query` filtra por nombre o aseguradora."""
+        sql = "SELECT * FROM patients WHERE org_id = ?"
+        args: list[Any] = [normalize_org_id(org_id)]
+        if query.strip():
+            like = f"%{query.strip().lower()}%"
+            sql += (
+                " AND (lower(given_name) LIKE ? OR lower(first_surname) LIKE ?"
+                " OR lower(second_surname) LIKE ? OR lower(insurer) LIKE ?"
+                " OR lower(likely_specialty) LIKE ?)"
+            )
+            args += [like, like, like, like, like]
+        sql += " ORDER BY last_seen_at DESC LIMIT ?"
+        args.append(max(1, min(int(limit), 500)))
+        with connect(self.path) as db:
+            rows = db.execute(sql, args).fetchall()
+        return [
+            PatientRow(
+                patient_id=r["patient_id"],
+                given_name=r["given_name"],
+                first_surname=r["first_surname"],
+                second_surname=r["second_surname"],
+                date_of_birth=r["date_of_birth"],
+                sex=r["sex"],
+                insurer=r["insurer"],
+                has_visited_before=bool(r["has_visited_before"]),
+                referrals=_split(r["referrals"]),
+                note=r["note"],
+                likely_specialty=r["likely_specialty"],
+                likely_confidence=float(r["likely_confidence"]),
+                times_seen=int(r["times_seen"]),
+                first_seen_at=r["first_seen_at"],
+                last_seen_at=r["last_seen_at"],
+            )
+            for r in rows
+        ]
 
     # ---- turnos cubiertos ------------------------------------------------
     def record_cover_shift(self, org_id: str, shift: CoverShift) -> CoverShift:

@@ -116,10 +116,45 @@ async def triage(
     if not patients or client is None:
         return {"patients": [], "asked": True, "warm": True}
 
+    from agent.accounts import store as accounts_store
+    from agent.accounts.store import PatientRow
+
+    platform = accounts_store.store()
+
+    def remember(patient: Any, specialty: str, confidence: float) -> None:
+        """Deja al paciente en la tabla de la clínica, con lo que Jev cree.
+
+        Sin documento ni teléfono. La misma regla que `PatientCard`: esta
+        base acaba dentro de una copia de seguridad.
+        """
+        try:
+            if not platform.exists:
+                return
+            platform.remember_patient(
+                org_id,
+                PatientRow(
+                    patient_id=str(getattr(patient, "patient_id", "") or ""),
+                    given_name=str(getattr(patient, "given_name", "") or ""),
+                    first_surname=str(getattr(patient, "first_surname", "") or ""),
+                    second_surname=str(getattr(patient, "second_surname", "") or ""),
+                    date_of_birth=str(getattr(patient, "date_of_birth", "") or ""),
+                    sex=str(getattr(patient, "sex", "") or ""),
+                    insurer=str(getattr(patient, "insurer", "") or ""),
+                    has_visited_before=bool(getattr(patient, "has_visited_before", False)),
+                    referrals=tuple(str(r) for r in (getattr(patient, "referrals", None) or [])),
+                    note=str(getattr(patient, "note", "") or ""),
+                    likely_specialty=specialty,
+                    likely_confidence=confidence,
+                ),
+            )
+        except Exception:  # noqa: BLE001 - una tabla no tumba una pantalla
+            return
+
     async def one(patient: Any) -> dict[str, Any]:
         choice = await client.triage_patient(
             _record_of(patient), specialties, timeout_seconds=2.0
         )
+        remember(patient, specialties.get(choice.slug or "", ""), choice.confidence)
         return {
             "patient_id": str(getattr(patient, "patient_id", "") or ""),
             # El nombre para poder casarlo con la tabla; nunca el documento
@@ -140,6 +175,48 @@ async def triage(
         "asked": True,
         "warm": True,
         "specialties": [{"id": k, "name": v} for k, v in specialties.items()],
+    }
+
+
+@router.get("/patients")
+async def patients(
+    request: Request,
+    q: str = "",
+    org_id: str = DEFAULT_ORG_ID,
+    _: None = Depends(_access),
+) -> dict[str, Any]:
+    """Los pacientes que esta clínica ha visto, filtrables.
+
+    Esta tabla empieza vacía y se llena sola: cada persona que una llamada
+    busca y cada resultado de una búsqueda del panel. Es lo que hace una
+    clínica de verdad su primer día, y es la única tabla honesta que se puede
+    construir sobre una API que no exporta pacientes.
+    """
+    from agent.accounts import store as accounts_store
+
+    platform = accounts_store.store()
+    if not platform.exists:
+        return {"patients": [], "total": 0}
+    rows = platform.list_patients(org_id, query=q)
+    return {
+        "patients": [
+            {
+                "patient_id": row.patient_id,
+                "name": row.name,
+                "date_of_birth": row.date_of_birth,
+                "sex": row.sex,
+                "insurer": row.insurer,
+                "has_visited_before": row.has_visited_before,
+                "referrals": list(row.referrals),
+                "note": row.note,
+                "likely_specialty": row.likely_specialty,
+                "likely_confidence": round(row.likely_confidence, 3),
+                "times_seen": row.times_seen,
+                "last_seen_at": row.last_seen_at,
+            }
+            for row in rows
+        ],
+        "total": len(rows),
     }
 
 
