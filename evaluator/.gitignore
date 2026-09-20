@@ -7,3 +7,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+
+# Runtime artifacts of the laboratory when --results points inside this package
+# instead of the default experiments/results/. They hold transcripts, manual
+# submissions and LLM judgments, so they must never reach Git.
+_history/
+_chat-sessions/
+_manual-calls/
+_live-audio/
+_judgments/
