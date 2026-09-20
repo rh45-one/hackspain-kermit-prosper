@@ -13,7 +13,8 @@ ni el scorer oficial.
 Verificación de la base: **418 tests pasan, 1 omitido**, en 314 segundos;
 Ruff pasa. Se registran dos avisos de deprecación de dependencias. No se ha
 ejecutado todavía una campaña con proveedores reales ni una revisión visual
-en navegador. Esta entrega contiene el análisis y el plan, no implementación.
+en navegador. Esta sección documenta el análisis y el plan; lo efectivamente
+implementado —y lo que sigue pendiente— está en «Entrega de esta iteración».
 
 ### Lo que ya funciona como base
 
@@ -247,6 +248,84 @@ locales presentes; no se han copiado al repositorio ni modificado.
 Una consulta autenticada de solo lectura a `/v1/models` devolvió HTTP 403.
 La configuración está revisada, pero falta verificar inferencia efectiva y
 cuotas de esta cuenta; ese resultado no identifica por sí solo la causa.
+
+## Entrega de esta iteración
+
+Alcance implementado dentro de `evaluator/` (backend y frontend intactos). No es
+una entrega completa del plan: cubre parte de P1, parte de P4 y el trabajo de
+P5 que aplica a lo entregado.
+
+### P1 — avance hacia el histórico y el resumen real
+
+- El observador conserva el orden original de los fragmentos de transcripción
+  con su marca temporal, y extrae `model`, `version` y `org_id` de
+  `engine_selected` y `call_context_created`. Lo que no está registrado queda
+  `null`; ninguna llamada antigua hereda la configuración actual.
+- El loader lee los dos layouts (`DATA_DIR/calls` y `DATA_DIR/<org_id>/calls`) y
+  no recorre JSONL ajenos a un directorio `calls/`. Una línea corrupta o a medio
+  escribir no tumba el histórico.
+- El índice deduplica el snapshot del observador y el audit vivo de la misma
+  llamada (organización + `call_id`), de modo que importar dos veces no
+  multiplica la población.
+- `api/analytics.py` calcula resumen, evolución diaria, comparación por
+  motor/modelo/versión y cobertura de evidencia desde las muestras: percentiles
+  reales, nunca promediando percentiles. Un dato ausente es `n/d`, nunca cero, y
+  la comparación entre modelos se declara descriptiva, no un A/B controlado.
+- Las rutas de evidencia del histórico sirven audio solo si resuelve dentro de
+  la raíz de resultados; el audio ausente responde 404 con un motivo, no con
+  silencio.
+
+Límite real: el audit actual **todavía no registra** `response_latency`,
+`interruption_recovered`/`interruption_unrecovered` ni
+`assistant_audio_emitted`. La consola los muestra como «no registrado» y no
+atribuye ninguna medición a una llamada anterior. Medirlos de verdad exige la
+evolución del backend, que es trabajo del otro responsable.
+
+### P4 — avance en la conversación manual
+
+- La prueba hablada es ahora una llamada dúplex real
+  (`WS /api/live/{profile_id}`): paquetes µ-law de 160 bytes (20 ms) en los dos
+  sentidos durante la llamada, `clear` del agente que corta el audio pendiente y
+  la posibilidad de interrumpir mientras se oye al agente.
+- El servidor no re-codifica el audio: lo que capturó el navegador es lo que oye
+  el agente. Se conserva el push-to-talk y el texto como modalidades aparte.
+- Cada error dice su causa (protocolo del navegador, límite de duración,
+  transporte) en vez de culpar siempre al agente, y un fallo de transporte nunca
+  repite el texto de la excepción.
+- La sesión se archiva con su transcripción, submissions y audio de ambas
+  direcciones y reaparece en el histórico, también si el cierre fue abrupto.
+
+Límite real: verificado con un agente WebSocket de prueba, no hablando contra el
+agente real. Los criterios de P4 (probar ambos perfiles, reconectar tras error,
+revisión visual en navegador) siguen pendientes de una sesión manual.
+
+### Juez LLM (extensión no prevista en el plan original)
+
+Valoración de calidad conversacional atada a la evidencia, con la rúbrica y el
+modelo versionados, caché por hash de evidencia y rechazo de citas inventadas.
+No es el resultado oficial, no oye el audio y no mide WER ni latencia audible.
+
+La clave entra por `EVALUATOR_JUDGE_API_KEY` (`NAN_API_KEY` como alias), y el
+proveedor por `EVALUATOR_JUDGE_BASE_URL`. Verificado contra **Helmcode** —el
+mismo proveedor OpenAI-compatible que usa el agente— sobre una llamada real de
+104 fragmentos: `fail` con calidad 2, citas de fragmentos válidas, resultado
+guardado y servido desde caché, sin DNI, teléfono ni correo en el archivo. La
+ruta por defecto de NaN no se ha ejercitado: no hay clave de NaN disponible.
+
+### P5 — verificación y documentación de lo entregado
+
+- Regresiones nuevas para el orden de transcripción, la deduplicación, las
+  métricas con datos faltantes, la recuperación correlacionada, los casos de
+  error del micrófono, los contratos de error del juez y del audio, y las reglas
+  de ignore de los artefactos sensibles.
+- `README.md` documenta las pantallas, los endpoints nuevos, las variables del
+  juez y los límites comprobados; este documento y `PLAN.md` registran qué quedó
+  verificado con dobles y qué no se ha probado contra proveedores reales.
+
+Lo que **no** se entregó: P2 (lanzar/cancelar corridas desde la consola —sigue
+deliberadamente fuera), P3 (personas reactivas y comparación de comportamiento),
+la prueba manual contra ambos perfiles reales y la verificación del juez contra
+NaN.
 
 ## Decisiones pendientes que no bloquean la base
 

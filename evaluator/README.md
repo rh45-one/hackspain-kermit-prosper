@@ -486,6 +486,83 @@ uv run --project evaluator python -m evaluator.cli validate \
 
 ## Novedades de esta iteración
 
+**Seguimiento de las llamadas reales.** La pestaña inicial ya no muestra una
+sola corrida: lee el histórico completo (reales, simuladas y manuales) y
+presenta métricas con su muestra, gráficos de evolución, comparación de motores
+por modelo y versión, y la cobertura de evidencia de la selección.
+
+- **El orden de la conversación se conserva.** El audit nuevo llega como
+  fragmentos (`transcript` con `role` y `ts`); el observador los guarda en el
+  orden en que se registraron y marca cada uno con su índice y su hora. Un
+  registro viejo que solo traía dos bloques de texto se declara
+  `transcript_order_known: false` en vez de fingir turnos que nadie midió.
+- **El layout por organización se lee sin romper lo viejo.** `DATA_DIR/calls`
+  (histórico) y `DATA_DIR/<org_id>/calls` (actual) conviven; el loader nunca
+  recorre JSONL ajenos que estén fuera de un directorio `calls/`.
+- **Una llamada, una fila.** El snapshot que deja `observe` y el audit vivo son
+  la misma llamada: se deduplican por organización + `call_id`, y la fila viva
+  gana. Importar dos veces no multiplica la población.
+- **Nada ausente se convierte en cero.** Latencia de respuesta, recuperación de
+  voz, calidad y coste muestran `—`/`n/d` cuando no hay medición. El
+  `response_latency` solo se computa desde eventos que lo miden; el intervalo
+  entre transcripciones se rotula explícitamente como «no es la latencia
+  audible». La recuperación tras una interrupción exige audio nuevo del agente
+  correlacionado por `interruption_id`; texto generado no cuenta.
+
+**Juez LLM de la conversación (`api/judge.py`).** Una valoración de calidad
+conversacional y de resultado, encuadrada como **valoración LLM local**, nunca
+como resultado oficial ni como evaluación acústica (no oye el audio).
+
+- Se pide por llamada desde el detalle (`POST /api/history/calls/{id}/judge`) y
+  solo sobre llamadas cerradas y con transcripción; en cualquier otro caso
+  responde 422 con el motivo. No hay forma de pedir una nota para una llamada
+  abierta.
+- La evidencia se minimiza antes de salir: se quitan DNI/NIE, teléfonos y
+  correos detectables y las claves de identidad de las acciones (el texto libre
+  puede conservar un nombre). **Nunca se envía audio.** El prompt del sistema
+  declara la conversación como información no fiable, y el juez debe citar los
+  índices de los fragmentos que usa.
+- Una respuesta que cite fragmentos inexistentes, o que afirme un resultado sin
+  evidencia, se descarta y se puede reintentar. El resultado guarda el hash de
+  la evidencia, el modelo y la versión del rúbrica: cambiar la conversación
+  invalida la caché en vez de reutilizar un veredicto ajeno.
+- Configuración: `EVALUATOR_JUDGE_API_KEY` (obligatoria para evaluar;
+  `NAN_API_KEY` sigue valiendo como alias), `EVALUATOR_JUDGE_MODEL` (por defecto
+  `glm5.3`) y `EVALUATOR_JUDGE_BASE_URL` (por defecto
+  `https://api.nan.builders/v1`). Solo hace falta un endpoint OpenAI-compatible:
+  apuntarlo a Helmcode —el mismo proveedor del agente— es cambiar la URL base,
+  con el mismo modelo `glm5.3`:
+
+  ```sh
+  export EVALUATOR_JUDGE_API_KEY=...      # sirve la HELMCODE_API_KEY del backend
+  export EVALUATOR_JUDGE_BASE_URL=https://api.helmcode.com/v1
+  uv run --project evaluator python -m evaluator.cli dev --audit-data backend/data
+  ```
+
+  Sin clave, la pestaña muestra «Sin configurar» y el botón explica por qué no
+  puede evaluar; no inventa un resultado. El evaluador **no lee `backend/.env`**
+  a propósito: la configuración del juez entra por su propio entorno.
+
+**Micrófono en directo (`api/live.py`).** La prueba hablada ya no es
+push-to-talk por turnos: `WS /api/live/{profile_id}` abre una llamada dúplex
+real contra el perfil elegido del catálogo del servidor.
+
+- El navegador captura con `AudioWorklet` a µ-law 8 kHz y manda paquetes de
+  160 bytes (20 ms) mientras reproduce la respuesta del agente; puede
+  **interrumpir mientras oye** y el `clear` del agente corta el audio pendiente.
+- El servidor no decodifica ni re-sintetiza: lo que capturó el navegador es lo
+  que oye el agente. La última respuesta exige un `stop` explícito o un cierre
+  del agente; hay un tope de duración (3 min) y el navegador avisa si la red se
+  atrasa.
+- **Cada fallo dice su causa.** Un paquete que no es audio de 20 ms se reporta
+  como error de protocolo del navegador, no como «el agente no está
+disponible»; agotar el
+  tiempo se reporta como límite de duración; solo un fallo de transporte real
+  se reporta como agente/clínica no disponibles, y nunca repite el texto de la
+  excepción (una URL puede llevar credenciales).
+- Al colgar, la sesión queda archivada con su transcripción, submissions y el
+  audio de ambas direcciones, así que reaparece en el histórico.
+
 **Llamadas reales del backend (observador post-hoc).** El backend ya deja un
 audit por llamada en `DATA_DIR/calls/<call_id>.jsonl` con el transcript de los
 dos lados, la acción encolada **con su payload completo** y el flush de
@@ -652,11 +729,11 @@ Cinco pestañas:
 
 | Pestaña | Qué muestra |
 |---|---|
-| Benchmarks | hechos de la corrida (dataset, reglas, repeticiones), una tarjeta por candidato y la matriz de aciertos por familia de problema |
-| Métricas | el detalle por candidato: cada agregado con su numerador/denominador, el desglose de errores por tipo y la lista de errores registrados |
+| Seguimiento | el histórico completo: métricas con su muestra, evolución diaria, cobertura de evidencia, comparación por motor/modelo/versión, distribución de latencia y estado del juez |
+| Llamadas | el histórico filtrable con detalle por llamada: conversación cronológica con fragmentos numerados, audio histórico, acciones y submissions, y la valoración del juez bajo demanda |
+| Ejecuciones | las corridas del banco y los trabajos controlados, con acceso a sus resultados |
 | Comparar | alternativas de la misma corrida, lado a lado, y el diff entre dos corridas con pareo de candidatos |
-| Llamadas reales | el observador post-hoc: qué llamadas reales vio esta corrida, con acción enviada, identidad confirmada, veredicto de las etiquetadas y el transcript plegado |
-| Probar el agente | la llamada en vivo, tipeada o **hablada** (ver micrófono), contra el **perfil** que elijas del catálogo del servidor |
+| Probar el agente | la llamada en vivo contra el perfil elegido: texto, push-to-talk o **micrófono en directo** (dúplex, con interrupción) |
 
 ```sh
 uv run --project evaluator python -m evaluator.cli dev \
@@ -668,9 +745,13 @@ uv run --project evaluator python -m evaluator.cli dev \
 
 Opciones: `--results` (dónde lee las corridas, por defecto
 `evaluator/experiments/results`), `--web` (la carpeta de la consola) y
-`--audit-data` (el `DATA_DIR` del backend). Con `--audit-data`, el histórico se
-sincroniza desde `DATA_DIR/calls/*.jsonl` en cada consulta y no hace falta
-ejecutar `observe` ni generar un informe HTML para ver las llamadas nuevas.
+`--audit-data` (el `DATA_DIR` del backend; por defecto `backend/data`). Con
+`--audit-data`, el histórico se sincroniza desde `DATA_DIR/calls/*.jsonl` o
+`DATA_DIR/<org_id>/calls/*.jsonl` en cada consulta y no hace falta ejecutar
+`observe` ni generar un informe HTML para ver las llamadas nuevas. El juez se
+configura por entorno (`EVALUATOR_JUDGE_API_KEY` o su alias `NAN_API_KEY`,
+`EVALUATOR_JUDGE_MODEL`, `EVALUATOR_JUDGE_BASE_URL`), nunca por petición del
+navegador.
 
 La API conserva las corridas como evidencia inmutable y añade dos escrituras
 controladas: reconstruir un índice local de historial desde esos artefactos y
@@ -693,7 +774,12 @@ que resolver dentro de su corrida.
 | `GET /api/runs/{id}/real-calls` | las llamadas reales que observó esa corrida (vacío si no es una corrida del observador) |
 | `POST /api/history/import` | reconstruye idempotentemente el índice local desde los runs existentes |
 | `GET /api/history/calls` | histórico filtrable y paginado de llamadas simuladas, reales y manuales; los dobles se excluyen por defecto |
-| `GET /api/history/calls/{record_id}` | evidencia y detalle de una llamada del histórico |
+| `GET /api/history/calls/{record_id}` | evidencia y detalle de una llamada del histórico, con su métrica por llamada y la valoración LLM si existe |
+| `GET /api/history/calls/{record_id}/audio/{stream}` | el WAV histórico de esa llamada (`caller`/`agent`); 404 si no hay grabación o si la ruta resolvería fuera de la raíz de resultados |
+| `POST /api/history/calls/{record_id}/judge` | pide la valoración del juez LLM sobre esa llamada y la guarda; 422 si está abierta, sin transcripción o sin clave del juez |
+| `GET /api/analytics?origin=&candidate=&from=&to=` | el panel de seguimiento: resumen, evolución diaria, modelos y cobertura, siempre con su muestra y sin rellenar faltantes |
+| `GET /api/judge` | el estado del juez: modelo, rúbrica, proveedor y si falta la clave (nunca la clave) |
+| `WS /api/live/{profile_id}` | la llamada de micrófono en directo: µ-law 8 kHz de 160 bytes por sentido, `clear` del agente y `stop` del navegador |
 | `GET /api/history/summary` | población, éxito evaluado y cobertura de audio, transcript, coste y resultado |
 | `POST /api/jobs` | crea una corrida controlada con `profile_ids`, `scenario_ids`, modalidad y repeticiones |
 | `GET /api/jobs` | trabajos persistidos y su progreso |
@@ -784,3 +870,32 @@ corrida— y los errores públicos pasan por el mismo cepillo.
   backend en una corrida.
 - Coste: `desconocido` hasta que el agente exponga consumo vía
   `usage_url` (plan §13: nunca mostrar cero).
+- **El juez LLM se verificó contra un proveedor real.** El endpoint
+  OpenAI-compatible se ejercitó contra Helmcode (`glm5.3`) sobre una llamada
+  real de 104 fragmentos: devolvió `fail` con calidad 2, citó fragmentos
+  existentes, quedó guardado bajo `_judgments/`, se sirvió desde caché en la
+  segunda consulta sin volver a llamar al proveedor, y el panel lo contó (1
+  evaluada, calidad 2). La verificación de privacidad también se comprobó: el
+  archivo guardado no contiene DNI, teléfono, correo ni claves.
+  Lo que sigue sin verificar: **NaN** (no hay clave de NaN en el repositorio) y
+  el **volumen y la coincidencia con el criterio oficial** — una valoración no
+  demuestra que el juez juzgue como la plataforma. El juez no oye el audio y no
+  mide calidad acústica, WER ni latencia audible.
+- **El micrófono en directo está verificado solo con dobles.** Los tests
+  levantan un agente WebSocket de prueba y una clínica silenciada; no se ha
+  hablado contra el agente real. El puente exige `isSecureContext`
+  (`https://` o `localhost`) y un navegador con `AudioWorklet`.
+- **La latencia por respuesta depende del backend.** `response_latency`,
+  `interruption_recovered`/`interruption_unrecovered` y `assistant_audio_emitted`
+  no existen todavía en el audit actual: las llamadas viejas aparecen como «no
+  registrado», y ninguna medición se atribuye retroactivamente a una llamada
+  anterior. El intervalo entre transcripciones sí se calcula, y se rotula como
+  lo que es (recepción de texto, no latencia audible).
+- Los artefactos sensibles del laboratorio (histórico, transcripciones,
+  grabaciones y valoraciones) viven bajo `experiments/results/`, ignorado por
+  Git; las reglas de ignore cubren también `_history/`, `_chat-sessions/`,
+  `_manual-calls/`, `_live-audio/` y `_judgments/` por si `--results` apunta a
+  otro sitio dentro del paquete.
+- La pantalla de resultados del frontend (`frontend/components/leaderboard/`)
+  sigue usando datos ficticios: esta entrega no la toca, el laboratorio es la
+  fuente real.

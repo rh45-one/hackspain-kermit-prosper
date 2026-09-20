@@ -29,7 +29,10 @@ modificarlo.
 | Lanzar corridas desde la consola | Pendiente y deliberadamente fuera | la API es read-only: una consola que reescribe su benchmark no es confiable |
 
 Suite: `uv run --project evaluator --locked pytest -c evaluator/pyproject.toml evaluator/tests -q`
-→ 400+ passed, 1 skipped. Lint: `ruff check evaluator/src evaluator/tests`.
+→ 533 passed, 1 skipped, en 435 s. Lint: `ruff check evaluator/src evaluator/tests` sin
+hallazgos. La suite debe lanzarse **desde la raíz del repositorio**: los
+escenarios se resuelven por ruta relativa y desde `evaluator/` fallan ocho tests
+del observador por una razón que no tiene que ver con el código.
 
 Defecto externo conocido: el backend de `main` no procesa el audio del caller
 (solo transcribe fragmentos), así que una llamada real termina en el fallback
@@ -52,6 +55,33 @@ raíz del repositorio):
 | 7 | Micrófono push-to-talk en la consola | listo | `web/mic-worklet.js`, `api/chat.py` (`say-audio`), `tests/test_api_chat.py` |
 | 8 | Documentación al día | listo | `README.md`, este `PLAN.md` |
 | 9 | Verificación completa | listo | 418 passed, 1 skipped; `ruff` sin hallazgos |
+
+## Seguimiento de la iteración en curso
+
+Segunda pasada, también limitada a `evaluator/`. Continúa el trabajo que quedó
+sin cerrar en la sesión anterior: el motor de métricas y el juez ya estaban
+escritos, faltaba probar sus bordes y documentarlos.
+
+| # | Tarea | Estado | Evidencia |
+|---|---|---|---|
+| 1 | Lint en verde | listo | `ruff check evaluator/src evaluator/tests` sin hallazgos |
+| 2 | Reglas de ignore para los artefactos sensibles (`_history`, `_chat-sessions`, `_manual-calls`, `_live-audio`, `_judgments`) | listo | `evaluator/.gitignore`, `tests/test_repo_hygiene.py` |
+| 3 | Casos de error del micrófono en directo: origen cruzado, paquete inválido, límite de duración, fallo de transporte | listo | `api/live.py` (errores con causa propia), `tests/test_live_bridge.py` |
+| 4 | Contratos de error de las rutas de evidencia: juez 404/422 y audio 404/traversal | listo | `tests/test_api_evidence_routes.py` |
+| 5 | Documentación de la entrega y sus límites reales | listo | `README.md` (§ Novedades, consola, endpoints, límites), este `PLAN.md`, `DEVELOPMENT_PLAN.md` |
+| 6 | Verificación completa desde la raíz | listo | 533 passed, 1 skipped (435 s); `ruff` sin hallazgos |
+| 7 | Nombres de entorno del juez alineados con el proveedor real (`EVALUATOR_JUDGE_API_KEY` con `NAN_API_KEY` como alias) | listo | `api/judge.py`, `web/dashboard.js`, `tests/test_judge.py` |
+| 8 | Verificación del juez contra un proveedor real (Helmcode, `glm5.3`) sobre una llamada real | listo | 104 fragmentos → `fail`/calidad 2, caché y scrubbing comprobados; `README.md` § Estado |
+
+Decisiones abiertas de esta iteración (no bloquean la base):
+
+- **NaN sigue sin ejercitar.** El juez quedó verificado contra Helmcode, el
+  proveedor que el propio backend usa; no hay clave de NaN en el repositorio, así
+  que la ruta por defecto (`api.nan.builders`) sigue sin probar. Tampoco se ha
+  medido si el juez coincide con el criterio oficial de la plataforma.
+- **La pantalla de resultados del frontend** sigue con datos ficticios
+  (`MOCK_EVALUATION_RESULTS`). Queda fuera por alcance: el laboratorio es la
+  fuente real y el usuario eligió ese destino.
 
 ## Observador post-hoc: las llamadas que el backend ya hizo
 
