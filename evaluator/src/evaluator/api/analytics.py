@@ -7,6 +7,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
+from evaluator.report.metrics import classify_error
+
 
 def number(value: Any) -> float | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -90,11 +92,11 @@ def call_incidents(row: dict[str, Any]) -> list[dict[str, str]]:
     if not row.get("ended"):
         add("no_close", "high", "Llamada sin cierre", "No existe un evento de finalización registrado.")
     if not events:
-        add("no_transcript", "high", "Sin transcripción", "No se registró ninguna intervención de la conversación.")
+        add("no_transcript", "telemetry", "Sin transcripción", "No se registró texto; no permite concluir que faltara audio.")
     elif "caller" not in roles:
-        add("caller_silent", "high", "No se oyó al paciente", "La transcripción solo contiene intervenciones del agente.")
+        add("caller_silent", "telemetry", "Sin voz del paciente transcrita", "Solo hay texto del agente. Comprueba el audio de entrada y el reconocimiento antes de atribuir silencio.")
     elif not roles.intersection({"agent", "assistant"}):
-        add("agent_silent", "high", "El agente no respondió", "La transcripción solo contiene intervenciones del paciente.")
+        add("agent_silent", "telemetry", "Sin respuesta transcrita", "Solo hay texto del paciente. Consulta la grabación para comprobar si hubo respuesta audible.")
 
     first_audio = metrics["first_audio_ms"]
     if first_audio is not None and first_audio >= 5000:
@@ -107,8 +109,15 @@ def call_incidents(row: dict[str, Any]) -> list[dict[str, str]]:
     elif metrics["interruptions"] and not metrics["recovery_observed"]:
         add("recovery_unknown", "telemetry", "Recuperación sin medir", "Se registraron resets, pero no un resultado correlacionado de recuperación.")
 
-    if row.get("errors") or any(attempt.get("failed") for attempt in row.get("submit_attempts", [])):
-        add("submission_failed", "high", "Error al registrar la gestión", "El backend registró un error o un envío rechazado.")
+    error_types = set(row.get("error_types", []))
+    error_types.update(classify_error(str(error)) for error in row.get("errors", []))
+    if "submission" in error_types or any(attempt.get("failed") or isinstance(attempt.get("status"), int) and attempt["status"] >= 400 for attempt in row.get("submit_attempts", [])):
+        add("submission_failed", "high", "Error al registrar la gestión", "Hay evidencia de un envío rechazado o un fallo de submission.")
+    for kind, title in {"transport": "Fallo de transporte", "stt": "Fallo de reconocimiento", "tts": "Fallo de síntesis", "clinic": "Fallo de clínica", "timeout": "Tiempo agotado", "text_adapter": "Fallo del adaptador de texto"}.items():
+        if kind in error_types:
+            add(f"{kind}_error", "high", title, "Revisa el diagnóstico técnico; no es evidencia de un fallo al registrar la gestión.")
+    if "other" in error_types and not error_types - {"other"}:
+        add("unclassified_error", "high", "Error sin clasificar", "Consulta el error registrado antes de atribuirlo al agente o a un envío.")
 
     agent_lines = [re.sub(r"\s+", " ", str(event.get("text", "")).strip().lower())
                    for event in events if event.get("role") in {"agent", "assistant"}]

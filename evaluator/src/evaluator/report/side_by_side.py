@@ -27,11 +27,20 @@ def load_cases(run_dir: Path | str) -> list[CaseResult]:
     path = Path(run_dir) / "cases.jsonl"
     if not path.exists():
         raise FileNotFoundError(f"{path} not found - is {run_dir} a run directory?")
-    return [
-        CaseResult.model_validate_json(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    cases = []
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            json.loads(line)
+        except json.JSONDecodeError:
+            if index == len(lines) - 1 and not text.endswith("\n"):
+                break
+            raise
+        cases.append(CaseResult.model_validate_json(line))
+    return cases
 
 
 def median_latency(case: CaseResult) -> float | None:

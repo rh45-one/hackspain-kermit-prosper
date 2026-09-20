@@ -230,6 +230,26 @@ class TestProfileSchema:
 # ---- P0.2: the catalog and the guard --------------------------------------
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("engine,clinic,ready", [("cascade", "http://127.0.0.1:18090", True),
+    ("gemini_live", "http://127.0.0.1:18090", False), ("cascade", "https://remote.invalid", False)])
+async def test_profile_identity_checks_engine_and_clinic(monkeypatch, engine, clinic, ready):
+    import hashlib
+
+    import httpx
+
+    from evaluator.profiles.guard import inspect_profile
+
+    async def get(self, url):
+        return httpx.Response(200, request=httpx.Request("GET", url), json={
+            "engine": engine, "model": "test", "clinic_fingerprint": hashlib.sha256(clinic.encode()).hexdigest()})
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", get)
+    result = await inspect_profile(cascade_profile())
+    assert result["ready"] is ready
+    assert result["verified"] is ready
+
+
 class TestShippedCatalog:
     def test_the_catalog_declares_both_real_engines(self):
         catalog = ProfileCatalog.builtin()
@@ -240,7 +260,7 @@ class TestShippedCatalog:
     def test_both_profiles_use_the_lab_port_and_never_7860(self):
         catalog = ProfileCatalog.builtin()
         for profile in catalog:
-            assert _url_port(profile.endpoints.ws_url or "") == 17860
+            assert _url_port(profile.endpoints.ws_url or "") == (17860 if profile.engine == "cascade" else 17862)
             assert _url_port(profile.endpoints.ws_url or "") != PRODUCTION_VOICE_PORT
             assert profile.laboratory.voice_port != PRODUCTION_VOICE_PORT
             assert destination_problems(profile) == []

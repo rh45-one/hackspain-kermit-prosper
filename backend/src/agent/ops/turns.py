@@ -38,6 +38,8 @@ routes: :func:`mount_if_enabled` is a no-op unless ``TURNS_ADAPTER`` is set.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import time
 import uuid
@@ -481,6 +483,19 @@ def _require_adapter() -> TextAdapter:
     if _adapter is None:  # pragma: no cover - the router is never mounted without one
         raise HTTPException(503, "text adapter not configured")
     return _adapter
+
+
+@router.get("/lab/identity")
+async def laboratory_identity(_: None = Depends(_ops_access)) -> dict[str, Any]:
+    adapter = _require_adapter()
+    settings = adapter.settings
+    engine = settings.voice_engine
+    model = settings.gemini_live_model if engine == "gemini_live" else settings.agent_model
+    configuration = {"engine": engine, "model": model, "text_model": adapter.model,
+                     "prompt_hash": hashlib.sha256(prompts.SYSTEM_PROMPT.encode()).hexdigest()}
+    return {**configuration, "version": os.environ.get("AGENT_REVISION"),
+            "config_hash": hashlib.sha256(json.dumps(configuration, sort_keys=True).encode()).hexdigest(),
+            "clinic_fingerprint": hashlib.sha256(settings.prosper_api_base_url.rstrip("/").encode()).hexdigest()}
 
 
 @router.post("/turns")

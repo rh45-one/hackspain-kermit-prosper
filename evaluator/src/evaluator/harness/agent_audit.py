@@ -71,6 +71,9 @@ def agent_audit_dir_for(call_id: str, base: Path | str) -> Path | None:
     for candidate in (base, base / "calls"):
         if (candidate / f"{call_id}.jsonl").is_file():
             return candidate
+    for path in sorted(base.glob(f"*/calls/{call_id}.jsonl")):
+        if not path.is_symlink():
+            return path.parent
     return None
 
 

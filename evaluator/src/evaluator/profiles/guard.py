@@ -19,8 +19,11 @@ Three refusals, in the order they matter:
 """
 from __future__ import annotations
 
+import hashlib
 import socket
 from urllib.parse import urlsplit
+
+import httpx
 
 from evaluator.profiles.schema import AgentProfile
 
@@ -58,7 +61,9 @@ class LaboratoryRefusal(ValueError):
 def _endpoint_urls(profile: AgentProfile) -> list[tuple[str, str]]:
     """Declared endpoints, as (field name, url) pairs, in contract order."""
     values = profile.endpoints.model_dump()
-    return [(field, values[field]) for field, _ in _ENDPOINT_LABELS if values.get(field)]
+    return [(field, values[field]) for field, _ in _ENDPOINT_LABELS if values.get(field)] + [
+        ("clinic_url", profile.laboratory.clinic_url)
+    ]
 
 
 def _is_private_host(host: str) -> bool:
@@ -165,3 +170,31 @@ def assert_laboratory_profile(profile: AgentProfile, *, probe_ports: bool = Fals
     problems = laboratory_problems(profile, probe_ports=probe_ports)
     if problems:
         raise LaboratoryRefusal(profile.id, problems)
+
+
+async def inspect_profile(profile: AgentProfile) -> dict:
+    assert_laboratory_profile(profile)
+    if profile.engine not in {"cascade", "gemini_live"}:
+        return {"ready": True, "verified": False, "reason": "El agente externo no declara identidad verificable."}
+    parts = urlsplit(profile.endpoints.ws_url or profile.endpoints.text_url or "")
+    scheme = "https" if parts.scheme in {"https", "wss"} else "http"
+    url = f"{scheme}://{parts.netloc}/lab/identity"
+    try:
+        async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            identity = response.json()
+        if not isinstance(identity, dict):
+            raise TypeError("identity")
+    except (httpx.HTTPError, ValueError, TypeError):
+        return {"ready": False, "verified": False,
+                "reason": "No se pudo verificar el agente. Arranca o actualiza el perfil con TURNS_ADAPTER=1."}
+    if identity.get("engine") != profile.engine:
+        return {"ready": False, "verified": False,
+                "reason": "El motor activo no coincide con el perfil seleccionado."}
+    expected = hashlib.sha256(profile.laboratory.clinic_url.rstrip("/").encode()).hexdigest()
+    if identity.get("clinic_fingerprint") != expected:
+        return {"ready": False, "verified": False,
+                "reason": "El agente no apunta a la clínica del perfil. No se ha iniciado ninguna llamada."}
+    return {"ready": True, "verified": True,
+            **{key: identity.get(key) for key in ("engine", "model", "text_model", "version", "config_hash")}}

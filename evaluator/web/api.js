@@ -28,6 +28,7 @@ window.LabApi = (() => {
     getComparison: (id) => request(`/api/runs/${encodeURIComponent(id)}/compare`),
     getDiff: (query) => request(`/api/diff?${query}`),
     getProfiles: () => request("/api/profiles"),
+    getProfileStatus: (id) => request(`/api/profiles/${encodeURIComponent(id)}/status`),
     importHistory: () => request("/api/history/import", json("POST", { source: "runs" })),
     getHistoryCalls: (query) => request(`/api/history/calls?${query}`),
     getHistoryCall: (id) => request(`/api/history/calls/${encodeURIComponent(id)}`),

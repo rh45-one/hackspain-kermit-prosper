@@ -133,6 +133,23 @@ def test_not_mounted_without_the_flag(tmp_path, monkeypatch):
     assert loopback(app).post("/turns", json={"call_id": "x", "text": "y"}).status_code == 404
 
 
+def test_laboratory_identity_is_guarded_and_contains_no_credentials(tmp_path, monkeypatch):
+    import hashlib
+
+    adapter = make_adapter(tmp_path, [], gemini_live_model="voice-test")
+    monkeypatch.setattr(text_turns, "_adapter", adapter)
+    app = FastAPI()
+    app.include_router(text_turns.router)
+    identity = loopback(app).get("/lab/identity")
+    assert identity.status_code == 200
+    assert identity.json()["engine"] == "gemini_live"
+    assert identity.json()["model"] == "voice-test"
+    assert identity.json()["text_model"] == "fake-model"
+    assert identity.json()["clinic_fingerprint"] == hashlib.sha256(b"http://127.0.0.1:18090").hexdigest()
+    assert "pk-local-eval" not in identity.text
+    assert TestClient(app, client=("203.0.113.5", 1234)).get("/lab/identity").status_code in {401, 403}
+
+
 def test_mounted_with_the_flag(tmp_path, monkeypatch):
     monkeypatch.setenv(text_turns.ENV_FLAG, "1")
     app = FastAPI()

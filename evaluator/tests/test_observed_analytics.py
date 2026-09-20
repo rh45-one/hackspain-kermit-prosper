@@ -81,6 +81,35 @@ def test_incidents_distinguish_failures_from_telemetry_gaps():
     assert next(item for item in incidents if item["code"] == "recovery_unknown")["severity"] == "telemetry"
 
 
+def test_manual_and_backend_evidence_are_one_call(tmp_path):
+    root = audit(tmp_path)
+    results = tmp_path / "results"
+    directory = results / "_manual-calls"
+    directory.mkdir(parents=True)
+    (directory / "call-test.json").write_text(json.dumps({
+        "call_id": "call-test", "profile_id": "wrong-label", "audio_files": {"caller": "caller.wav"},
+        "evidence": {"audio": "present"}, "submit_attempts": [{"status": 200}]}))
+    store = HistoryStore(results)
+    store.import_runs()
+    store.import_backend_audits(root)
+    rows = store.calls({"source": "tests"})
+    assert len(rows) == 1
+    assert rows[0]["origin"] == "manual"
+    assert rows[0]["candidate"] == "cascade"
+    assert rows[0]["audio_files"]["caller"] == "caller.wav"
+    assert rows[0]["transcript_events"]
+    assert rows[0]["submit_attempts"] == [{"status": 200}]
+    assert store.call(rows[0]["id"]) == rows[0]
+
+
+def test_transport_error_is_not_submission_failure():
+    incidents = call_incidents({"ended": True, "errors": ["websocket connection closed"],
+        "transcript_events": [{"role": "agent", "text": "Hola"}]})
+    assert "submission_failed" not in {item["code"] for item in incidents}
+    assert "transport_error" in {item["code"] for item in incidents}
+    assert next(item for item in incidents if item["code"] == "caller_silent")["severity"] == "telemetry"
+
+
 def test_observer_snapshots_do_not_multiply_real_calls(tmp_path):
     root = audit(tmp_path)
     results = tmp_path / "results"

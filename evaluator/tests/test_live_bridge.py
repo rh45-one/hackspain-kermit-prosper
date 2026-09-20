@@ -109,6 +109,28 @@ def test_microphone_duplex_clear_resume_and_archive(tmp_path, monkeypatch):
         server.stop()
 
 
+def test_live_archive_keeps_submission_attempts(tmp_path, monkeypatch):
+    silent_call_window(monkeypatch)
+
+    async def record(*args, **kwargs):
+        return {"actions": [{"action": "NO_ACTION"}], "attempts": [{"status": 200}]}
+
+    monkeypatch.setattr(live, "wait_for_actions", record)
+    server = serve_in_thread(idle_agent([]), "127.0.0.1", 0)
+    profile = voice_profile(f"ws://127.0.0.1:{server.listener.getsockname()[1]}/ws")
+    try:
+        with (
+            TestClient(create_app(tmp_path, profiles=ProfileCatalog([profile]))) as client,
+            client.websocket_connect("/api/live/test-voice") as socket,
+        ):
+            assert socket.receive_json()["event"] == "ready"
+            socket.send_text("stop")
+            assert socket.receive_json()["event"] == "finished"
+        assert archive(tmp_path)["submit_attempts"] == [{"status": 200}]
+    finally:
+        server.stop()
+
+
 def test_live_unknown_profile_is_visible_failure(tmp_path):
     with TestClient(create_app(tmp_path)) as client, client.websocket_connect("/api/live/unknown") as socket:
         result = socket.receive_json()

@@ -7,6 +7,7 @@
 // frame per port message.
 //
 const FRAME_SAMPLES = 160;
+const TARGET_SAMPLE_RATE = 8000;
 const MULAW_BIAS = 33;
 const MULAW_CLIP = 8159;
 const MULAW_SEGMENT_ENDS = [63, 127, 255, 511, 1023, 2047, 4095, 8191];

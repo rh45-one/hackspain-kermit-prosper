@@ -16,6 +16,7 @@ import glob
 import hashlib
 import json
 import os
+import signal
 import socket
 import subprocess
 import threading
@@ -30,6 +31,7 @@ from typing import Any
 import httpx
 import uvicorn
 
+from evaluator.api.redact import redact_secrets
 from evaluator.clinic.dataset import Dataset
 from evaluator.clinic.server import create_app as create_clinic_app
 from evaluator.compare import categorize, compare, transcript_leaks
@@ -49,6 +51,8 @@ from evaluator.models import (
     ExperimentConfig,
     Scenario,
 )
+from evaluator.profiles import AgentProfile, assert_laboratory_profile
+from evaluator.profiles.guard import inspect_profile
 from evaluator.simulator.llm_patient import make_patient
 
 # Voice path: how long the caller will wait, after its own `hold_ms`, for the
@@ -162,7 +166,7 @@ def _scenario_turns(
             else:
                 n = sum(len(f) for f in frames)
                 noise_frames = [
-                    pcm_to_ulaw(synth_noise(n, seed=hash(scenario.id) & 0xFFFF,
+                    pcm_to_ulaw(synth_noise(n, seed=int.from_bytes(hashlib.sha256(scenario.id.encode()).digest()[:4]),
                                             kind=turn.noise.synth or "brown"))
                 ]
             frames = mix_with_noise(frames, noise_frames, snr_db=turn.noise.snr_db)
@@ -398,6 +402,7 @@ async def _run_case(
     caller_audio_s: float | None = None
     agent_audio_s: float | None = None
     rig_errors: list[str] = []
+    started_at = datetime.now(UTC).isoformat()
     started = time.monotonic()
     harness_failed = open_resp.status_code != 200
 
@@ -541,6 +546,9 @@ async def _run_case(
         scenario_id=scenario.id,
         problem_id=scenario.problem_id,
         candidate=candidate.name,
+        candidate_version=candidate.runtime_identity.get("version") or candidate.version,
+        started_at=started_at,
+        ended_at=datetime.now(UTC).isoformat(),
         repetition=repetition,
         verdict=verdict,
         failure_signal=signal,  # type: ignore[arg-type]
@@ -727,10 +735,26 @@ def _not_ready_case(
     )
 
 
+def verify_clinic(url: str, dataset: Dataset, key: str) -> None:
+    from evaluator.profiles import AgentProfile, assert_laboratory_profile
+
+    assert_laboratory_profile(AgentProfile(id="clinic", laboratory={"clinic_url": url}))
+    try:
+        response = httpx.get(f"{url.rstrip('/')}/eval/identity", headers={"X-Api-Key": key},
+                             timeout=3, trust_env=False)
+        response.raise_for_status()
+        identity = response.json()
+        if identity.get("service") != "evaluator-clinic" or identity.get("dataset_fingerprint") != dataset.fingerprint:
+            raise ValueError("fixture")
+    except (httpx.HTTPError, ValueError, AttributeError):
+        raise ValueError("No se pudo verificar la clínica local y su dataset. Arranca o actualiza la clínica del laboratorio; no se reutilizará un proceso desconocido.") from None
+
+
 def run_experiment(
     config_path: str,
     out_root: str | None = None,
     cancel_requested: Callable[[], bool] | None = None,
+    on_progress: Callable[[Path, int, int], None] | None = None,
 ) -> Path:
     """Run one experiment end to end; returns the results directory."""
     config_path_obj = Path(config_path).resolve()
@@ -753,11 +777,64 @@ def run_experiment(
     out_dir = Path(out_root or config_dir / "results") / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     evidence_dir = out_dir / "evidence"
+    results: list[CaseResult] = []
+    planned = len(case_plan(config, scenarios))
+    if config.switchboard:
+        planned += min(config.switchboard.concurrency, len(scenarios)) * len(config.candidates)
+    safe_config = redact_secrets(config.model_dump(exclude={"submit_key": True, "candidates": {"__all__": {"start_command", "start_cwd"}}}))
+    for declared, candidate in zip(safe_config["candidates"], config.candidates, strict=True):
+        declared["settings"] = {key: candidate.env[key] for key in (
+            "VOICE_ENGINE", "AGENT_MODEL", "GEMINI_LIVE_MODEL", "TURNS_MODEL",
+            "DEEPGRAM_STT_MODEL", "ELEVENLABS_TTS_MODEL"
+        ) if key in candidate.env}
+    revision = {}
+    try:
+        repo = Path(__file__).resolve().parents[4]
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True, stderr=subprocess.DEVNULL, timeout=3).strip()
+        dirty = bool(subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=repo, text=True, timeout=3).strip())
+        revision = {"commit": commit, "dirty": dirty}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    manifest = {
+        "run_id": run_id, "experiment": config.name, "rules_version": config.rules_version,
+        "dataset_hash": dataset_hash, "dataset_fingerprint": dataset.fingerprint,
+        "dataset": config.clinic_dataset, "dataset_profile": _dataset_profile(config_dir / config.clinic_dataset),
+        "reference_now": config.reference_now, "repetitions": config.repetitions, "budget": config.budget,
+        "started_at": datetime.now(UTC).isoformat(), "ended_at": None,
+        "candidates": [], "startup": {}, "revision": revision,
+        "config_hash": hashlib.sha256(json.dumps({key: value for key, value in safe_config.items() if key != "name"}, sort_keys=True).encode()).hexdigest(),
+        "configuration": safe_config,
+        "scenarios": [{"id": s.id, "problem_id": s.problem_id, "version": s.version, "split": s.split,
+                       "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for s, path in scenarios],
+        "note": "resultado local - no es el veredicto oficial del reto",
+        "status": "running", "completed_cases": 0, "planned_cases": planned,
+    }
+    (out_dir / "cases.jsonl").touch()
 
-    clinic = serve_in_thread(
-        create_clinic_app(dataset, api_key=config.submit_key), "127.0.0.1", config.clinic_port
-    )
-    clinic_url = f"http://127.0.0.1:{config.clinic_port}"
+    def save_manifest():
+        manifest["candidates"] = [redact_secrets(c.model_dump(exclude={"start_command"})) for c in config.candidates]
+        path = out_dir / "manifest.json"
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        temporary.replace(path)
+
+    def persist_case(result):
+        result.run_id = run_id
+        with (out_dir / "cases.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(result.model_dump_json() + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        results.append(result)
+        manifest["completed_cases"] = len(results)
+        save_manifest()
+        if on_progress:
+            on_progress(out_dir, len(results), planned)
+
+    save_manifest()
+    if on_progress:
+        on_progress(out_dir, 0, planned)
+    clinic = None
+    clinic_url = config.clinic_url or f"http://127.0.0.1:{config.clinic_port}"
 
     doubles: list[_ServerHandle] = []
     procs: list[subprocess.Popen] = []
@@ -766,7 +843,17 @@ def run_experiment(
     # other alternatives in the same run keep their evidence.
     startup: dict[str, str | None] = {}
     try:
+        if config.clinic_mode == "existing":
+            verify_clinic(clinic_url, dataset, config.submit_key)
+        else:
+            clinic = serve_in_thread(create_clinic_app(dataset, api_key=config.submit_key), "127.0.0.1", config.clinic_port)
+            clinic_url = f"http://127.0.0.1:{clinic.listener.getsockname()[1]}"
         for cand in config.candidates:
+            profile = AgentProfile(id=cand.name, engine=cand.engine or "external",
+                endpoints={"ws_url": cand.ws_url, "text_url": cand.text_url, "usage_url": cand.usage_url},
+                laboratory={"clinic_url": clinic_url})
+            if cand.kind != "double":
+                assert_laboratory_profile(profile, probe_ports=bool(cand.start_command))
             if cand.kind == "double":
                 doubles.append(
                     serve_in_thread(
@@ -778,15 +865,21 @@ def run_experiment(
             elif cand.start_command:
                 env = {**os.environ, **cand.env}
                 procs.append(
-                    subprocess.Popen(cand.start_command, shell=True, env=env, cwd=config_dir)
+                    subprocess.Popen(cand.start_command, shell=True, env=env, cwd=cand.start_cwd or config_dir, start_new_session=True)
                 )
                 # The process is not the service: wait for the socket, or the
                 # cases are scored against an agent that was still booting.
                 startup[cand.name] = wait_until_listening(cand)
+            if cand.kind != "double" and not startup.get(cand.name):
+                identity = asyncio.run(inspect_profile(profile))
+                cand.runtime_identity = identity
+                if not identity["ready"]:
+                    startup[cand.name] = identity["reason"]
 
         not_ready = {name for name, problem in startup.items() if problem}
 
-        results: list[CaseResult] = []
+        manifest["startup"] = {name: {"listening": problem is None, "detail": problem or "listening"} for name, problem in startup.items()}
+        save_manifest()
         cancelled = False
         for rep, scenario, path, cand in case_plan(config, scenarios):
             # Cancellation is checked between calls. A current call gets to
@@ -797,7 +890,7 @@ def run_experiment(
                 break
             case_id = f"{cand.name}/{scenario.id}/r{rep}"
             if cand.name in not_ready:
-                results.append(
+                persist_case(
                     _not_ready_case(cand, scenario, rep, case_id, str(startup[cand.name]))
                 )
                 continue
@@ -816,7 +909,7 @@ def run_experiment(
                     submit_drain_s=config.submit_drain_s,
                 )
             )
-            results.append(result)
+            persist_case(result)
 
         # Switchboard diagnostic (problem 2): N simultaneous calls, one
         # scenario each, to expose state contamination between sessions.
@@ -842,47 +935,39 @@ def run_experiment(
                     )
                     for i, (scenario, path) in enumerate(pool)
                 ]
-                results.extend(asyncio.run(_gather_cases(calls)))
+                for result in asyncio.run(_gather_cases(calls)):
+                    persist_case(result)
 
-        manifest = {
-            "run_id": run_id,
-            "experiment": config.name,
-            "rules_version": config.rules_version,
-            "dataset_hash": dataset_hash,
-            "dataset": config.clinic_dataset,
-            "dataset_profile": _dataset_profile(config_dir / config.clinic_dataset),
-            "reference_now": config.reference_now,
-            "repetitions": config.repetitions,
-            "budget": config.budget,
-            "started_at": datetime.now(UTC).isoformat(),
-            "candidates": [c.model_dump(exclude={"start_command"}) for c in config.candidates],
-            "startup": {
-                name: {"listening": problem is None, "detail": problem or "listening"}
-                for name, problem in startup.items()
-            },
-            "scenarios": [
-                {"id": s.id, "problem_id": s.problem_id, "version": s.version, "split": s.split}
-                for s, _ in scenarios
-            ],
-            "note": "resultado local - no es el veredicto oficial del reto",
-            "status": "cancelled" if cancelled else "completed",
-            "completed_cases": len(results),
-            "planned_cases": len(case_plan(config, scenarios)),
-        }
-        (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
-        with open(out_dir / "cases.jsonl", "w", encoding="utf-8") as fh:
-            fh.writelines(r.model_dump_json() + "\n" for r in results)
+        manifest.update(status="cancelled" if cancelled else "completed", ended_at=datetime.now(UTC).isoformat())
+        save_manifest()
         # Same aggregates the console and `cli metrics` show, in machine form:
         # an A/B decision should not require re-parsing cases.jsonl.
         from evaluator.report.metrics import write_metrics
 
         write_metrics(out_dir, results)
+    except BaseException as exc:
+        manifest.update(status="failed", ended_at=datetime.now(UTC).isoformat(), error=type(exc).__name__)
+        save_manifest()
+        raise
     finally:
         for p in procs:
-            p.terminate()
+            if p.poll() is None:
+                if os.name == "posix":
+                    os.killpg(p.pid, signal.SIGTERM)
+                else:
+                    p.terminate()
+                try:
+                    p.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    if os.name == "posix":
+                        os.killpg(p.pid, signal.SIGKILL)
+                    else:
+                        p.kill()
+                    p.wait()
         for d in doubles:
             d.stop()
-        clinic.stop()
+        if clinic is not None:
+            clinic.stop()
 
     from evaluator.report.render import render_report
 

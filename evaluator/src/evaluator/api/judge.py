@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from evaluator.api.redact import redact_text
 
-RUBRIC_VERSION = "voice-review-5"
+RUBRIC_VERSION = "voice-review-6"
 # The judge only needs an OpenAI-compatible chat endpoint. The first name wins;
 # `NAN_API_KEY` stays as the documented fallback so an existing setup does not
 # break, but the provider is chosen by the environment, not by the variable name.
@@ -121,7 +121,8 @@ def _turns(events):
 
 def evidence(row):
     return scrub({"transcript": _turns(row.get("transcript_events", [])),
-        "queued_actions": row.get("actions", []),
+        "queued_actions": row.get("queued_actions", row.get("actions", [])),
+        "accepted_actions": row.get("accepted_actions", []),
         "submission_evidence": row.get("submit_attempts", []),
         "ended": row.get("ended", False),
         "order_known": row.get("transcript_order_known", True)})

@@ -160,7 +160,7 @@ def load_backend_call(path: Path) -> BackendCall:
     return call
 
 
-def load_backend_calls(calls_dir: Path | str) -> list[BackendCall]:
+def backend_call_paths(calls_dir: Path | str) -> list[Path]:
     """Load every `*.jsonl` in the agent's `calls/` dir (or the DATA_DIR itself)."""
     base = Path(calls_dir)
     # Both legacy DATA_DIR/calls and current DATA_DIR/<org>/calls exist.
@@ -172,7 +172,11 @@ def load_backend_calls(calls_dir: Path | str) -> list[BackendCall]:
         paths.update(base.glob("*.jsonl"))  # explicitly supplied legacy audit directory
     if not paths and not base.is_dir():
         raise FileNotFoundError(f"no hay audit de llamadas en {base} ni en {base / 'calls'}")
-    return [load_backend_call(p) for p in sorted(paths) if not p.is_symlink()]
+    return [p for p in sorted(paths) if not p.is_symlink()]
+
+
+def load_backend_calls(calls_dir: Path | str) -> list[BackendCall]:
+    return [load_backend_call(path) for path in backend_call_paths(calls_dir)]
 
 
 def _resolve_scenario_path(base: Path, scenario_path: str) -> Path:

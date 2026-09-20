@@ -12,6 +12,10 @@ let current = null;
 let calls = [];
 let manualCalls = [];
 let callsPage = 0;
+let callsTotal = 0;
+let callsRequest = 0;
+let filterTimer = null;
+let jobsTimer = null;
 let callsLoaded = false;
 let chatSession = null;
 let chatTurns = [];
@@ -70,17 +74,57 @@ function formatDate(value) {
 
 // ---- navigation ------------------------------------------------------------
 
-$("tabs").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-tab]");
-  if (!button) return;
-  const tab = button.dataset.tab;
+function route(values, replace = false) {
+  const url = new URL(location.href);
+  for (const [key, value] of Object.entries(values)) {
+    if (value == null || value === '') url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  }
+  if (url.href !== location.href) window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
+}
+
+function activateTab(tab) {
+  if (!TABS.includes(tab)) tab = 'overview';
+  const button = document.querySelector(`[data-tab="${tab}"]`);
   $("tabs").querySelectorAll("button").forEach((item) => item.classList.toggle("on", item === button));
   $("tabs").querySelectorAll("button").forEach((item) => item.setAttribute("aria-current", item === button ? "page" : "false"));
   TABS.forEach((name) => ($(`tab-${name}`).hidden = name !== tab));
   if (tab === "calls") loadCalls().catch(showError);
   if (tab === "experiments") renderExperimentRuns().catch(showError);
   window.scrollTo({ top: 0, behavior: "auto" });
+}
+
+$("tabs").addEventListener("click", event => {
+  const button = event.target.closest('button[data-tab]');
+  if (!button) return;
+  route({ tab: button.dataset.tab });
+  activateTab(button.dataset.tab);
 });
+
+function callRoute() {
+  route({ tab: 'calls', source: $('call-origin').value, page: callsPage + 1,
+    result: $('call-result').value, candidate: $('call-profile').value,
+    search: $('call-scenario').value, call: null }, true);
+  $('call-detail').hidden = true;
+}
+
+async function applyRoute() {
+  const query = new URL(location.href).searchParams;
+  $('call-origin').value = query.get('source') === 'tests' ? 'tests' : 'production';
+  $('call-result').value = query.get('result') || '';
+  $('call-profile').value = query.get('candidate') || '';
+  $('call-scenario').value = query.get('search') || '';
+  callsPage = Math.max(0, Math.floor(Number(query.get('page')) || 1) - 1);
+  callsLoaded = false;
+  syncCohort();
+  activateTab(query.get('tab') || 'overview');
+  if (query.get('run') && current?.run_id !== query.get('run')) await selectRun(query.get('run'));
+  if (query.get('call')) {
+    const call = await api.getHistoryCall(query.get('call'));
+    renderCallDetail(toCallRecord(call));
+  } else $('call-detail').hidden = true;
+}
+window.addEventListener('popstate', () => applyRoute().catch(showError));
 
 // ---- overview and shared run selection ------------------------------------
 
@@ -133,7 +177,8 @@ async function loadRuns() {
   syncCandidateSelect("a");
   syncCandidateSelect("b");
   await renderExperimentRuns();
-  if (runs.length) await selectRun(runs[0].run_id);
+  const wanted = new URL(location.href).searchParams.get('run') || current?.run_id;
+  if (runs.length) await selectRun(runs.some(run => run.run_id === wanted) ? wanted : runs[0].run_id);
   else renderEmptyOverview();
 }
 
@@ -143,7 +188,9 @@ async function selectRun(runId) {
   $("run").value = runId;
   $("report").href = `/api/runs/${encodeURIComponent(runId)}/report`;
   const [detail, comparison] = await Promise.all([api.getRun(runId), api.getComparison(runId)]);
+  if ($('run').value !== runId) return;
   current = detail;
+  route({ run: runId }, true);
   renderOverview(detail);
   renderComparison(comparison);
 }
@@ -165,6 +212,12 @@ function renderOverview(detail) {
     ["dataset", manifest.dataset || "n/d"],
     ["reglas", manifest.rules_version || "n/d"],
     ["repeticiones", manifest.repetitions ?? "n/d"],
+    ["estado", manifest.status || 'desconocido'],
+    ["progreso", `${manifest.completed_cases ?? detail.metrics?.cases ?? 0} / ${manifest.planned_cases ?? 'n/d'}`],
+    ["commit", manifest.revision?.commit ? `${manifest.revision.commit.slice(0, 12)}${manifest.revision.dirty ? ' · cambios locales' : ''}` : 'no registrado'],
+    ["configuración", manifest.config_hash?.slice(0, 12) || 'no registrada'],
+    ["inicio", formatDate(manifest.started_at)],
+    ["fin", manifest.ended_at ? formatDate(manifest.ended_at) : 'en curso / no registrado'],
   ].map(([label, value]) => `<span>${esc(label)}: <b>${esc(value)}</b></span>`).join("");
 
   const names = Object.keys(candidates);
@@ -214,41 +267,36 @@ function toCallRecord(caseResult) {
 }
 
 async function loadCalls() {
-  if (callsLoaded) return renderCalls();
-  $("calls-status").textContent = "Reconstruyendo el historial local…";
-  await api.importHistory();
-  const rows = [];
-  let page = 1;
-  do {
-    const result = await api.getHistoryCalls(new URLSearchParams({ page, page_size: 100 }));
-    rows.push(...result.items);
-    page = result.next_page;
-  } while (page);
-  calls = rows.map(toCallRecord);
+  const request = ++callsRequest;
+  $('calls-status').textContent = 'Cargando llamadas…';
+  const query = new URLSearchParams({ page: callsPage + 1, page_size: PAGE_SIZE, source: $('call-origin').value });
+  const verdict = $('call-result').value;
+  if (verdict) query.set('verdict', verdict === 'informative' ? 'unknown' : verdict);
+  if ($('call-profile').value.trim()) query.set('candidate_query', $('call-profile').value.trim());
+  if ($('call-scenario').value.trim()) query.set('search', $('call-scenario').value.trim());
+  const result = await api.getHistoryCalls(query);
+  if (request !== callsRequest) return;
+  callsTotal = result.total;
+  if (callsPage > 0 && callsPage * PAGE_SIZE >= callsTotal) {
+    callsPage = Math.max(0, Math.ceil(callsTotal / PAGE_SIZE) - 1);
+    callRoute();
+    return loadCalls();
+  }
+  calls = result.items.map(toCallRecord);
   callsLoaded = true;
   renderCalls();
 }
 
 function filteredCalls() {
-  const origin = $("call-origin").value;
-  const result = $("call-result").value;
-  const profile = $("call-profile").value.trim().toLocaleLowerCase();
-  const scenario = $("call-scenario").value.trim().toLocaleLowerCase();
-  return calls.filter((call) =>
-    (origin === "production" ? call.source === "production" : origin === "tests" ? call.source !== "production" : (!origin || call.origin === origin)) &&
-    (!result || (result === "informative" ? (!call.verdict || call.verdict === "unknown") : (call.judgment?.outcome || call.verdict) === result)) &&
-    (!profile || String(call.profile).toLocaleLowerCase().includes(profile)) &&
-    (!scenario || `${call.scenario} ${call.call_id}`.toLocaleLowerCase().includes(scenario)),
-  );
+  return calls;
 }
 
 function renderCalls() {
   const filtered = filteredCalls();
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  callsPage = Math.min(callsPage, pages - 1);
-  const page = filtered.slice(callsPage * PAGE_SIZE, (callsPage + 1) * PAGE_SIZE);
-  $("calls-status").textContent = filtered.length
-    ? `${filtered.length} llamada(s) en la población filtrada. Evidencia parcial sigue indicada por llamada.`
+  const pages = Math.max(1, Math.ceil(callsTotal / PAGE_SIZE));
+  const page = filtered;
+  $("calls-status").textContent = callsTotal
+    ? `${callsTotal} llamada(s) en la población filtrada. Mostrando ${page.length}.`
     : "No hay llamadas que coincidan con estos filtros.";
   $("calls-list").innerHTML = page.length ? `<div class="tablewrap">${table(
     ["Inicio / llamada", "Origen", "Motor / modelo", "Duración", "Resultado", "Transcripción", ""],
@@ -257,12 +305,12 @@ function renderCalls() {
       originBadge(call.origin, call.source),
       `${esc(call.model || call.profile)}<br><span class="meta">${esc(call.candidate_version || 'Versión no registrada')}</span>`,
       call.duration_s == null ? '—' : `${Math.round(call.duration_s)} s`,
-      `${verdictBadge(call.judgment?.outcome || call.verdict || "informative")}${call.judgment ? '<br><span class="meta">juez LLM</span>' : ''}`,
+      `${verdictBadge(call.verdict || 'unknown')}<br><span class="meta">Resultado exacto</span>${call.judgment ? `<br>${verdictBadge(call.judgment.outcome)} <span class="meta">Estimación LLM</span>` : ''}`,
       call.transcript_events?.length ? `${call.transcript_events.length} fragmentos` : 'No disponible',
-      `<button class="small" data-call-detail="${esc(call.id)}" type="button">Ver detalle</button>`,
+      `<a class="button small" data-call-detail="${esc(call.id)}" href="?tab=calls&source=${call.source === 'production' ? 'production' : 'tests'}&call=${encodeURIComponent(call.id)}">Ver detalle</a>`,
     ]),
   )}</div>` : '<div class="empty"><h3>Sin evidencia para mostrar</h3><p>Probá otro filtro o recargá las corridas. Una respuesta de API vacía no se rellena con ejemplos ficticios.</p></div>';
-  $("call-pagination").hidden = filtered.length <= PAGE_SIZE;
+  $("call-pagination").hidden = callsTotal <= PAGE_SIZE;
   $("calls-page").textContent = `Página ${callsPage + 1} de ${pages}`;
   $("calls-prev").disabled = callsPage === 0;
   $("calls-next").disabled = callsPage >= pages - 1;
@@ -288,6 +336,7 @@ function conversationTurns(events) {
 }
 
 function renderCallDetail(call) {
+  route({ tab: 'calls', call: call.id }, true);
   const events = call.transcript_events || call.transcript_fragments || [];
   const historicalAudio = Object.keys(call.audio_files || {}).map(stream => `<label>${esc(stream)}<audio controls preload="none" src="/api/history/calls/${encodeURIComponent(call.id)}/audio/${encodeURIComponent(stream)}"></audio></label>`).join('');
   const audio = historicalAudio || Object.entries(call.audio || {}).map(([stream]) => {
@@ -305,7 +354,7 @@ function renderCallDetail(call) {
   $("call-detail").hidden = false;
   const metrics = call.metrics || {};
   const timeline = (call.timeline || []).map(item => `<li><time>${esc(item.timestamp ? new Date(item.timestamp).toLocaleTimeString('es-ES') : '—')}</time><strong>${esc(item.event)}</strong><code>${esc(JSON.stringify(item.data || {}))}</code></li>`).join('');
-  const incidents = (call.incidents || []).filter(item => item.severity !== 'telemetry');
+  const incidents = call.incidents || [];
   $("call-detail").innerHTML = `<div class="detail-head"><div><div class="detail-provenance">${originBadge(call.origin, call.source)} <span>${call.ended ? 'Finalizada' : 'Sin cierre'}</span></div><h2>${esc(call.call_id || call.case_id)}</h2><p class="meta">${esc(call.profile)} · ${esc(call.scenario)} · ${esc(formatDate(call.started_at))}</p></div><button id="call-detail-close" type="button" aria-label="Cerrar detalle">Cerrar</button></div>
     <div class="quality-strip"><div><span>Calidad</span><strong>${call.judgment?.quality ?? '—'}<small>/5</small></strong></div><div><span>Primera voz</span><strong>${metrics.first_audio_ms == null ? '—' : `${Math.round(metrics.first_audio_ms)} ms`}</strong></div><div><span>Respuestas medidas</span><strong>${metrics.response_ms?.length ?? 0}</strong></div><div><span>Interrupciones</span><strong>${metrics.interruptions ?? 0}</strong></div></div>
     ${incidents.length ? `<section class="call-incidents"><h3>Requiere atención</h3>${incidents.map(item => `<div><span class="incident-level ${esc(item.severity)}">${item.severity === 'high' ? 'Alta' : 'Revisar'}</span><p><strong>${esc(item.title)}</strong> · ${esc(item.detail)}</p></div>`).join('')}</section>` : ''}
@@ -313,9 +362,15 @@ function renderCallDetail(call) {
     <section class="judgment"><h3>Valoración de calidad</h3><div id="call-judgment"></div><div class="judge-actions"><button id="judge-call" class="primary" ${!call.ended || !events.length ? 'disabled' : ''}>${call.judgment ? 'Verificar valoración' : 'Evaluar llamada'}</button><span id="judge-call-state" role="status"></span></div><p class="meta">Se analizan transcripción y acciones con la rúbrica versionada del evaluador. No se envía audio.</p></section>
     <h3>Conversación registrada</h3>${call.transcript_order_known === false ? '<p class="hint">Este registro antiguo no conserva el orden entre interlocutores.</p>' : ''}<ol class="transcript">${transcript}</ol>
     <h3>Acciones y envíos</h3><div class="actions">${actions}</div>
+    <details><summary>Intentos de envío · ${call.submit_attempts?.length || 0}</summary><pre class="log">${esc(JSON.stringify(call.submit_attempts || [], null, 2))}</pre></details>
+    <p class="meta">Fuentes: ${esc((call.evidence_sources || []).join(' · '))}</p>
     <details class="timeline"><summary>Diagnóstico técnico · ${(call.timeline || []).length} eventos</summary>${timeline ? `<ol>${timeline}</ol>` : '<p class="meta">No hay eventos técnicos registrados.</p>'}</details>
     ${call.errors?.length ? `<h3>Errores del rig</h3><pre class="log">${esc(call.errors.join("\n"))}</pre>` : ""}`;
-  $("call-detail-close").addEventListener("click", () => ($("call-detail").hidden = true));
+  $('call-detail-close').addEventListener('click', () => {
+    $('call-detail').hidden = true;
+    route({ call: null }, true);
+    document.querySelector(`[data-call-detail="${CSS.escape(call.id)}"]`)?.focus();
+  });
   function showJudgment(judgment) {
     const labels = { task_completion: 'Resolución', conversation: 'Conversación', efficiency: 'Eficiencia', safety: 'Seguridad', recovery: 'Recuperación' };
     const scores = judgment?.scores ? `<div class="call-scorecard">${Object.entries(judgment.scores).map(([key, value]) => `<div><span>${esc(labels[key] || key)}</span><strong>${value == null ? 'No observable' : `${esc(value)} / 5`}</strong></div>`).join('')}</div>` : '';
@@ -340,30 +395,42 @@ function renderCallDetail(call) {
     } catch (error) { $('judge-call-state').textContent = error.message; }
     finally { button.disabled = false; }
   });
-  $("call-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  $('call-detail').tabIndex = -1;
+  $('call-detail').focus({ preventScroll: true });
+  $('call-detail').scrollIntoView({ behavior: 'auto', block: 'start' });
 }
 
-$("call-filters").addEventListener("input", () => { callsPage = 0; renderCalls(); });
-$("call-filters").addEventListener("reset", () => setTimeout(() => { callsPage = 0; renderCalls(); }));
-$("calls-prev").addEventListener("click", () => { callsPage -= 1; renderCalls(); });
-$("calls-next").addEventListener("click", () => { callsPage += 1; renderCalls(); });
+$('call-filters').addEventListener('submit', event => event.preventDefault());
+$('call-filters').addEventListener('input', () => {
+  clearTimeout(filterTimer);
+  callsRequest++;
+  filterTimer = setTimeout(() => { callsPage = 0; callRoute(); loadCalls().catch(showError); }, 200);
+});
+$('call-filters').addEventListener('reset', () => setTimeout(() => {
+  callsPage = 0; syncCohort(); callRoute(); loadCalls().catch(showError);
+}));
+$('calls-prev').addEventListener('click', () => { callsPage = Math.max(0, callsPage - 1); callRoute(); loadCalls().catch(showError); });
+$('calls-next').addEventListener('click', () => { callsPage += 1; callRoute(); loadCalls().catch(showError); });
 $("calls-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-call-detail]");
-  if (!button) return;
+  if (!button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  route({ call: button.dataset.callDetail });
   api.getHistoryCall(button.dataset.callDetail)
     .then((call) => renderCallDetail(toCallRecord(call)))
     .catch(showError);
 });
 
-document.querySelectorAll('[data-cohort]').forEach(button => button.addEventListener('click', () => {
+function syncCohort() {
   document.querySelectorAll('[data-cohort]').forEach(item => {
-    const on = item === button;
+    const on = item.dataset.cohort === $('call-origin').value;
     item.classList.toggle('on', on);
     item.setAttribute('aria-pressed', String(on));
   });
+}
+document.querySelectorAll('[data-cohort]').forEach(button => button.addEventListener('click', () => {
   $('call-origin').value = button.dataset.cohort;
-  callsPage = 0;
-  renderCalls();
+  syncCohort(); callsPage = 0; callRoute(); loadCalls().catch(showError);
 }));
 
 $("judge-pending").addEventListener("click", async () => {
@@ -385,24 +452,43 @@ $("judge-pending").addEventListener("click", async () => {
 // ---- experiments -----------------------------------------------------------
 
 async function renderExperimentRuns() {
+  clearTimeout(jobsTimer);
   const jobs = await api.getJobs();
+  if (jobs.length) {
+    runs = await api.getRuns();
+    for (const id of ['run', 'diff-a', 'diff-b']) {
+      const selected = $(id).value;
+      $(id).innerHTML = runOptions();
+      if (runs.some(run => run.run_id === selected)) $(id).value = selected;
+    }
+  }
+  if (jobs.some(job => ['pending', 'preparing', 'running', 'cancelling'].includes(job.status))) {
+    jobsTimer = setTimeout(() => {
+      if (!$('tab-experiments').hidden && !document.hidden) renderExperimentRuns().catch(showError);
+    }, 2000);
+  }
+  const activeJob = jobs.find(job => job.run_id && job.run_id === current?.run_id);
+  if (activeJob) await selectRun(activeJob.run_id);
   const historical = runs.length
     ? `<div class="tablewrap">${table(["corrida", "inicio", "casos", "resultado", "estado"], runs.map((run) => [
       `<code>${esc(run.run_id)}</code>`, esc(formatDate(run.started_at)), esc(run.cases),
       `${esc(run.passed)} correctas · ${esc(run.failed)} incorrectas · ${esc(run.invalid)} no evaluables`,
-      `<button class="small" data-run-open="${esc(run.run_id)}">Ver resultados</button>`,
+      `${esc(run.status || 'desconocido')} · <a class="button small" data-run-open="${esc(run.run_id)}" href="?tab=experiments&run=${encodeURIComponent(run.run_id)}">Ver resultados</a>`,
     ]))}</div>`
     : '<div class="empty"><h3>No hay ejecuciones registradas</h3><p>Creá una ejecución con perfiles y escenarios declarados en el servidor.</p></div>';
   const active = jobs.length ? `<h2>Trabajos</h2><div class="tablewrap">${table(["id", "estado", "progreso", "acción"], jobs.map((job) => [
     `<code>${esc(job.id)}</code>`, verdictBadge(job.status), `${esc(job.progress?.completed || 0)} / ${esc(job.progress?.total || "n/d")}`,
-    ["pending", "preparing", "running", "cancelling"].includes(job.status) ? `<button class="small" data-job-cancel="${esc(job.id)}">Cancelar</button>` : "—",
+    ['pending', 'preparing', 'running', 'cancelling'].includes(job.status) ? `<button class="small" data-job-cancel="${esc(job.id)}" ${job.status === 'cancelling' ? 'disabled' : ''}>${job.status === 'cancelling' ? 'Cerrando caso actual…' : 'Cancelar'}</button>` : esc(job.error || '—'),
   ]))}</div>` : "";
   $("experiment-runs").innerHTML = active + '<h2>Corridas disponibles</h2>' + historical;
 }
 
 $("experiment-runs").addEventListener("click", event => {
   const button = event.target.closest('[data-run-open]');
-  if (button) selectRun(button.dataset.runOpen).then(() => document.querySelector('.run-summary').scrollIntoView({ behavior: 'smooth' })).catch(showError);
+  if (!button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  route({ tab: 'experiments', run: button.dataset.runOpen });
+  selectRun(button.dataset.runOpen).then(() => document.querySelector('.run-summary').scrollIntoView({ behavior: 'auto' })).catch(showError);
 });
 
 // ---- comparison ------------------------------------------------------------
@@ -434,7 +520,9 @@ $("diff-run").addEventListener("click", async () => {
       <div class="cell"><span>nuevos fallos</span><strong>${esc(summary.newly_failing ?? "n/d")}</strong></div>
       <div class="cell"><span>cambios</span><strong>${esc(summary.verdict_changed ?? "n/d")}</strong></div>
     </div>${metrics.length ? `<div class="tablewrap">${table(["métrica", "A", "B", "delta"], metrics.map((row) => [esc(row.label), esc(row.a_text), esc(row.b_text), esc(row.delta ?? "n/d")]))}</div>` : ""}
-    <div class="banner">El tamaño de muestra y la estabilidad condicionan cualquier conclusión. Una sola repetición no declara un ganador.</div>`;
+    <div class="banner">El tamaño de muestra y la estabilidad condicionan cualquier conclusión. Una sola repetición no declara un ganador.</div>
+    <p>Solo en A: ${esc(summary.only_in_a ?? 0)} · Solo en B: ${esc(summary.only_in_b ?? 0)}. Los deltas usan únicamente casos pareados.</p>
+    ${(summary.warnings || []).map(item => `<p class="error" role="status">${esc(item.message)}</p>`).join('')}`;
   } catch (error) { showError(error); }
 });
 
@@ -471,15 +559,18 @@ $("experiment-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const profileIds = [...$("experiment-profiles").selectedOptions].map((option) => option.value);
   const scenarioIds = [...$("experiment-scenarios").selectedOptions].map((option) => option.value);
+  const button = $('experiment-create');
+  button.disabled = true;
   try {
     await api.createJob({
       profile_ids: profileIds,
       scenario_ids: scenarioIds,
-      mode: $("experiment-mode").value === "voz" ? "voice" : "text",
+      mode: $("experiment-mode").value === "voice" ? "voice" : "text",
       repetitions: Number($("experiment-repetitions").value),
     });
     await renderExperimentRuns();
   } catch (error) { showError(error); }
+  finally { button.disabled = false; }
 });
 
 $("experiment-runs").addEventListener("click", async (event) => {
@@ -664,4 +755,4 @@ function createMic() {
 
 mic = createMic();
 loadProfiles().catch(showError);
-loadRuns().catch(showError);
+loadRuns().then(applyRoute).catch(showError);

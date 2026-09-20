@@ -109,7 +109,7 @@
         </div>
         <form id="call-filters" class="filterbar">
           <input id="call-origin" type="hidden" value="production" />
-          <label class="field">resultado<select id="call-result"><option value="">todos</option><option value="pass">correcta</option><option value="fail">incorrecta</option><option value="invalid_evaluation">no evaluable</option><option value="informative">informativa</option></select></label>
+          <label class="field">Resultado exacto<select id="call-result"><option value="">todos</option><option value="pass">correcta</option><option value="fail">incorrecta</option><option value="invalid_evaluation">no evaluable</option><option value="informative">informativa</option></select></label>
           <label class="field">perfil / candidato<input id="call-profile" type="search" placeholder="Filtrar" /></label>
           <label class="field">Buscar llamada<input id="call-scenario" type="search" placeholder="ID de llamada o escenario" /></label>
           <button type="reset">Limpiar</button>
@@ -188,6 +188,15 @@
           <div><h2>Micrófono en directo</h2><p>Habla y escucha al mismo tiempo. Puedes interrumpir al agente durante su respuesta.</p><label class="field">Perfil de voz<select id="live-profile"></select></label><p id="live-state" role="status">Línea disponible · audio de 8 kHz</p></div>
           <div class="live-controls"><button type="button" id="live-start" class="primary">Iniciar llamada</button><button type="button" id="live-mute" disabled aria-pressed="false">Silenciar micrófono</button><button type="button" id="live-stop" disabled>Colgar</button><span id="live-time" class="mono">00:00</span></div>
         </section>
+        <section class="live-diagnostics" aria-label="Diagnóstico del audio">
+          <label class="field">Micrófono<select id="live-device"><option value="">Predeterminado del sistema</option></select></label>
+          <label class="field">Nivel de entrada<meter id="live-level" min="0" max="1" value="0" aria-label="Nivel de señal del micrófono"></meter></label>
+          <p id="live-signal" role="status">Sin captura de audio</p>
+          <p id="live-identity" role="status">Motor activo aún sin verificar</p>
+          <p id="live-packets">Paquetes enviados / recibidos: 0 / 0</p>
+          <div><strong>Última voz reconocida</strong><p id="live-transcript" aria-live="polite">Sin transcripción disponible</p></div>
+          <a id="live-history" hidden>Ver esta llamada en el historial</a>
+        </section>
         <section class="live-brief" aria-label="Contexto de la llamada manual">
           <article class="brief-card">
             <div class="brief-head">
@@ -236,7 +245,7 @@
         <div id="chat-log" class="chatlog"></div>
 
         <form id="chat-form" class="row" hidden>
-          <input id="chat-text" placeholder="Escribí lo que diría el caller y Enter" autocomplete="off" />
+          <input id="chat-text" aria-label="Texto que dirá el caller" placeholder="Escribí lo que diría el caller y Enter" autocomplete="off" />
           <button class="primary">Decir</button>
           <button type="button" id="mic" class="live" hidden title="Mantener apretado para hablar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>

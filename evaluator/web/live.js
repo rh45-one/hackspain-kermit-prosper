@@ -1,6 +1,16 @@
 (() => {
   let ws, context, stream, node, source, gain, timer;
   let active = false, starting = false, muted = false, cursor = 0, generation = 0;
+  let lastFrame = 0, lastSignal = 0, sent = 0, monitor = null, callId = null, stopTimeout = null;
+  const device = $('live-device');
+  async function devices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const selected = device.value;
+    const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(item => item.kind === 'audioinput');
+    device.innerHTML = '<option value="">Predeterminado del sistema</option>' + inputs.map((item, i) => `<option value="${esc(item.deviceId)}">${esc(item.label || `Micrófono ${i + 1}`)}</option>`).join('');
+    if (inputs.some(item => item.deviceId === selected)) device.value = selected;
+  }
+  devices().catch(() => {});
   const playing = new Set();
   const start = $('live-start'), stop = $('live-stop'), mute = $('live-mute'), state = $('live-state');
   function clearPlayback() {
@@ -29,7 +39,12 @@
   }
   async function release(message) {
     generation++; active = false; starting = false;
-    clearInterval(timer); clearPlayback();
+    clearInterval(timer); clearInterval(monitor); clearTimeout(stopTimeout); clearPlayback();
+    if (context) context.onstatechange = null;
+    if (node) node.onprocessorerror = null;
+    stream?.getTracks().forEach(track => { track.onended = null; });
+    device.disabled = false;
+    $('live-level').value = 0;
     if (node) node.port.onmessage = null;
     node?.disconnect(); source?.disconnect(); gain?.disconnect();
     stream?.getTracks().forEach(track => track.stop());
@@ -54,22 +69,47 @@
     $('live-profile').disabled = true;
     const token = ++generation;
     try {
+      state.textContent = 'Verificando el motor y la clínica…';
+      const identity = await api.getProfileStatus(profile);
+      if (token !== generation) return;
+      if (!identity.ready) { await release(identity.reason); return; }
+      $('live-identity').textContent = identity.verified ? `Motor activo: ${identity.engine} · ${identity.model || 'modelo no registrado'}` : identity.reason;
+      $('live-history').hidden = true; callId = null; sent = 0;
+      $('live-transcript').textContent = 'Esperando transcripción del agente…';
+      device.disabled = true;
       state.textContent = 'Autoriza el micrófono para conectar…';
       context = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
       await context.resume();
-      const captured = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
+      const captured = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, ...(device.value ? { deviceId: { exact: device.value } } : {}) }, video: false });
       if (token !== generation) { captured.getTracks().forEach(t => t.stop()); return; }
       stream = captured;
+      devices().catch(() => {});
+      stream.getAudioTracks().forEach(track => { track.onended = () => release('El micrófono se desconectó. Selecciona otro dispositivo e inicia de nuevo.'); });
+      context.onstatechange = () => { if (active && context?.state === 'suspended') release('El navegador suspendió el audio. Vuelve a iniciar la llamada.'); };
       await context.audioWorklet.addModule('/static/mic-worklet.js');
       if (token !== generation) return;
       source = context.createMediaStreamSource(stream);
       node = new AudioWorkletNode(context, 'mulaw-capture', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], processorOptions: { targetSampleRate: 8000, frameSamples: 160 } });
       gain = context.createGain(); gain.gain.value = 0;
       source.connect(node); node.connect(gain); gain.connect(context.destination);
+      node.onprocessorerror = () => release('Falló la captura de audio. Reinicia la llamada o prueba otro navegador.');
+      lastFrame = Date.now(); lastSignal = 0;
       node.port.onmessage = event => {
+        lastFrame = Date.now();
+        const bytes = new Uint8Array(event.data);
+        let energy = 0;
+        for (const byte of bytes) {
+          const value = (~byte) & 255;
+          const sample = ((((value & 15) << 3) + 132) << ((value & 112) >> 4)) - 132;
+          energy += (sample / 32768) ** 2;
+        }
+        const level = Math.sqrt(energy / Math.max(1, bytes.length));
+        $('live-level').value = Math.min(1, level * 5);
+        if (level > .005) lastSignal = lastFrame;
         if (!active || ws?.readyState !== WebSocket.OPEN) return;
         if (ws.bufferedAmount > 256 * 1024) { release('Conexión demasiado lenta. Vuelve a iniciar la llamada.'); return; }
         ws.send(muted ? new Uint8Array(160).fill(255) : event.data);
+        sent++;
       };
       state.textContent = 'Conectando con el agente…';
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/live/${encodeURIComponent(profile)}`);
@@ -79,12 +119,29 @@
         const message = JSON.parse(event.data);
         if (message.event === 'ready') {
           clearTimeout(timeout); active = true; starting = false; mute.disabled = false;
-          state.textContent = 'En línea. Ya puedes hablar e interrumpir al agente.';
+          state.textContent = 'Conexión abierta. Comprueba el nivel del micrófono y habla.';
+          callId = message.call_id;
+          monitor = setInterval(() => {
+            if (!active) return;
+            const now = Date.now();
+            if (now - lastFrame > 3000) { release('No llegan paquetes del micrófono. Revisa el dispositivo y vuelve a iniciar.'); return; }
+            $('live-signal').textContent = muted ? 'Micrófono silenciado' : now - lastSignal > 5000 ? 'Sin señal apreciable. Si estás hablando, revisa el dispositivo o su volumen.' : 'Señal de entrada detectada';
+          }, 500);
           const since = Date.now();
           timer = setInterval(() => { const seconds = Math.floor((Date.now() - since) / 1000); $('live-time').textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; }, 500);
+        } else if (message.event === 'telemetry') {
+          $('live-packets').textContent = `Navegador: ${sent} enviados · puente: ${message.frames_sent} enviados / ${message.frames_received} recibidos`;
+          $('live-transcript').textContent = message.caller_text || (message.transcript_available ? 'Aún no hay voz del caller transcrita. Esto no demuestra silencio.' : 'El audit del agente no está disponible todavía.');
         } else if (message.event === 'media') play(message.media?.payload);
         else if (message.event === 'clear') clearPlayback();
-        else if (message.event === 'finished') { clearTimeout(timeout); release(message.error || 'Llamada guardada. Disponible en Historial → Manuales.'); }
+        else if (message.event === 'finished') {
+          clearTimeout(timeout);
+          if (callId) {
+            $('live-history').href = `?tab=calls&source=tests&search=${encodeURIComponent(callId)}`;
+            $('live-history').hidden = false;
+          }
+          release(message.error || 'Llamada guardada. Abre el enlace para consultar su evidencia.');
+        }
       };
       ws.onerror = () => { clearTimeout(timeout); release('Error de conexión. Comprueba el servidor del laboratorio.'); };
       ws.onclose = () => { clearTimeout(timeout); release('El agente ha cerrado la conexión. Consulta el historial de pruebas manuales.'); };
@@ -97,7 +154,8 @@
       active = false; stop.disabled = true; mute.disabled = true;
       stream?.getTracks().forEach(track => track.stop()); clearPlayback();
       state.textContent = 'Guardando llamada…'; ws.send('stop');
-      setTimeout(() => { if (ws && !active) release('Llamada finalizada. Actualiza el historial para consultar la evidencia.'); }, 8000);
+      const token = generation;
+      stopTimeout = setTimeout(() => { if (token === generation && ws && !active) release('Llamada finalizada. Actualiza el historial para consultar la evidencia.'); }, 15000);
     } else release('Llamada cancelada.');
   });
   mute.addEventListener('click', () => { muted = !muted; mute.setAttribute('aria-pressed', String(muted)); mute.textContent = muted ? 'Activar micrófono' : 'Silenciar micrófono'; });

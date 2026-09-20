@@ -15,8 +15,14 @@ cd "$(dirname "$0")"
 
 CLINIC_PORT=18090
 AGENT_PORT=17860
+OPS_PORT=17861
 CONSOLE_PORT=8099
 LAB_DATA="$(pwd)/evaluator/experiments/results/agent-data"
+if [[ "${VOICE_ENGINE:-cascade}" == "gemini_live" ]]; then
+  AGENT_PORT=17862
+  OPS_PORT=17863
+  LAB_DATA="${LAB_DATA}-gemini"
+fi
 
 start() {
   # 1) Clinic double (fake Prosper platform), key pk-local-eval
@@ -36,7 +42,7 @@ start() {
     : "${HELMCODE_API_KEY:?export HELMCODE_API_KEY antes de arrancar (key del brain/juez)}"
     setsid nohup env \
       VOICE_WS_HOST=127.0.0.1 VOICE_WS_PORT="${AGENT_PORT}" PORT="${AGENT_PORT}" \
-      OPS_HTTP_PORT=17861 TURNS_ADAPTER=1 \
+      OPS_HTTP_PORT="${OPS_PORT}" TURNS_ADAPTER=1 \
       PROSPER_API_BASE_URL="http://127.0.0.1:${CLINIC_PORT}" PROSPER_API_KEY=pk-local-eval \
       VOICE_ENGINE="${VOICE_ENGINE:-cascade}" \
       HELMCODE_API_KEY="${HELMCODE_API_KEY}" AGENT_MODEL="${AGENT_MODEL:-deepseek-v4-flash}" \

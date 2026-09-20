@@ -138,7 +138,7 @@ def gemini_live_profile() -> AgentProfile:
             "id": "gemini_live",
             "engine": "gemini_live",
             "version": "lab-1",
-            "endpoints": _endpoints(),
+            "endpoints": {"ws_url": "ws://127.0.0.1:17862/ws", "text_url": "http://127.0.0.1:17862"},
             "capabilities": _capabilities(),
             "providers": {
                 "name": "gemini live",
@@ -150,8 +150,12 @@ def gemini_live_profile() -> AgentProfile:
                 "agent_api_key": "PROSPER_API_KEY",
                 "gemini_api_key": "GEMINI_API_KEY",
             },
-            "launch_env": {**LAB_LAUNCH_ENV, "VOICE_ENGINE": "gemini_live"},
-            "laboratory": _laboratory(),
+            "launch_env": {**LAB_LAUNCH_ENV, "VOICE_ENGINE": "gemini_live",
+                           "VOICE_WS_PORT": "17862", "PORT": "17862", "OPS_HTTP_PORT": "17863",
+                           "DATA_DIR": f"{LAB_DATA_DIR}-gemini"},
+            "laboratory": {**_laboratory(), "voice_port": 17862,
+                           "data_dir": f"{LAB_DATA_DIR}-gemini",
+                           "agent_audit_dir": f"{LAB_DATA_DIR}-gemini"},
             "notes": (
                 "la voz la sintetiza el propio modelo: no hay STT/TTS separados que "
                 "declarar"

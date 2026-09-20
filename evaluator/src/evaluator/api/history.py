@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from evaluator.models import CaseResult
-from evaluator.observer.backend_calls import load_backend_calls, load_backend_records
+from evaluator.observer.backend_calls import (
+    backend_call_paths,
+    load_backend_call,
+    load_backend_records,
+)
 from evaluator.observer.run import _real_call_row
 from evaluator.report.side_by_side import load_cases
 
@@ -59,6 +63,19 @@ class HistoryStore:
         self.root = Path(root)
         self.path = self.root / "_history" / "calls-v1.json"
         self._lock = threading.RLock()
+        self._source_cache = {}
+
+    def _cached(self, path, loader):
+        try:
+            stat = path.stat()
+            stamp = (stat.st_mtime_ns, stat.st_size)
+        except FileNotFoundError:
+            self._source_cache.pop(path, None)
+            return loader()
+        previous = self._source_cache.get(path)
+        if previous is None or previous[0] != stamp:
+            self._source_cache[path] = (stamp, loader())
+        return self._source_cache[path][1]
 
     def _load(self) -> dict[str, dict[str, Any]]:
         try:
@@ -82,7 +99,7 @@ class HistoryStore:
         for directory in sorted(self.root.iterdir()) if self.root.is_dir() else []:
             if not directory.is_dir() or not (directory / "cases.jsonl").is_file():
                 continue
-            manifest = _manifest(directory)
+            manifest = self._cached(directory / "manifest.json", lambda directory=directory: _manifest(directory))
             versions = {
                 str(item.get("name")): str(item.get("version"))
                 for item in manifest.get("candidates", [])
@@ -92,17 +109,17 @@ class HistoryStore:
                 str(item.get("name")): str(item.get("kind", "external"))
                 for item in manifest.get("candidates", []) if isinstance(item, dict)
             }
-            for case in _cases(directory):
+            for case in self._cached(directory / "cases.jsonl", lambda directory=directory: _cases(directory)):
                 row = self._case_row(case, directory.name, versions, kinds, manifest)
                 calls[row["id"]] = row
                 seen.add(row["id"])
-            for raw in _read_jsonl(directory / "real_calls.jsonl"):
+            for raw in self._cached(directory / "real_calls.jsonl", lambda directory=directory: _read_jsonl(directory / "real_calls.jsonl")):
                 row = self._real_row(raw, directory.name, manifest)
                 calls[row["id"]] = row
                 seen.add(row["id"])
         for path in sorted((self.root / "_manual-calls").glob("*.json")) if (self.root / "_manual-calls").is_dir() else []:
             try:
-                raw = json.loads(path.read_text(encoding="utf-8"))
+                raw = self._cached(path, lambda path=path: json.loads(path.read_text(encoding="utf-8")))
             except json.JSONDecodeError:
                 continue
             if not isinstance(raw, dict) or not raw.get("call_id"):
@@ -113,23 +130,25 @@ class HistoryStore:
         # Remove stale entries only when their source is an evaluator run that
         # has disappeared. This prevents an interrupted write from multiplying
         # a call, while preserving a current partial run on the next import.
+        run_ids = self._run_ids()
         calls = {
             key: value for key, value in calls.items()
             if value.get("origin") == "manual"
             or value.get("run_id") in {"live-backend", "production"}
-            or value.get("run_id") in self._run_ids()
+            or value.get("run_id") in run_ids
         }
         created = sum(1 for key in calls if key not in before)
         updated = sum(1 for key in calls if key in before and calls[key] != before[key])
         skipped = sum(1 for key in seen if key in before and calls.get(key) == before[key])
-        self._save(calls)
+        if calls != before:
+            self._save(calls)
         return {"indexed": len(calls), "created": created, "updated": updated, "skipped": skipped}
 
     @synchronized
     def import_backend_audits(self, data_dir: Path | str) -> dict[str, int]:
         """Synchronize live backend audits without creating a static report."""
         try:
-            backend_calls = load_backend_calls(data_dir)
+            backend_calls = [self._cached(path, lambda path=path: load_backend_call(path)) for path in backend_call_paths(data_dir)]
         except FileNotFoundError:
             return {"indexed": 0, "created": 0, "updated": 0, "skipped": 0}
         calls = self._load()
@@ -138,7 +157,8 @@ class HistoryStore:
             raw = _real_call_row(call, None, None, [])
             row = self._real_row(raw, "live-backend", {})
             calls[row["id"]] = row
-        self._save(calls)
+        if calls != before:
+            self._save(calls)
         created = sum(1 for key in calls if key not in before)
         updated = sum(1 for key in calls if key in before and calls[key] != before[key])
         return {"indexed": len(calls), "created": created, "updated": updated,
@@ -159,7 +179,8 @@ class HistoryStore:
             row = self._real_row(raw, "production", {})
             row["source"] = "production"
             calls[row["id"]] = row
-        self._save(calls)
+        if calls != before:
+            self._save(calls)
         created = sum(1 for key in calls if key not in before)
         updated = sum(1 for key in calls if key in before and calls[key] != before[key])
         return {"indexed": len(calls), "created": created, "updated": updated,
@@ -173,7 +194,11 @@ class HistoryStore:
     def _case_row(self, case: CaseResult, run_id: str, versions: dict[str, str], kinds: dict[str, str], manifest: dict[str, Any]) -> dict[str, Any]:
         rid = _record_id(case.origin, run_id, case.case_id)
         events = [event.model_dump(mode="json") for event in case.ordered_transcript]
+        declaration = next((item for item in manifest.get("candidates", []) if item.get("name") == case.candidate), {})
+        identity = declaration.get("runtime_identity") or {}
         return {
+            "model": identity.get("text_model" if declaration.get("text_url") else "model"),
+            "identity": identity,
             "id": rid, "call_id": case.call_id, "origin": case.origin,
             "run_id": run_id, "case_id": case.case_id, "candidate": case.candidate,
             "candidate_version": case.candidate_version or versions.get(case.candidate),
@@ -184,7 +209,8 @@ class HistoryStore:
             "duration_s": case.duration_s, "cost": case.cost,
             "evidence": case.evidence.as_dict(), "transcript_events": events,
             "transcript_fragments": case.transcript if not events else [],
-            "actions": case.submitted, "submit_attempts": case.submit_attempts,
+            "actions": case.submitted, "accepted_actions": case.submitted, "queued_actions": [],
+            "submit_attempts": case.submit_attempts,
             "audio": case.audio, "errors": case.errors, "notes": case.notes,
             "ended": bool(case.ended_at) or case.verdict != "invalid_evaluation",
             "turn_latencies_ms": case.turn_latencies_ms,
@@ -224,12 +250,17 @@ class HistoryStore:
         return {
             "id": _record_id("manual", "manual", call_id), "call_id": call_id, "origin": "manual",
             "run_id": None, "case_id": None, "candidate": raw.get("profile_id") or "manual-agent",
-            "candidate_version": None, "candidate_kind": "external", "scenario_id": scenario.get("id"),
+            "candidate_version": raw.get("candidate_version"), "candidate_kind": "external", "scenario_id": scenario.get("id"),
+            "model": raw.get("identity", {}).get("model"), "identity": raw.get("identity") or {},
+            "org_id": raw.get("org_id"), "requested_profile": raw.get("profile_id"),
             "problem_id": None, "verdict": verdict, "evaluated": bool(scenario),
             "started_at": raw.get("started_at"), "ended_at": raw.get("ended_at"),
             "cost": None, "evidence": raw.get("evidence") or {"audio": "unknown", "transcript": "unknown", "cost": "unknown", "outcome": "unknown"},
             "transcript_events": raw.get("turns") or [], "transcript_fragments": [],
-            "actions": raw.get("submissions") or [], "submit_attempts": raw.get("rejected") or [],
+            "actions": raw.get("submissions") or [], "accepted_actions": raw.get("submissions") or [],
+            "queued_actions": raw.get("queued_actions") or [],
+            "submit_attempts": raw.get("submit_attempts") or raw.get("rejected") or [],
+            "error_types": ["transport"] if raw.get("transport_error") else [],
             "audio": {}, "errors": [raw["transport_error"]] if raw.get("transport_error") else [], "notes": [],
             "ended": True, "duration_s": raw.get("duration_s"),
             "audio_files": raw.get("audio_files") or {},
@@ -251,13 +282,57 @@ class HistoryStore:
             previous = real.get(key)
             if previous is None or row.get("run_id") in {"live-backend", "production"}:
                 real[key] = row
-        rows = other + list(real.values())
+        rows = _merge_calls(other + list(real.values()))
         rows = [row for row in rows if _matches(row, filters)]
         return sorted(rows, key=lambda row: (row.get("started_at") or "", row["id"]), reverse=True)
 
     @synchronized
     def call(self, record_id: str) -> dict[str, Any] | None:
-        return self._load().get(record_id)
+        rows = self.calls({"include_doubles": True})
+        direct = next((row for row in rows if record_id in row.get("record_ids", [row["id"]])), None)
+        if direct:
+            return direct
+        original = self._load().get(record_id)
+        if original:
+            matches = [row for row in rows if row.get("call_id") == original.get("call_id")
+                       and row.get("org_id") == original.get("org_id")
+                       and (row.get("source") == "production") == (original.get("source") == "production")]
+            return matches[0] if len(matches) == 1 else None
+        return None
+
+
+def _merge_calls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = ("production" if row.get("source") == "production" else "tests", row.get("call_id") or row["id"])
+        groups.setdefault(key, []).append(row)
+    merged = []
+    for group in groups.values():
+        orgs = {row["org_id"] for row in group if row.get("org_id")}
+        partitions = [[row for row in group if row.get("org_id") == org] for org in orgs | {None}] if len(orgs) > 1 else [group]
+        for items in partitions:
+            if not items:
+                continue
+            primary = max(items, key=lambda row: (row["origin"] in {"manual", "simulated"}, row.get("evaluated", False)))
+            result = dict(primary)
+            result["record_ids"] = sorted({row["id"] for row in items})
+            result["evidence_sources"] = sorted({row.get("run_id") or row["origin"] for row in items})
+            evidence = dict(result.get("evidence", {}))
+            for row in items:
+                for key, state in row.get("evidence", {}).items():
+                    if state == "present" or key not in evidence:
+                        evidence[key] = state
+                for key in ("transcript_events", "timeline", "audio_files", "submit_attempts", "started_at", "ended_at", "duration_s", "org_id"):
+                    if not result.get(key) and row.get(key):
+                        result[key] = row[key]
+                if row["origin"] == "real":
+                    for key in ("model", "candidate_version", "candidate"):
+                        if row.get(key) and row[key] != "backend-real":
+                            result[key] = row[key]
+                    result["queued_actions"] = row.get("actions", [])
+            result["evidence"] = evidence
+            merged.append(result)
+    return merged
 
 
 def _manifest(directory: Path) -> dict[str, Any]:
@@ -286,6 +361,10 @@ def _matches(row: dict[str, Any], filters: dict[str, Any]) -> bool:
             continue
         if value is not None and value != "" and row.get(field) != value:
             return False
+    if filters.get("search") and str(filters["search"]).casefold() not in f"{row.get('call_id', '')} {row.get('scenario_id', '')}".casefold():
+        return False
+    if filters.get("candidate_query") and str(filters["candidate_query"]).casefold() not in str(row.get("candidate", "")).casefold():
+        return False
     started = row.get("started_at") or ""
     if filters.get("from") and started < filters["from"]:
         return False

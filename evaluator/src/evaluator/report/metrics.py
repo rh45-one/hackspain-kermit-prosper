@@ -36,7 +36,7 @@ ERROR_KINDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tts", ("tts", "espeak", "pico2wave", "synthesis")),
     ("text_adapter", ("text adapter", "/turns")),
     ("clinic", ("clinic", "/availability", "/api/v1")),
-    ("submission", ("submit", "record", "flush")),
+    ("submission", ("submit", "submission", "record", "flush")),
     ("transport", ("connection", "websocket", "closed", "reset", "eof", "connect")),
     ("stt", ("stt", "deepgram", "transcri")),
 )

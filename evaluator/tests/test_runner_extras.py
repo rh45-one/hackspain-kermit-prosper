@@ -22,6 +22,24 @@ def _scenario(**kw) -> Scenario:
     )
 
 
+def test_existing_clinic_is_verified_without_rebinding(tmp_path):
+    from evaluator.clinic.dataset import Dataset
+    from evaluator.clinic.server import create_app
+    from evaluator.runner.experiment import verify_clinic
+
+    dataset = Dataset.load(Path(__file__).parents[1] / "data/clinic_dataset.json")
+    server = serve_in_thread(create_app(dataset), "127.0.0.1", 0)
+    url = f"http://127.0.0.1:{server.listener.getsockname()[1]}"
+    try:
+        verify_clinic(url, dataset, "pk-local-eval")
+        changed = Dataset({**dataset.raw, "meta": {"version": "different"}})
+        with pytest.raises(ValueError, match="dataset"):
+            verify_clinic(url, changed, "pk-local-eval")
+        assert httpx.get(f"{url}/api/v1/health").status_code == 200
+    finally:
+        server.stop()
+
+
 class TestIsolation:
     def test_server_refuses_an_occupied_port(self):
         from fastapi import FastAPI

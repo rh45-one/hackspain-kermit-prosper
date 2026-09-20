@@ -40,7 +40,8 @@ from evaluator.api.live import create_live_router
 from evaluator.api.production import ProductionSource, ProductionSyncError
 from evaluator.api.redact import redact_secrets, redact_text
 from evaluator.models import CaseResult
-from evaluator.profiles import ProfileCatalog
+from evaluator.profiles import ProfileCatalog, ProfileError
+from evaluator.profiles.guard import LaboratoryRefusal, inspect_profile
 from evaluator.report.diff import diff_runs
 from evaluator.report.metrics import summarize
 from evaluator.report.side_by_side import load_cases, side_by_side
@@ -150,6 +151,9 @@ def _run_row(directory: Path) -> dict[str, Any]:
         "failed": sum(1 for c in cases if c.verdict == "fail"),
         "invalid": sum(1 for c in cases if c.verdict == "invalid_evaluation"),
         "has_report": (directory / "report.html").is_file(),
+        "status": manifest.get("status", "unknown"),
+        "completed_cases": manifest.get("completed_cases", len(cases)),
+        "planned_cases": manifest.get("planned_cases"),
     }
 
 
@@ -296,6 +300,13 @@ def create_app(
         """
         return catalog.public_view()
 
+    @app.get("/api/profiles/{profile_id}/status")
+    async def profile_status(profile_id: str):
+        try:
+            return await inspect_profile(catalog.get(profile_id))
+        except (ProfileError, LaboratoryRefusal) as exc:
+            raise HTTPException(400, str(exc)) from None
+
     @app.get("/api/runs")
     def runs() -> list[dict[str, Any]]:
         return [_run_row(d) for d in _list_runs(root)]
@@ -330,24 +341,28 @@ def create_app(
         include_doubles: bool = False,
         page: int = 1,
         page_size: int = 25,
+        search: str | None = None,
+        candidate_query: str | None = None,
     ) -> dict[str, Any]:
         if page < 1 or not 1 <= page_size <= 100:
             raise HTTPException(422, "page debe ser >= 1 y page_size estar entre 1 y 100")
         filters = {
             "origin": origin, "source": source, "candidate": candidate, "candidate_version": version,
             "verdict": verdict, "scenario_id": scenario_id, "from": from_, "to": to,
-            "include_doubles": include_doubles,
+            "include_doubles": include_doubles, "search": search, "candidate_query": candidate_query,
         }
         refresh_history()
         rows = history.calls(filters)
+        total = len(rows)
+        start = (page - 1) * page_size
+        rows = rows[start : start + page_size]
         for row in rows:
             row["judgment"] = judge.cached(row)
             row["metrics"] = call_metrics(row)
             row["incidents"] = call_incidents(row)
-        start = (page - 1) * page_size
         return {
-            "items": redact_secrets(rows[start : start + page_size]), "page": page, "page_size": page_size,
-            "total": len(rows), "next_page": page + 1 if start + page_size < len(rows) else None,
+            "items": redact_secrets(rows), "page": page, "page_size": page_size,
+            "total": total, "next_page": page + 1 if start + page_size < total else None,
         }
 
     @app.get("/api/history/calls/{record_id}")
@@ -529,7 +544,8 @@ def create_app(
         path_value = case.audio.get(stream)
         if not path_value:
             raise HTTPException(404, f"el caso {case_id} no tiene audio de {stream}")
-        path = Path(path_value).resolve()
+        path = Path(path_value)
+        path = (path if path.is_absolute() else directory / path).resolve()
         if not path.is_file() or directory.resolve() not in path.parents:
             raise HTTPException(404, "evidencia de audio no disponible")
         return FileResponse(path, media_type="audio/wav")

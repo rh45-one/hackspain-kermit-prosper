@@ -42,6 +42,23 @@ def _write_run(root: Path, name: str, cases: list[dict]) -> Path:
     return d
 
 
+def test_diff_warns_on_incompatible_fixture_and_scenarios(tmp_path):
+    a = _write_run(tmp_path, "a", [_case()])
+    b = _write_run(tmp_path, "b", [_case()])
+    for path, fingerprint in ((a, "old"), (b, "new")):
+        (path / "manifest.json").write_text(json.dumps({"dataset_fingerprint": fingerprint,
+            "rules_version": "v1", "scenarios": [{"id": "sb-001", "sha256": fingerprint}]}))
+    summary = diff_runs(a, b).summary()
+    assert summary["comparable"] is False
+    assert {item["code"] for item in summary["warnings"]} >= {"dataset_changed", "scenario_changed"}
+
+
+def test_diff_aggregates_only_paired_cases(tmp_path):
+    a = _write_run(tmp_path, "a", [_case(scenario_id="shared", verdict="fail"), _case(scenario_id="extra")])
+    b = _write_run(tmp_path, "b", [_case(scenario_id="shared", verdict="fail")])
+    assert diff_runs(a, b).metrics["pass_rate"]["delta"] == 0
+
+
 class TestDiffRuns:
     def test_newly_passing_and_failing(self, tmp_path):
         a = _write_run(tmp_path, "a", [

@@ -126,6 +126,10 @@ def create_app(dataset: Dataset, api_key: str = "pk-local-eval", window_seconds:
 
     # --- clinic read API -------------------------------------------------------
 
+    @app.get("/eval/identity", dependencies=[Depends(_auth)])
+    def identity() -> dict[str, str]:
+        return {"service": "evaluator-clinic", "dataset_fingerprint": dataset.fingerprint}
+
     @app.get("/api/v1/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}

@@ -12,6 +12,7 @@ into it when the team key is available.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -51,6 +52,10 @@ class Dataset:
         self.specialties_by_id = {s["id"]: s for s in self.specialties}
         self.types_by_id = {t["id"]: t for t in self.appointment_types}
         self.plans_by_id = {p["id"]: p for p in self.plans}
+
+    @property
+    def fingerprint(self) -> str:
+        return hashlib.sha256(json.dumps(self.raw, sort_keys=True).encode()).hexdigest()
 
     @classmethod
     def load(cls, path: str | Path) -> Dataset:

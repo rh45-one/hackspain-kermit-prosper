@@ -54,6 +54,7 @@ from evaluator.profiles import (
     assert_laboratory_profile,
     request_refusals,
 )
+from evaluator.profiles.guard import inspect_profile
 from evaluator.tester import ChatOptions as TesterOptions
 from evaluator.tester import close_call_window, open_call_window, wait_for_actions
 
@@ -230,6 +231,7 @@ class ChatSession:
             "transport_error": evidence.error,
             "transcript_chars": audit.caller_chars if audit.available else None,
             "submissions": record.get("actions", []),
+            "submit_attempts": record.get("attempts", []),
             "turns": [turn.as_dict() for turn in self.turns],
             "rejected": [
                 attempt
@@ -385,6 +387,9 @@ def create_chat_router(manager: ChatSessionManager) -> APIRouter:
             assert_laboratory_profile(profile)
         except LaboratoryRefusal as exc:
             raise HTTPException(400, str(exc)) from None
+        identity = await inspect_profile(profile)
+        if not identity["ready"]:
+            raise HTTPException(409, identity["reason"])
         options = TesterOptions.from_profile(
             profile,
             call_id=body.get("call_id"),

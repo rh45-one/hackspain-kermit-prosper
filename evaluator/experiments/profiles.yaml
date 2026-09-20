@@ -94,8 +94,8 @@ profiles:
     engine: gemini_live
     version: lab-1
     endpoints:
-      ws_url: ws://127.0.0.1:17860/ws
-      text_url: http://127.0.0.1:17860
+      ws_url: ws://127.0.0.1:17862/ws
+      text_url: http://127.0.0.1:17862
       usage_url: null
     capabilities:
       text: true
@@ -117,20 +117,20 @@ profiles:
       gemini_api_key: GEMINI_API_KEY
     launch_env:
       VOICE_WS_HOST: 127.0.0.1
-      VOICE_WS_PORT: "17860"
-      PORT: "17860"
-      OPS_HTTP_PORT: "17861"
+      VOICE_WS_PORT: "17862"
+      PORT: "17862"
+      OPS_HTTP_PORT: "17863"
       TURNS_ADAPTER: "1"
       PROSPER_API_BASE_URL: http://127.0.0.1:18090
-      DATA_DIR: evaluator/experiments/results/agent-data
+      DATA_DIR: evaluator/experiments/results/agent-data-gemini
       VOICE_ENGINE: gemini_live
     laboratory:
-      voice_port: 17860
+      voice_port: 17862
       clinic_url: http://127.0.0.1:18090
       submit_key: pk-local-eval
-      data_dir: evaluator/experiments/results/agent-data
+      data_dir: evaluator/experiments/results/agent-data-gemini
       scenario: null
-      agent_audit_dir: evaluator/experiments/results/agent-data
+      agent_audit_dir: evaluator/experiments/results/agent-data-gemini
       tts: espeak-ng
       stt: null
       launch_hint: uv run --project backend python -m agent.serve, desde la raíz del repo y con este entorno

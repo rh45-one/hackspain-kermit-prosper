@@ -11,10 +11,12 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from evaluator.harness.agent_audit import agent_audit_dir_for
 from evaluator.harness.audio import ulaw_to_wav
 from evaluator.harness.wsclient import FRAME_BYTES, CallSession
-from evaluator.observer.backend_calls import load_backend_calls
+from evaluator.observer.backend_calls import load_backend_call
 from evaluator.profiles import ProfileCatalog, assert_laboratory_profile
+from evaluator.profiles.guard import inspect_profile
 from evaluator.tester import ChatOptions, close_call_window, open_call_window, wait_for_actions
 
 # The browser paces 20 ms mu-law packets, so the frame budget and the wall-clock
@@ -48,11 +50,27 @@ def create_live_router(catalog: ProfileCatalog, root: Path) -> APIRouter:
         call_id = f"mic-{uuid.uuid4().hex}"
         error = None
         timeline = []
+        identity = {}
+
+        def read_audit():
+            if not options or not options.agent_audit_dir:
+                return None
+            try:
+                directory = agent_audit_dir_for(call_id, options.agent_audit_dir)
+                path = directory / f"{call_id}.jsonl" if directory else None
+                return load_backend_call(path) if path and not path.is_symlink() else None
+            except OSError:
+                return None
+
         try:
             profile = catalog.get(profile_id)
             assert_laboratory_profile(profile)
             if not profile.endpoints.ws_url:
                 raise ValueError("Este perfil no declara un WebSocket de voz")
+            identity = await inspect_profile(profile)
+            if not identity["ready"]:
+                error = identity["reason"]
+                return
             options = ChatOptions.from_profile(profile, call_id=call_id)
             await open_call_window(options)
             opened = True
@@ -64,7 +82,18 @@ def create_live_router(catalog: ProfileCatalog, root: Path) -> APIRouter:
 
             session = CallSession(options.ws_url, call_id, event_sink=forward)
             await session.open()
-            await socket.send_json({"event": "ready", "call_id": call_id, "profile_id": profile_id})
+            await socket.send_json({"event": "ready", "call_id": call_id, "profile_id": profile_id, "identity": identity})
+
+            async def telemetry():
+                while True:
+                    await asyncio.sleep(1)
+                    audit = await asyncio.to_thread(read_audit)
+                    await socket.send_json({"event": "telemetry",
+                        "frames_sent": session.evidence.frames_sent,
+                        "frames_received": session.evidence.frames_received,
+                        "transcript_available": audit is not None,
+                        "caller_text": audit.caller_text if audit else "",
+                        "agent_text": audit.assistant_text if audit else ""})
 
             async def receive():
                 nonlocal error
@@ -88,7 +117,8 @@ def create_live_router(catalog: ProfileCatalog, root: Path) -> APIRouter:
                         error = PROTOCOL_ERROR
                         return
 
-            tasks = [asyncio.create_task(receive()), asyncio.create_task(session.wait_remote())]
+            tasks = [asyncio.create_task(receive()), asyncio.create_task(session.wait_remote()),
+                     asyncio.create_task(telemetry())]
             done, _ = await asyncio.wait(
                 tasks, timeout=MAX_CALL_SECONDS, return_when=asyncio.FIRST_COMPLETED
             )
@@ -124,14 +154,18 @@ def create_live_router(catalog: ProfileCatalog, root: Path) -> APIRouter:
                 turns = []
                 if options.agent_audit_dir:
                     with contextlib.suppress(OSError):
-                        audit = next((c for c in load_backend_calls(options.agent_audit_dir) if c.call_id == call_id), None)
+                        audit = await asyncio.to_thread(read_audit)
                         if audit:
                             turns = audit.transcript_events
                             timeline.extend(audit.timeline)
                 payload = {"call_id": call_id, "profile_id": profile_id, "started_at": started.isoformat(),
                            "ended_at": ended.isoformat(), "duration_s": (ended - started).total_seconds(),
                            "turns": turns, "timeline": timeline, "audio_files": audio_files,
-                           "submissions": record.get("actions", []), "transport_error": error,
+                           "submissions": record.get("actions", []),
+                           "submit_attempts": record.get("attempts", []), "transport_error": error,
+                           "identity": identity, "candidate_version": identity.get("version"),
+                           "frames_sent": session.evidence.frames_sent if session else 0,
+                           "frames_received": session.evidence.frames_received if session else 0,
                            "first_audio_ms": session.evidence.first_audio_ms if session else None,
                            "evidence": {"audio": "present" if audio_files else "absent",
                                         "transcript": "present" if turns else "absent",

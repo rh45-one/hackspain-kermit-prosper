@@ -582,6 +582,9 @@ class CandidateConfig(BaseModel):
     text_timeout_seconds: float = 120.0
     usage_url: str | None = None  # optional; GET {usage_url}/calls/{call_id} → {cost, usage}
     start_command: str | None = None  # optional; the runner waits for ws_url
+    start_cwd: str | None = None
+    engine: str | None = None
+    runtime_identity: dict[str, Any] = Field(default_factory=dict)
     env: dict[str, str] = Field(default_factory=dict)
     mode: Literal["correct", "mutate", "silent"] = "correct"  # double only
     port: int | None = None  # double only
@@ -641,6 +644,8 @@ class ExperimentConfig(BaseModel):
     reference_now: str | None = None  # default anchor for relative dates
     clinic_dataset: str
     clinic_port: int = 18090
+    clinic_mode: Literal["managed", "existing"] = "managed"
+    clinic_url: str | None = None
     submit_key: str = "pk-local-eval"  # X-Api-Key the local receiver expects
     repetitions: int = 1
     budget: dict[str, Any] = Field(default_factory=dict)  # plan §18 limits

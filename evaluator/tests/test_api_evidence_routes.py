@@ -17,6 +17,19 @@ from fastapi.testclient import TestClient
 from evaluator.api.app import create_app
 from evaluator.api.judge import KEY_ENV_VARS
 
+
+def test_browser_contracts():
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js es necesario para verificar la captura y los contratos de la consola")
+    result = subprocess.run([node, "--test", str(Path(__file__).with_name("web.test.cjs"))],
+                            capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 WAV = b"RIFF$\x00\x00\x00WAVEfmt "
 
 
@@ -67,6 +80,20 @@ def manual_row(client: TestClient, call_id: str) -> dict:
     client.post("/api/history/import")
     rows = client.get("/api/history/calls?origin=manual").json()["items"]
     return next(row for row in rows if row["call_id"] == call_id)
+
+
+def test_history_filters_and_paginates_before_enrichment(tmp_path):
+    for index in range(24):
+        manual_archive(tmp_path, f"synthetic-{index:02}", profile_id="cascade")
+    with TestClient(create_app(tmp_path)) as client:
+        page = client.get("/api/history/calls", params={"source": "tests", "page": 2, "page_size": 10}).json()
+        assert len(page["items"]) == 10
+        assert page["total"] == 24
+        assert page["next_page"] == 3
+        filtered = client.get("/api/history/calls", params={"search": "synthetic-23", "candidate_query": "CASCADE"}).json()
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["call_id"] == "synthetic-23"
+        assert client.get("/api/history/calls?page=0").status_code == 422
 
 
 def test_judge_route_rejects_unknown_open_and_empty_calls(tmp_path, monkeypatch):

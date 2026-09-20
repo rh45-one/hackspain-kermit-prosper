@@ -84,10 +84,9 @@ def _load_cases(run_dir: Path) -> dict[tuple[str, str, int], CaseResult]:
     path = run_dir / "cases.jsonl"
     if not path.exists():
         raise FileNotFoundError(f"{path} not found - is {run_dir} a run directory?")
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        c = CaseResult.model_validate_json(line)
+    from evaluator.report.side_by_side import load_cases
+
+    for c in load_cases(run_dir):
         cases[(c.candidate, c.scenario_id, c.repetition)] = c
     return cases
 
@@ -137,6 +136,7 @@ class RunDiff:
     # different runs): "did B's new configuration beat A's old one?"
     candidate_a: str | None = None
     candidate_b: str | None = None
+    warnings: list[dict[str, str]] = field(default_factory=list)
 
     def by_kind(self, kind: str) -> list[CaseDiff]:
         return [d for d in self.diffs if d.kind == kind]
@@ -157,6 +157,8 @@ class RunDiff:
             "only_in_b": len(self.only_in_b),
             "candidate_a": self.candidate_a,
             "candidate_b": self.candidate_b,
+            "warnings": self.warnings,
+            "comparable": bool(self.diffs) and not self.warnings,
         }
 
 
@@ -223,10 +225,36 @@ def diff_runs(
         label = f"{picked_a}→{picked_b}"
         cases_a = _pair_by_scenario(cases_a, picked_a, label)
         cases_b = _pair_by_scenario(cases_b, picked_b, label)
+    shared = set(cases_a) & set(cases_b)
+    warnings = []
+    ma, mb = _load_manifest(dir_a), _load_manifest(dir_b)
+    for key, code, label in (("dataset_fingerprint", "dataset_changed", "dataset"),
+                              ("rules_version", "rules_changed", "reglas")):
+        va, vb = ma.get(key), mb.get(key)
+        if key == "dataset_fingerprint" and (not va or not vb):
+            va, vb = ma.get("dataset_hash"), mb.get("dataset_hash")
+        if not va or not vb:
+            warnings.append({"code": "provenance_missing", "message": f"No se puede verificar que coincidan las {label}."})
+        elif va != vb:
+            warnings.append({"code": code, "message": f"Han cambiado las {label}; no atribuyas el delta solo al agente."})
+    if ma.get("reference_now") != mb.get("reference_now"):
+        warnings.append({"code": "clock_changed", "message": "Cambió el reloj de referencia; las fechas relativas no son comparables."})
+    sa = {item["id"]: item.get("sha256") for item in ma.get("scenarios", [])}
+    sb = {item["id"]: item.get("sha256") for item in mb.get("scenarios", [])}
+    for sid in sorted({key[1] for key in shared}):
+        if not sa.get(sid) or not sb.get(sid):
+            warnings.append({"code": "scenario_unverified", "message": f"Escenario sin hash verificable: {sid}."})
+        elif sa[sid] != sb[sid]:
+            warnings.append({"code": "scenario_changed", "message": f"Cambió el contenido del escenario {sid}."})
+    modes_a = {"text" if c.get("text_url") else "voice" for c in ma.get("candidates", []) if not candidate_a or c.get("name") == candidate_a}
+    modes_b = {"text" if c.get("text_url") else "voice" for c in mb.get("candidates", []) if not candidate_b or c.get("name") == candidate_b}
+    if modes_a and modes_b and modes_a != modes_b:
+        warnings.append({"code": "mode_changed", "message": "Las ejecuciones usan modalidades distintas: texto y voz no miden lo mismo."})
     result = RunDiff(
         run_a=str(dir_a),
         run_b=str(dir_b),
-        metrics=metric_deltas(cases_a, cases_b),
+        metrics=metric_deltas({k: cases_a[k] for k in shared}, {k: cases_b[k] for k in shared}),
+        warnings=warnings,
         candidate_a=candidate_a,
         candidate_b=candidate_b,
     )
@@ -290,6 +318,8 @@ def format_diff(result: RunDiff) -> str:
             "de estabilidad del informe (necesita repetitions > 1) y quédate con",
             "los escenarios que salen siempre incorrectos.",
         ]
+    for warning in result.warnings:
+        lines.append(f"AVISO: {warning['message']}")
     if result.metrics:
         lines.append("\nmétricas:")
         for row in result.metrics.values():

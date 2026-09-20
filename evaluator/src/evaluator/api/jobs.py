@@ -7,22 +7,27 @@ the runner's own ``finally`` block to close clinic and double processes.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
+from evaluator.clinic.dataset import Dataset
+from evaluator.harness.tts import provider_available
 from evaluator.profiles import (
     LaboratoryRefusal,
     ProfileCatalog,
     ProfileNotFound,
     assert_laboratory_profile,
 )
-from evaluator.runner.experiment import run_experiment
+from evaluator.profiles.guard import inspect_profile
+from evaluator.runner.experiment import run_experiment, verify_clinic
 
 TERMINAL = {"completed", "failed", "cancelled"}
 ACTIVE = {"pending", "preparing", "running", "cancelling"}
@@ -92,11 +97,13 @@ class JobStore:
             raise JobError("mode debe ser text o voice")
         if isinstance(repetitions, bool) or not isinstance(repetitions, int) or not 1 <= repetitions <= 10:
             raise JobError("repetitions debe estar entre 1 y 10")
+        if len(profiles) != len(set(profiles)) or len(scenarios) != len(set(scenarios)):
+            raise JobError("Los perfiles y escenarios no pueden repetirse en la selección")
         selected = []
         for profile_id in profiles:
             try:
                 profile = self.catalog.get(profile_id)
-                assert_laboratory_profile(profile)
+                assert_laboratory_profile(profile, probe_ports=bool(profile.start_command))
             except (ProfileNotFound, LaboratoryRefusal) as exc:
                 raise JobError(str(exc)) from None
             endpoint = profile.endpoints.text_url if mode == "text" else profile.endpoints.ws_url
@@ -104,6 +111,24 @@ class JobStore:
                 raise JobError(f"perfil {profile_id} no declara la modalidad {mode}")
             selected.append(profile)
         paths = [self._scenario_path(scenario_id) for scenario_id in scenarios]
+        endpoints = [p.endpoints.text_url if mode == "text" else p.endpoints.ws_url for p in selected]
+        if len(endpoints) != len(set(endpoints)):
+            raise JobError("Dos candidatos comparten endpoint. Arranca cada motor en un puerto separado")
+        bindings = {(p.laboratory.clinic_url, p.laboratory.submit_key, p.laboratory.tts if mode == "voice" else None) for p in selected}
+        if len(bindings) != 1:
+            raise JobError("Un experimento debe compartir clínica y TTS; separa los perfiles incompatibles")
+        first = selected[0].laboratory
+        if mode == "voice" and not provider_available(first.tts):
+            raise JobError("El TTS del perfil no está disponible. Instálalo antes de ejecutar voz")
+        try:
+            verify_clinic(first.clinic_url, Dataset.load(Path(__file__).parents[3] / "data/clinic_dataset.json"), first.submit_key)
+            for profile in selected:
+                if not profile.start_command:
+                    status = asyncio.run(inspect_profile(profile))
+                    if not status["ready"]:
+                        raise JobError(status["reason"])
+        except ValueError as exc:
+            raise JobError(str(exc)) from None
         job_id = f"job-{uuid.uuid4().hex[:12]}"
         job = {
             "id": job_id, "status": "pending", "created_at": _now(), "started_at": None, "ended_at": None,
@@ -113,6 +138,8 @@ class JobStore:
         }
         with self._lock:
             jobs = self._load()
+            if any(item["status"] in ACTIVE for item in jobs.values()):
+                raise JobError("Ya hay un experimento activo. Espera o cancélalo antes de crear otro")
             jobs[job_id] = job
             self._save(jobs)
         thread = threading.Thread(target=self._run, args=(job_id, selected, paths), name=job_id, daemon=False)
@@ -180,7 +207,9 @@ class JobStore:
         try:
             config = self._write_config(job_id, profiles, paths)
             self._set(job_id, status="running")
-            out = run_experiment(str(config), str(self.root), cancel_requested=lambda: self._cancelled(job_id))
+            out = run_experiment(str(config), str(self.root), cancel_requested=lambda: self._cancelled(job_id),
+                on_progress=lambda path, completed, total: self._set(job_id, run_id=path.name,
+                    progress={"completed": completed, "total": total}))
             manifest = _read_manifest(out)
             completed = int(manifest.get("completed_cases", 0))
             status = "cancelled" if manifest.get("status") == "cancelled" else "completed"
@@ -199,10 +228,18 @@ class JobStore:
                 "name": profile.id, "kind": "external", "version": profile.version,
                 "text_url": profile.endpoints.text_url if job["mode"] == "text" else None,
                 "ws_url": profile.endpoints.ws_url if job["mode"] == "voice" else None,
+                "usage_url": profile.endpoints.usage_url, "engine": profile.engine,
+                "start_command": profile.start_command,
+                "start_cwd": str(Path(__file__).resolve().parents[4]),
+                "env": {**profile.launch_env, "PROSPER_API_KEY": profile.laboratory.submit_key,
+                        "PROSPER_API_BASE_URL": profile.laboratory.clinic_url},
             })
         config = {
             "name": job_id, "clinic_dataset": str((Path(__file__).parents[3] / "data" / "clinic_dataset.json").resolve()),
-            "clinic_port": 18090, "submit_key": first.laboratory.submit_key,
+            "clinic_port": urlsplit(first.laboratory.clinic_url).port or 80,
+            "clinic_mode": "existing", "clinic_url": first.laboratory.clinic_url,
+            "tts_command": first.laboratory.tts if job["mode"] == "voice" else None,
+            "submit_key": first.laboratory.submit_key,
             "repetitions": job["repetitions"], "candidates": candidates,
             "scenarios": [str(path) for path in paths],
         }
