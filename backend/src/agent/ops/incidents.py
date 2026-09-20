@@ -121,10 +121,16 @@ async def list_incidents(
     org_id: str = DEFAULT_ORG_ID,
     _: None = Depends(_access),
 ) -> dict[str, Any]:
-    """La cola, y el recuento por urgencia para la cabecera."""
+    """La cola, y el recuento por urgencia para la cabecera.
+
+    Barre las bajas antes de contestar, así que una baja del catálogo aparece
+    en la lista sin que nadie la escriba. Es idempotente, así que mirar la
+    pantalla no crea filas.
+    """
     platform = accounts_store.store()
     if not platform.exists:
         return {"incidents": [], "open": 0, "by_urgency": {}}
+    await sweep_for_absences(org_id)
     rows = platform.list_incidents(org_id, status=status)
     open_rows = [r for r in rows if r.status != "closed"]
     counts: dict[str, int] = {}
@@ -135,6 +141,63 @@ async def list_incidents(
         "open": len(open_rows),
         "by_urgency": counts,
     }
+
+
+async def sweep_for_absences(org_id: str = DEFAULT_ORG_ID) -> int:
+    """Abre una incidencia por cada médico que el catálogo da de baja.
+
+    El grafo lleva desde el principio dibujando a los que están de baja
+    apagados, y eso era todo lo que pasaba: una caja gris. Un médico de baja
+    es una agenda sin cubrir, o sea exactamente una incidencia — y nadie la
+    abría hasta que un paciente llamaba y se la encontraba.
+
+    Idempotente por el resumen: se barre al arrancar y cada vez que alguien
+    mira la lista, y una baja que ya tiene su fila abierta no genera otra.
+    Sin esa comprobación, mirar la pantalla crearía incidencias, que es la
+    clase de bucle que llena una base de datos en una tarde.
+
+    Devuelve cuántas ha abierto. Nunca levanta: un catálogo frío o ilegible
+    significa cero, no un error.
+    """
+    try:
+        from agent.brain import deps
+
+        platform = accounts_store.store()
+        if not platform.exists:
+            return 0
+        cache = deps.try_catalogue_cache(org_id)
+        if cache is None or not getattr(cache, "warmed", False):
+            return 0
+
+        already = {
+            row.summary for row in platform.list_incidents(org_id) if row.status != "closed"
+        }
+        route = directory.route_for(org_id, "provider_on_leave")
+        opened = 0
+        for provider in (getattr(cache, "providers_by_id", {}) or {}).values():
+            away = getattr(provider, "on_leave_until", None) or getattr(provider, "leave", None)
+            if not away:
+                continue
+            specialty = getattr(provider, "specialty_name", "") or "su especialidad"
+            summary = f"{provider.name} está de baja y su agenda de {specialty} se queda sin cubrir"
+            if summary in already:
+                continue
+            platform.open_incident(
+                org_id,
+                Incident(
+                    id="",
+                    reason="provider_on_leave",
+                    summary=summary,
+                    assigned_to=(route.person_slug if route else ""),
+                    urgency=(route.urgency if route else "today"),
+                    source="catálogo",
+                    note="Abierta sola: el catálogo le da de baja.",
+                ),
+            )
+            opened += 1
+        return opened
+    except Exception:  # noqa: BLE001 - un barrido no puede tumbar el panel
+        return 0
 
 
 @router.get("/shifts")

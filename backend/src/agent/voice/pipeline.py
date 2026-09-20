@@ -12,6 +12,8 @@ agent.voice.twilio for the soxr evidence behind that constraint.
 """
 from __future__ import annotations
 
+import asyncio
+
 from typing import Any
 
 from loguru import logger
@@ -396,6 +398,26 @@ def build_worker(
         # task tree) performs the actual teardown, so no deadlock here.
         await worker.cancel()
 
+    async def _hangup_watch() -> None:
+        """Cuelga cuando el agente dice que ha terminado.
+
+        Sondeo y no un `Event` a propósito: el contexto es un dataclass que
+        cruza tres módulos y ya lo comparten el tap, las herramientas y el
+        serializador. Medio segundo de latencia al colgar no lo nota nadie, y
+        una primitiva de asyncio guardada en un dataclass compartido sí se
+        nota el día que alguien lo copia entre bucles de eventos.
+        """
+        try:
+            while not ctx.stopped:
+                if ctx.hangup_reason:
+                    await asyncio.sleep(ctx.hangup_after_seconds)
+                    if not ctx.stopped:
+                        await _end_call(ctx.hangup_reason)
+                    return
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:  # pragma: no cover - teardown normal
+            return
+
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport: Any, client: Any) -> None:
         ctx.audit("client_connected", {})
@@ -417,6 +439,8 @@ def build_worker(
             # spoken greeting) without touching the init system instruction.
             context.add_message({"role": "developer", "content": first_turn_context(ctx)})
             await worker.queue_frames([LLMRunFrame()])
+        # El vigilante vive lo que viva la llamada y se va con ella.
+        ctx.hangup_task = asyncio.create_task(_hangup_watch())
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport: Any, client: Any) -> None:

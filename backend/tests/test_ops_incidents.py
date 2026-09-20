@@ -154,3 +154,79 @@ def test_when_jev_abstains_the_configured_route_answers(accounts_db, monkeypatch
 def test_a_stranger_cannot_launch_incidents():
     with _client() as client:
         assert client.post("/ops/api/live/incidents/simulate").status_code in (401, 403)
+
+
+# ---- las que se abren solas -----------------------------------------------
+class _Provider:
+    def __init__(self, name: str, specialty: str, away: bool) -> None:
+        self.id = name.lower().replace(" ", "-")
+        self.name = name
+        self.specialty_name = specialty
+        self.on_leave_until = "2026-09-30" if away else None
+
+
+class _Cache:
+    warmed = True
+
+    def __init__(self, *providers: _Provider) -> None:
+        self.providers_by_id = {p.id: p for p in providers}
+
+
+def test_a_doctor_on_leave_opens_its_own_incident(accounts_db, monkeypatch):
+    """El grafo los dibujaba apagados y eso era todo lo que pasaba.
+
+    Un médico de baja es una agenda sin cubrir, o sea exactamente una
+    incidencia — y nadie la abría hasta que un paciente llamaba y se la
+    encontraba.
+    """
+    import asyncio
+
+    from agent.brain import deps
+    from agent.ops.incidents import sweep_for_absences
+
+    monkeypatch.setattr(
+        deps,
+        "try_catalogue_cache",
+        lambda org_id=None: _Cache(
+            _Provider("Dr. Pablo Requena", "Medicina general", True),
+            _Provider("Dra. Carmen Ortiz", "Medicina general", False),
+        ),
+    )
+
+    assert asyncio.run(sweep_for_absences(DEFAULT_ORG_ID)) == 1
+
+    rows = Store(accounts_db).list_incidents(DEFAULT_ORG_ID)
+    assert len(rows) == 1
+    assert "Pablo Requena" in rows[0].summary
+    assert rows[0].source == "catálogo"
+    assert rows[0].assigned_to == "german"
+
+
+def test_looking_at_the_screen_does_not_create_rows(accounts_db, monkeypatch):
+    """Sin esto, mirar la pantalla llenaría la base en una tarde."""
+    import asyncio
+
+    from agent.brain import deps
+    from agent.ops.incidents import sweep_for_absences
+
+    monkeypatch.setattr(
+        deps,
+        "try_catalogue_cache",
+        lambda org_id=None: _Cache(_Provider("Dr. Pablo Requena", "Medicina general", True)),
+    )
+
+    assert asyncio.run(sweep_for_absences(DEFAULT_ORG_ID)) == 1
+    assert asyncio.run(sweep_for_absences(DEFAULT_ORG_ID)) == 0
+    assert asyncio.run(sweep_for_absences(DEFAULT_ORG_ID)) == 0
+    assert len(Store(accounts_db).list_incidents(DEFAULT_ORG_ID)) == 1
+
+
+def test_a_cold_catalogue_opens_nothing(accounts_db, monkeypatch):
+    import asyncio
+
+    from agent.brain import deps
+    from agent.ops.incidents import sweep_for_absences
+
+    monkeypatch.setattr(deps, "try_catalogue_cache", lambda org_id=None: None)
+
+    assert asyncio.run(sweep_for_absences(DEFAULT_ORG_ID)) == 0

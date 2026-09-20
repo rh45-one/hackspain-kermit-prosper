@@ -47,6 +47,14 @@ class CallContext:
     phone_hint_match: dict[str, Any] | None = None
     patient_candidates: list[dict[str, Any]] = field(default_factory=list)
     confirmed_patient: dict[str, Any] | None = None
+    # Cuando el agente ha terminado lo que venía a hacer y quiere colgar.
+    # Lo pide una herramienta y lo ejecuta la tubería: una herramienta no
+    # puede cerrar el socket por el que está contestando.
+    hangup_after_seconds: float = 0.0
+    hangup_reason: str = ""
+    # La tarea que vigila lo anterior. Guardada para que no la recoja el
+    # recolector de basura a mitad de llamada.
+    hangup_task: Any = None
 
     # Latest finalized caller utterance (server-owned; the only text Jev's
     # assess_current_turn is allowed to read). Written by add_transcript.
@@ -133,6 +141,24 @@ class CallContext:
             return False
 
     # ---- audit -----------------------------------------------------------
+    def request_hangup(self, reason: str, after_seconds: float = 6.0) -> None:
+        """Pide colgar cuando el agente ya ha terminado.
+
+        Con margen, y el margen es el punto. Colgar en cuanto la herramienta
+        contesta corta el "vale, perfecto, pues te lo mando por escrito" a
+        media palabra, y una llamada que se corta sola es peor que una que
+        dura seis segundos de más. Seis segundos es una frase de despedida
+        dicha sin prisa.
+
+        Quien cuelga de verdad es la tubería: una herramienta está
+        contestando por el mismo socket que tendría que cerrar.
+        """
+        if self.hangup_reason:
+            return
+        self.hangup_reason = reason
+        self.hangup_after_seconds = max(0.0, float(after_seconds))
+        self.audit("hangup_requested", {"reason": reason, "after_s": self.hangup_after_seconds})
+
     def audit(self, event: str, data: dict[str, Any] | None = None) -> None:
         if self._audit_path is None:
             return

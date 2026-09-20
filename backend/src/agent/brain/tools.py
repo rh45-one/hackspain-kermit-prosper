@@ -1660,12 +1660,30 @@ class ToolBox:
         # No booking, no submission. This call was never about the diary; it
         # was about a person, and the record of what they said is the whole
         # output. Saying it back to them is the model's job, not this tool's.
+        # Y se cuelga. Esta llamada tenía un solo objetivo —saber si puede
+        # cubrirlo— y ya está contestado: seguir al teléfono con un compañero
+        # que ya te ha dicho lo que ibas a preguntarle es cómo se consigue
+        # que la próxima vez no lo coja.
+        #
+        # Con margen para despedirse. El margen depende de la respuesta: un
+        # "sí" hay que repetírselo —día, hora y sede— y un "no" se agradece y
+        # se deja, que insistir es exactamente lo que no se hace.
+        self.ctx.request_hangup(
+            f"cover_answered_{answer}", after_seconds=10.0 if answer == "yes" else 6.0
+        )
+
         await params.result_callback(
             {
                 "written_down": True,
                 "can_cover": answer,
                 "incident_closed": closed,
                 "shift_recorded": booked,
+                "now_say_goodbye": (
+                    "Repítele el día, la hora y la sede, dile que se lo mandas por escrito, "
+                    "despídete y cuelga."
+                    if answer == "yes"
+                    else "Dale las gracias, dile que buscáis a otro, despídete y cuelga."
+                ),
             }
         )
 
