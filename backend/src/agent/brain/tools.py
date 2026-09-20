@@ -1620,6 +1620,7 @@ class ToolBox:
         can_cover: str,
         when_to_call_back: str | None = None,
         note: str | None = None,
+        covers_when: str | None = None,
     ) -> None:
         """Write down what the colleague answered about covering the gap.
 
@@ -1627,6 +1628,8 @@ class ToolBox:
             can_cover: One of 'yes', 'no' or 'will_check'.
             when_to_call_back: When they asked to be rung again, in their words, if they said so.
             note: Anything they added that the clinic needs to know, in their words.
+            covers_when: If they said yes, the day and hours they agreed to, in their own words
+                ("el martes por la mañana", "de nueve a dos"). Leave empty if it was not said.
         """
         answer = str(can_cover).strip().lower()
         if answer not in {"yes", "no", "will_check"}:
@@ -1652,13 +1655,67 @@ class ToolBox:
         # abierto como si nadie hubiera llamado. Quien lo mirara volvería a
         # llamarle mañana por algo que ya había contestado.
         closed = self._settle_incident(brief, answer, when_to_call_back, note)
+        booked = self._write_the_shift_down(brief, answer, covers_when, note)
 
         # No booking, no submission. This call was never about the diary; it
         # was about a person, and the record of what they said is the whole
         # output. Saying it back to them is the model's job, not this tool's.
         await params.result_callback(
-            {"written_down": True, "can_cover": answer, "incident_closed": closed}
+            {
+                "written_down": True,
+                "can_cover": answer,
+                "incident_closed": closed,
+                "shift_recorded": booked,
+            }
         )
+
+    def _write_the_shift_down(
+        self,
+        brief: dict[str, Any],
+        answer: str,
+        covers_when: str | None,
+        note: str | None,
+    ) -> bool:
+        """Un "sí" deja el turno apuntado, con nombre y día.
+
+        La incidencia cerrada dice que el hueco está resuelto y no dice quién
+        está el martes por la mañana. Eso es lo que hay que poder mirar el
+        lunes, y se quedaba dentro de la nota de una fila cerrada — o sea, en
+        ningún sitio.
+
+        El "cuándo" son las palabras con las que se acordó, y si no se dijo
+        nada, el hueco que el catálogo ya sabía que estaba sin cubrir. Lo que
+        no se hace es inventarse una hora: un turno con una hora que nadie ha
+        dicho es peor que un turno sin hora.
+        """
+        if answer != "yes":
+            return False
+        try:
+            from agent.accounts import store as accounts_store
+            from agent.accounts.store import CoverShift
+            from agent.orgs import normalize_org_id
+
+            platform = accounts_store.store()
+            if not platform.exists:
+                return False
+            platform.record_cover_shift(
+                normalize_org_id(getattr(self.ctx, "org_id", "") or ""),
+                CoverShift(
+                    id="",
+                    person_slug=str(brief.get("person_slug") or ""),
+                    person_name=str(brief.get("who") or ""),
+                    covers_when=str(covers_when or brief.get("gap") or ""),
+                    site=str(brief.get("site") or ""),
+                    instead_of=str(brief.get("missing") or brief.get("stands_in_for") or ""),
+                    reason=str(brief.get("reason") or ""),
+                    incident_id=str(brief.get("incident") or ""),
+                    call_id=str(getattr(self.ctx, "call_id", "") or ""),
+                    note=str(note or ""),
+                ),
+            )
+            return True
+        except Exception:  # noqa: BLE001 - nunca por delante del final de una llamada
+            return False
 
     def _settle_incident(
         self,

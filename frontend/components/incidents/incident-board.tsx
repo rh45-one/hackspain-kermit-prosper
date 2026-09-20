@@ -45,6 +45,16 @@ const URGENCY: Record<string, { word: string; dot: string; rank: number }> = {
   queue: { word: "En cola", dot: "bg-steel/60", rank: 2 },
 };
 
+type Shift = {
+  id: string;
+  person_name: string;
+  covers_when: string;
+  site: string;
+  instead_of: string;
+  note: string;
+  created_at: string;
+};
+
 const POLL_MS = 4000;
 
 export function IncidentBoard({ callBase }: { callBase: string }) {
@@ -54,6 +64,7 @@ export function IncidentBoard({ callBase }: { callBase: string }) {
   const [busy, setBusy] = useState(false);
   const [auto, setAuto] = useState(false);
   const [lastDecision, setLastDecision] = useState<string>("");
+  const [shifts, setShifts] = useState<Shift[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +77,12 @@ export function IncidentBoard({ callBase }: { callBase: string }) {
       setRows(body.incidents ?? []);
       setOpen(body.open ?? 0);
       setError("");
+      // Los turnos van en la misma vuelta: si alguien acaba de decir que sí
+      // por teléfono, la fila cambia de estado y el turno aparece a la vez.
+      const covered = await fetch("/api/live/shifts", { cache: "no-store" });
+      if (covered.ok) {
+        setShifts(((await covered.json()) as { shifts?: Shift[] }).shifts ?? []);
+      }
     } catch {
       setError("No se puede hablar con el agente.");
     }
@@ -257,6 +274,49 @@ export function IncidentBoard({ callBase }: { callBase: string }) {
           );
         })}
       </ul>
+
+      {shifts.length > 0 ? (
+        <section className="mt-10">
+          <h2 className="mb-1 font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
+            Turnos cubiertos · {shifts.length}
+          </h2>
+          <p className="mb-3 text-[13px] text-steel">
+            Lo que alguien dijo por teléfono que cubriría. Una incidencia cerrada dice que el
+            hueco está resuelto; esto dice quién está.
+          </p>
+          <ul className="grid gap-2">
+            {shifts.slice(0, 10).map((shift) => (
+              <li
+                key={shift.id}
+                className="rounded-xl border border-mist bg-canvas-white px-4 py-3"
+              >
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                  <span className="font-heading text-[15px] text-graphite">
+                    {shift.person_name}
+                  </span>
+                  <span className="text-[14px] text-graphite">
+                    cubre {shift.covers_when || "el hueco"}
+                  </span>
+                  {shift.site ? (
+                    <span className="text-[13px] text-steel">en {shift.site}</span>
+                  ) : null}
+                  {shift.instead_of ? (
+                    <span className="text-[13px] text-quiet">
+                      en lugar de {shift.instead_of}
+                    </span>
+                  ) : null}
+                  <span className="ml-auto font-mono text-[11px] tabular-nums text-quiet">
+                    {shift.created_at.slice(11, 16)}
+                  </span>
+                </div>
+                {shift.note ? (
+                  <p className="mt-1 text-[12.5px] text-steel">{shift.note}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {done.length > 0 ? (
         <section className="mt-10">

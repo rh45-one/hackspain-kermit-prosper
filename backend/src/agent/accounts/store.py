@@ -90,6 +90,30 @@ def _incident_row(row: Any) -> Incident:
 
 
 @dataclass(frozen=True)
+class CoverShift:
+    """Un turno que alguien se ha comprometido a cubrir, por teléfono.
+
+    No es una cita. Una cita es de un paciente y vive en la API de Prosper;
+    esto es de la clínica y de su gente. `covers_when` es texto y no una
+    fecha a propósito: lo que se dice por teléfono es "el martes por la
+    mañana", y convertirlo aquí en una hora sería inventarse una que nadie
+    ha dicho.
+    """
+
+    id: str
+    person_slug: str
+    person_name: str = ""
+    covers_when: str = ""
+    site: str = ""
+    instead_of: str = ""
+    reason: str = ""
+    incident_id: str = ""
+    call_id: str = ""
+    note: str = ""
+    created_at: str = ""
+
+
+@dataclass(frozen=True)
 class Incident:
     """Algo que ha ido mal, mientras va mal.
 
@@ -590,6 +614,68 @@ class Store:
                 (normalize_org_id(org_id), incident_id),
             ).fetchone()
         return _incident_row(row) if row is not None else None
+
+    # ---- turnos cubiertos ------------------------------------------------
+    def record_cover_shift(self, org_id: str, shift: CoverShift) -> CoverShift:
+        """Apunta que alguien cubre un turno. Nunca reemplaza: es un registro."""
+        row = CoverShift(
+            id=shift.id or f"cov-{uuid.uuid4().hex[:12]}",
+            person_slug=shift.person_slug,
+            person_name=shift.person_name,
+            covers_when=shift.covers_when,
+            site=shift.site,
+            instead_of=shift.instead_of,
+            reason=shift.reason,
+            incident_id=shift.incident_id,
+            call_id=shift.call_id,
+            note=shift.note,
+            created_at=now_iso(),
+        )
+        with connect(self.path) as db:
+            db.execute(
+                """INSERT INTO cover_shifts (id, org_id, person_slug, person_name,
+                                             covers_when, site, instead_of, reason,
+                                             incident_id, call_id, note, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row.id,
+                    normalize_org_id(org_id),
+                    row.person_slug,
+                    row.person_name,
+                    row.covers_when,
+                    row.site,
+                    row.instead_of,
+                    row.reason,
+                    row.incident_id,
+                    row.call_id,
+                    row.note,
+                    row.created_at,
+                ),
+            )
+        return row
+
+    def list_cover_shifts(self, org_id: str, *, limit: int = 100) -> list[CoverShift]:
+        with connect(self.path) as db:
+            rows = db.execute(
+                "SELECT * FROM cover_shifts WHERE org_id = ? ORDER BY created_at DESC LIMIT ?",
+                (normalize_org_id(org_id), max(1, min(int(limit), 500))),
+            ).fetchall()
+        return [
+            CoverShift(
+                id=r["id"],
+                person_slug=r["person_slug"],
+                person_name=r["person_name"],
+                covers_when=r["covers_when"],
+                site=r["site"],
+                instead_of=r["instead_of"],
+                reason=r["reason"],
+                incident_id=r["incident_id"],
+                call_id=r["call_id"],
+                note=r["note"],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
 
     def reassign_incident(self, org_id: str, incident_id: str, slug: str) -> bool:
         """Pasa una incidencia a otra persona, sin tocar su estado ni su nota."""

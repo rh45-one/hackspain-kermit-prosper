@@ -409,3 +409,48 @@ def test_a_call_with_no_incident_behind_it_settles_nothing(accounts_db):
     box = ToolBox(ctx, _settings())
 
     assert box._settle_incident({"who": "Andrés"}, "yes", None, None) is False
+
+
+def test_a_yes_also_writes_the_shift_down(accounts_db):
+    """La incidencia cerrada no dice quién está el martes por la mañana."""
+    from agent.accounts import directory
+    from agent.accounts.store import Incident, Person, Route, Store
+    from agent.brain.tools import ToolBox
+    from agent.voice.context import CallContext
+
+    shop = Store(accounts_db)
+    shop.upsert_person(DEFAULT_ORG_ID, Person(slug="hugo", name="Hugo Rodríguez", role="ORL"))
+    shop.upsert_person(
+        DEFAULT_ORG_ID, Person(slug="andres", name="Andrés Vila", role="ORL", covers_for="hugo")
+    )
+    shop.upsert_route(
+        DEFAULT_ORG_ID, Route(reason="provider_on_leave", person_slug="andres", urgency="today")
+    )
+    opened = shop.open_incident(
+        DEFAULT_ORG_ID, Incident(id="", reason="provider_on_leave", assigned_to="andres")
+    )
+    brief = dict(directory.cover_brief(DEFAULT_ORG_ID, "provider_on_leave", incident=opened.id))
+
+    ctx = CallContext(org_id=DEFAULT_ORG_ID)
+    ctx.cover_brief = brief
+    box = ToolBox(ctx, _settings())
+    box._write_the_shift_down(brief, "yes", "el martes de nueve a dos", None)
+
+    shifts = shop.list_cover_shifts(DEFAULT_ORG_ID)
+    assert len(shifts) == 1
+    assert shifts[0].person_name == "Andrés Vila"
+    assert shifts[0].covers_when == "el martes de nueve a dos"
+    assert shifts[0].instead_of == "Hugo Rodríguez"
+    assert shifts[0].incident_id == opened.id
+
+
+def test_only_a_yes_puts_anybody_on_a_shift(accounts_db):
+    """Un "lo miro" no es alguien en el mostrador el martes."""
+    from agent.accounts.store import Store
+    from agent.brain.tools import ToolBox
+    from agent.voice.context import CallContext
+
+    box = ToolBox(CallContext(org_id=DEFAULT_ORG_ID), _settings())
+    for answer in ("no", "will_check"):
+        assert box._write_the_shift_down({"who": "Andrés"}, answer, "el martes", None) is False
+    assert Store(accounts_db).list_cover_shifts(DEFAULT_ORG_ID) == []
