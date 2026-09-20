@@ -1,5 +1,10 @@
 # evaluator — evaluador local del agente Prosper
 
+El juez de calidad usa por defecto el endpoint OpenAI-compatible de Helmcode.
+Configura `HELMCODE_API_KEY` (o `EVALUATOR_JUDGE_API_KEY`), y opcionalmente
+`EVALUATOR_JUDGE_MODEL`/`EVALUATOR_JUDGE_BASE_URL`. Las notas son estimaciones
+locales ligadas a evidencia, no puntuaciones oficiales de Prosper.
+
 Evaluador, tester y benchmark independiente para el agente de recepción de
 Clínica Arenal (HackSpain 2026, track Prosper). El agente es un sistema
 externo bajo prueba: este paquete controla las entradas, los datos y el

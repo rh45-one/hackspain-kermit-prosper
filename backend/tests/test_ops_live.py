@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from agent.accounts.store import reset_store_cache
 from agent.config import Settings
 from agent.ops import auth, console, live
+from agent.ops import evaluator as evaluator_export
 
 TOKEN = "s3cret"
 HEADERS = {"x-ops-token": TOKEN}
@@ -46,6 +47,7 @@ def calls_dir(tmp_path, monkeypatch):
     directory = Path(config.calls_dir)
     directory.mkdir(parents=True)
     monkeypatch.setattr(live, "settings", lambda: config)
+    monkeypatch.setattr(evaluator_export, "settings", lambda: config)
     monkeypatch.setattr(console, "settings", lambda: config)
     # The accounts layer answers "is anybody signed in" on every request, and
     # it must answer it about this throwaway DATA_DIR and not about whatever
@@ -79,6 +81,16 @@ def test_the_live_routes_sit_behind_the_same_door(calls_dir, client):
     assert client.get("/ops/api/live/calls").status_code == 401
     assert client.get("/ops/api/live/calls/c1").status_code == 401
     assert client.get("/ops/api/live/calls", headers=HEADERS).status_code == 200
+
+
+def test_evaluator_export_contains_only_completed_raw_traces(calls_dir, client):
+    write_trace(calls_dir, "done", [say("caller", "hola"), ("call_ended", {"elapsed_s": 3})])
+    write_trace(calls_dir, "open", [say("caller", "sigo aquí")])
+    assert client.get("/ops/api/evaluator/calls").status_code == 401
+    payload = client.get("/ops/api/evaluator/calls", headers=HEADERS).json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["call_id"] == "done"
+    assert payload["items"][0]["records"][-1]["event"] == "call_ended"
 
 
 # ---- redaction -----------------------------------------------------------

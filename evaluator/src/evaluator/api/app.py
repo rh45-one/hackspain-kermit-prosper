@@ -21,6 +21,8 @@ Four rules:
 from __future__ import annotations
 
 import json
+import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -28,13 +30,14 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
-from evaluator.api.analytics import call_metrics, dashboard
+from evaluator.api.analytics import call_incidents, call_metrics, dashboard
 from evaluator.api.chat import ChatSessionManager, create_chat_router
 from evaluator.api.history import HistoryStore
 from evaluator.api.history import summary as history_summary
 from evaluator.api.jobs import JobError, JobStore
 from evaluator.api.judge import Judge, JudgeError
 from evaluator.api.live import create_live_router
+from evaluator.api.production import ProductionSource, ProductionSyncError
 from evaluator.api.redact import redact_secrets, redact_text
 from evaluator.models import CaseResult
 from evaluator.profiles import ProfileCatalog
@@ -157,6 +160,8 @@ def create_app(
     profiles: ProfileCatalog | None = None,
     scenario_root: Path | str | None = None,
     audit_root: Path | str | None = None,
+    production_url: str | None = None,
+    production_token: str | None = None,
 ) -> FastAPI:
     root = Path(results_root)
     web = Path(web_dir) if web_dir else None
@@ -165,28 +170,65 @@ def create_app(
     history = HistoryStore(root)
     judge = Judge(root)
     audit = Path(audit_root) if audit_root else None
+    production = ProductionSource(
+        production_url or os.environ.get("EVALUATOR_PRODUCTION_URL", "https://prosper-clinicreflow.fly.dev"),
+        production_token if production_token is not None else os.environ.get("EVALUATOR_PRODUCTION_TOKEN", ""),
+    )
+    production_state: dict[str, Any] = {
+        "configured": production.configured,
+        "available": False,
+        "last_sync_at": None,
+        "last_error": None,
+        "calls": 0,
+        "monotonic": 0.0,
+    }
     scenarios = Path(scenario_root) if scenario_root else Path(__file__).parents[3] / "scenarios"
     jobs = JobStore(root, catalog, scenarios)
     app = FastAPI(title="Pronto evaluator - developer console", docs_url="/api/docs")
     app.include_router(create_chat_router(sessions))
     app.include_router(create_live_router(catalog, root))
 
-    def refresh_history():
+    def sync_production(*, force: bool = False) -> dict[str, Any]:
+        if not production.configured:
+            return production_state
+        if not force and time.monotonic() - production_state["monotonic"] < 5:
+            return production_state
+        production_state["monotonic"] = time.monotonic()
+        try:
+            exported = production.fetch()
+            history.import_production(exported)
+            production_state.update({
+                "available": True,
+                "last_sync_at": datetime.now(UTC).isoformat(),
+                "last_error": None,
+                "calls": len(exported),
+            })
+        except ProductionSyncError as exc:
+            production_state.update({"available": False, "last_error": str(exc)})
+        return production_state
+
+    def refresh_history(*, force_production: bool = False):
         history.import_runs()
         if audit:
             history.import_backend_audits(audit)
+        sync_production(force=force_production)
 
     @app.get("/api/analytics")
-    def analytics(origin: str = "real", candidate: str | None = None,
+    def analytics(origin: str | None = "real", source: str | None = None, candidate: str | None = None,
                   from_: str | None = Query(None, alias="from"), to: str | None = None):
         refresh_history()
-        rows = history.calls({"origin": origin, "candidate": candidate, "from": from_, "to": to})
+        rows = history.calls({"origin": origin, "source": source, "candidate": candidate, "from": from_, "to": to})
         for row in rows:
             row["judgment"] = judge.cached(row)
         result = dashboard(rows)
-        result["source"] = {"configured": audit is not None,
-                            "available": bool(audit and audit.is_dir()),
-                            "origin": origin, "updated_at": datetime.now(UTC).isoformat()}
+        local_available = bool(audit and audit.is_dir())
+        result["source"] = {
+            "configured": local_available or production.configured,
+            "available": local_available or production_state["available"],
+            "origin": origin,
+            "updated_at": production_state["last_sync_at"] or datetime.now(UTC).isoformat(),
+            "production": {key: value for key, value in production_state.items() if key != "monotonic"},
+        }
         result["judge"] = judge.status()
         return result
 
@@ -203,6 +245,27 @@ def create_app(
             return await judge.evaluate(row)
         except JudgeError as exc:
             raise HTTPException(422, str(exc)) from None
+
+    @app.post("/api/history/judge-pending")
+    async def judge_pending(body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Evaluate a bounded batch of completed calls without prior reviews."""
+        body = body or {}
+        if set(body) - {"source", "limit"}:
+            raise HTTPException(400, "campos desconocidos en la evaluación")
+        limit = body.get("limit", 20)
+        if not isinstance(limit, int) or not 1 <= limit <= 50:
+            raise HTTPException(422, "limit debe estar entre 1 y 50")
+        refresh_history(force_production=True)
+        rows = history.calls({"source": body.get("source")})
+        pending = [row for row in rows if row.get("ended") and row.get("transcript_events") and not judge.cached(row)][:limit]
+        evaluated, failed = 0, []
+        for row in pending:
+            try:
+                await judge.evaluate(row)
+                evaluated += 1
+            except JudgeError as exc:
+                failed.append({"call_id": row.get("call_id"), "error": str(exc)})
+        return {"selected": len(pending), "evaluated": evaluated, "failed": failed}
 
     @app.get("/api/history/calls/{record_id}/audio/{stream}")
     def history_audio(record_id: str, stream: str):
@@ -248,11 +311,16 @@ def create_app(
             raise HTTPException(400, "campos desconocidos en la importación")
         if body and body.get("source", "runs") != "runs":
             raise HTTPException(400, "la única fuente permitida es runs")
-        return history.import_runs()
+        result = history.import_runs()
+        if audit:
+            history.import_backend_audits(audit)
+        sync_production(force=True)
+        return {**result, "production_calls": production_state["calls"]}
 
     @app.get("/api/history/calls")
     def history_calls(
         origin: str | None = None,
+        source: str | None = None,
         candidate: str | None = None,
         version: str | None = None,
         verdict: str | None = None,
@@ -266,16 +334,16 @@ def create_app(
         if page < 1 or not 1 <= page_size <= 100:
             raise HTTPException(422, "page debe ser >= 1 y page_size estar entre 1 y 100")
         filters = {
-            "origin": origin, "candidate": candidate, "candidate_version": version,
+            "origin": origin, "source": source, "candidate": candidate, "candidate_version": version,
             "verdict": verdict, "scenario_id": scenario_id, "from": from_, "to": to,
             "include_doubles": include_doubles,
         }
-        if audit:
-            history.import_backend_audits(audit)
+        refresh_history()
         rows = history.calls(filters)
         for row in rows:
             row["judgment"] = judge.cached(row)
             row["metrics"] = call_metrics(row)
+            row["incidents"] = call_incidents(row)
         start = (page - 1) * page_size
         return {
             "items": redact_secrets(rows[start : start + page_size]), "page": page, "page_size": page_size,
@@ -284,13 +352,13 @@ def create_app(
 
     @app.get("/api/history/calls/{record_id}")
     def history_call(record_id: str) -> dict[str, Any]:
-        if audit:
-            history.import_backend_audits(audit)
+        refresh_history()
         row = history.call(record_id)
         if row is None:
             raise HTTPException(404, "llamada desconocida")
         row["judgment"] = judge.cached(row)
         row["metrics"] = call_metrics(row)
+        row["incidents"] = call_incidents(row)
         return redact_secrets(row)
 
     @app.get("/api/history/summary")
@@ -304,8 +372,7 @@ def create_app(
         to: str | None = None,
         include_doubles: bool = False,
     ) -> dict[str, Any]:
-        if audit:
-            history.import_backend_audits(audit)
+        refresh_history()
         rows = history.calls({
             "origin": origin, "candidate": candidate, "candidate_version": version,
             "verdict": verdict, "scenario_id": scenario_id, "from": from_, "to": to,

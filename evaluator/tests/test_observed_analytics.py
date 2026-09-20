@@ -3,9 +3,10 @@ import json
 
 from fastapi.testclient import TestClient
 
-from evaluator.api.analytics import aggregate, call_metrics
+from evaluator.api.analytics import aggregate, call_incidents, call_metrics
 from evaluator.api.app import create_app
 from evaluator.api.history import HistoryStore
+from evaluator.api.production import ProductionSource
 from evaluator.observer.backend_calls import load_backend_calls
 from evaluator.observer.run import observe
 
@@ -71,6 +72,15 @@ def test_recovery_requires_correlated_audio_evidence():
     assert metrics["recovery_observed"] == 2
 
 
+def test_incidents_distinguish_failures_from_telemetry_gaps():
+    broken = {"ended": True, "transcript_events": [{"role": "caller", "text": "hola"}],
+              "timeline": [{"event": "barge_in_reset", "data": {"resets": 3}}],
+              "errors": ["submission refused"]}
+    incidents = call_incidents(broken)
+    assert {item["code"] for item in incidents} >= {"agent_silent", "submission_failed", "recovery_unknown"}
+    assert next(item for item in incidents if item["code"] == "recovery_unknown")["severity"] == "telemetry"
+
+
 def test_observer_snapshots_do_not_multiply_real_calls(tmp_path):
     root = audit(tmp_path)
     results = tmp_path / "results"
@@ -96,3 +106,19 @@ def test_nan_and_negative_values_not_measurements():
     result = aggregate([{"turn_latencies_ms": [None, -5, float("nan"), 0, 1000]}])
     assert result["response_n"] == 2
     assert result["response_p50_ms"] == 500
+
+
+def test_production_calls_sync_on_analytics_refresh(tmp_path, monkeypatch):
+    exported = [{"call_id": "prod-1", "records": [
+        {"ts": "2026-09-20T10:00:00Z", "event": "engine_selected", "data": {"engine": "gemini_live", "model": "live-model"}},
+        {"ts": "2026-09-20T10:00:01Z", "event": "transcript", "data": {"role": "caller", "text": "hola"}},
+        {"ts": "2026-09-20T10:00:03Z", "event": "call_ended", "data": {"elapsed_s": 3}},
+    ]}]
+    monkeypatch.setattr(ProductionSource, "fetch", lambda self: exported)
+    with TestClient(create_app(tmp_path / "results", production_token="token")) as client:
+        analytics = client.get("/api/analytics").json()
+        assert analytics["summary"]["calls"] == 1
+        assert analytics["source"]["production"]["available"] is True
+        rows = client.get("/api/history/calls", params={"origin": "real"}).json()
+        assert rows["items"][0]["call_id"] == "prod-1"
+        assert rows["items"][0]["source"] == "production"

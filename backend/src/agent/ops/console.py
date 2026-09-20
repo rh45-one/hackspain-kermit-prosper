@@ -279,14 +279,16 @@ async def reflow(_: None = Depends(require_ops_access)) -> list[dict[str, object
 from agent.ops.agent_config import router as agent_config_router
 from agent.ops.auth import router as auth_router
 from agent.ops.cover import router as cover_router
-from agent.ops.incidents import router as incidents_router
-from agent.ops.triage import router as triage_router
 from agent.ops.directory import router as directory_router
+from agent.ops.evaluator import router as evaluator_router
 from agent.ops.frontdesk import router as frontdesk_router
 from agent.ops.graph import router as graph_router
+from agent.ops.incidents import router as incidents_router
 from agent.ops.live import router as live_router
+from agent.ops.triage import router as triage_router
 
 app.include_router(live_router)
+app.include_router(evaluator_router)
 # The operator panel a teammate built in frontend/ has been calling these
 # since it landed, and they did not exist: /calls, /patients, /calendar and
 # /directory have all been answering 404. The router comes from PR #2; the

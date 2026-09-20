@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from evaluator.models import CaseResult
-from evaluator.observer.backend_calls import load_backend_calls
+from evaluator.observer.backend_calls import load_backend_calls, load_backend_records
 from evaluator.observer.run import _real_call_row
 from evaluator.report.side_by_side import load_cases
 
@@ -116,7 +116,7 @@ class HistoryStore:
         calls = {
             key: value for key, value in calls.items()
             if value.get("origin") == "manual"
-            or value.get("run_id") == "live-backend"
+            or value.get("run_id") in {"live-backend", "production"}
             or value.get("run_id") in self._run_ids()
         }
         created = sum(1 for key in calls if key not in before)
@@ -143,6 +143,27 @@ class HistoryStore:
         updated = sum(1 for key in calls if key in before and calls[key] != before[key])
         return {"indexed": len(calls), "created": created, "updated": updated,
                 "skipped": max(0, len(backend_calls) - created - updated)}
+
+    @synchronized
+    def import_production(self, exported: list[dict[str, Any]]) -> dict[str, int]:
+        """Synchronize completed traces fetched from the production host."""
+        parsed = [
+            load_backend_records(str(item["call_id"]), item["records"])
+            for item in exported
+            if item.get("call_id") and isinstance(item.get("records"), list)
+        ]
+        calls = self._load()
+        before = dict(calls)
+        for call in parsed:
+            raw = _real_call_row(call, None, None, [])
+            row = self._real_row(raw, "production", {})
+            row["source"] = "production"
+            calls[row["id"]] = row
+        self._save(calls)
+        created = sum(1 for key in calls if key not in before)
+        updated = sum(1 for key in calls if key in before and calls[key] != before[key])
+        return {"indexed": len(calls), "created": created, "updated": updated,
+                "skipped": max(0, len(parsed) - created - updated)}
 
     def _run_ids(self) -> set[str]:
         if not self.root.is_dir():
@@ -228,7 +249,7 @@ class HistoryStore:
                 continue
             key = (row.get("org_id") or "", row["call_id"])
             previous = real.get(key)
-            if previous is None or row.get("run_id") == "live-backend":
+            if previous is None or row.get("run_id") in {"live-backend", "production"}:
                 real[key] = row
         rows = other + list(real.values())
         rows = [row for row in rows if _matches(row, filters)]
@@ -257,8 +278,12 @@ def _cases(directory: Path) -> list[CaseResult]:
 def _matches(row: dict[str, Any], filters: dict[str, Any]) -> bool:
     if not filters.get("include_doubles", False) and row.get("candidate_kind") == "double":
         return False
-    for field in ("origin", "candidate", "candidate_version", "verdict", "scenario_id"):
+    if filters.get("source") == "tests" and row.get("source") == "production":
+        return False
+    for field in ("origin", "source", "candidate", "candidate_version", "verdict", "scenario_id"):
         value = filters.get(field)
+        if field == "source" and value == "tests":
+            continue
         if value is not None and value != "" and row.get(field) != value:
             return False
     started = row.get("started_at") or ""

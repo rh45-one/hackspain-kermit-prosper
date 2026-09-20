@@ -50,7 +50,8 @@ function verdictBadge(verdict) {
   return `<span class="badge ${style}">${esc(label)}</span>`;
 }
 
-function originBadge(origin) {
+function originBadge(origin, source) {
+  if (source === "production") return `<span class="origin origin-production">producción</span>`;
   const labels = { real: "real", simulated: "simulada", manual: "manual" };
   return `<span class="origin origin-${esc(origin)}">${esc(labels[origin] || origin || "desconocido")}</span>`;
 }
@@ -234,7 +235,7 @@ function filteredCalls() {
   const profile = $("call-profile").value.trim().toLocaleLowerCase();
   const scenario = $("call-scenario").value.trim().toLocaleLowerCase();
   return calls.filter((call) =>
-    (!origin || call.origin === origin) &&
+    (origin === "production" ? call.source === "production" : origin === "tests" ? call.source !== "production" : (!origin || call.origin === origin)) &&
     (!result || (result === "informative" ? (!call.verdict || call.verdict === "unknown") : (call.judgment?.outcome || call.verdict) === result)) &&
     (!profile || String(call.profile).toLocaleLowerCase().includes(profile)) &&
     (!scenario || `${call.scenario} ${call.call_id}`.toLocaleLowerCase().includes(scenario)),
@@ -253,7 +254,7 @@ function renderCalls() {
     ["Inicio / llamada", "Origen", "Motor / modelo", "Duración", "Resultado", "Transcripción", ""],
     page.map((call) => [
       `${esc(formatDate(call.started_at))}<br><span class="meta">${esc(call.call_id)}</span>`,
-      originBadge(call.origin),
+      originBadge(call.origin, call.source),
       `${esc(call.model || call.profile)}<br><span class="meta">${esc(call.candidate_version || 'Versión no registrada')}</span>`,
       call.duration_s == null ? '—' : `${Math.round(call.duration_s)} s`,
       `${verdictBadge(call.judgment?.outcome || call.verdict || "informative")}${call.judgment ? '<br><span class="meta">juez LLM</span>' : ''}`,
@@ -272,6 +273,20 @@ function actionHtml(action) {
   return `<article class="action-card">${fields || "sin acciones registradas"}</article>`;
 }
 
+function conversationTurns(events) {
+  return events.reduce((turns, event, index) => {
+    const previous = turns.at(-1);
+    if (previous && previous.role === event.role) {
+      previous.text += event.text || '';
+      previous.indices.push(index);
+      previous.timestamp ||= event.timestamp;
+    } else {
+      turns.push({ ...event, text: event.text || '', indices: [index] });
+    }
+    return turns;
+  }, []);
+}
+
 function renderCallDetail(call) {
   const events = call.transcript_events || call.transcript_fragments || [];
   const historicalAudio = Object.keys(call.audio_files || {}).map(stream => `<label>${esc(stream)}<audio controls preload="none" src="/api/history/calls/${encodeURIComponent(call.id)}/audio/${encodeURIComponent(stream)}"></audio></label>`).join('');
@@ -281,23 +296,31 @@ function renderCallDetail(call) {
     return `<label>${esc(stream)}<audio controls preload="none" src="${url}"></audio></label>`;
   }).join("") || '<p class="meta">Audio no disponible para esta llamada.</p>';
   const transcript = events.length
-    ? events.map((event, index) => `<li id="fragment-${index}" class="transcript-${esc(event.role)}"><span>${event.role === 'caller' ? 'Paciente' : 'Agente'}</span><p>${esc(event.text)}</p><small>#${index} · ${esc(event.timestamp ? new Date(event.timestamp).toLocaleTimeString('es-ES') : (event.offset_s != null ? `${event.offset_s}s` : "sin marca"))}${event.fragment ? " · fragmento" : ""}</small></li>`).join("")
+    ? conversationTurns(events).map(event => `<li id="fragment-${event.indices[0]}" class="transcript-${esc(event.role)}"><span>${event.role === 'caller' ? 'Paciente' : 'Agente'}</span><p>${esc(event.text)}</p><small>${event.indices.length > 1 ? `${event.indices.length} fragmentos unidos` : `#${event.indices[0]}`} · ${esc(event.timestamp ? new Date(event.timestamp).toLocaleTimeString('es-ES') : (event.offset_s != null ? `${event.offset_s}s` : "sin marca"))}</small></li>`).join("")
     : '<li class="empty-line">Transcripción no disponible. La ausencia de texto no implica silencio.</li>';
   const actions = call.actions.length ? call.actions.map(actionHtml).join("") : '<p class="meta">No hay acciones registradas.</p>';
   const result = call.verdict
     ? `${verdictBadge(call.verdict)} ${esc(call.failure_signal || "")}`
     : verdictBadge("informative");
   $("call-detail").hidden = false;
-  $("call-detail").innerHTML = `<div class="detail-head"><div><p class="kicker">${originBadge(call.origin)} detalle</p><h2>${esc(call.call_id || call.case_id)}</h2><p class="meta">${esc(call.profile)} · ${esc(call.scenario)} · ${esc(formatDate(call.started_at))}</p></div><button id="call-detail-close" type="button" aria-label="Cerrar detalle">Cerrar</button></div>
+  const metrics = call.metrics || {};
+  const timeline = (call.timeline || []).map(item => `<li><time>${esc(item.timestamp ? new Date(item.timestamp).toLocaleTimeString('es-ES') : '—')}</time><strong>${esc(item.event)}</strong><code>${esc(JSON.stringify(item.data || {}))}</code></li>`).join('');
+  const incidents = (call.incidents || []).filter(item => item.severity !== 'telemetry');
+  $("call-detail").innerHTML = `<div class="detail-head"><div><div class="detail-provenance">${originBadge(call.origin, call.source)} <span>${call.ended ? 'Finalizada' : 'Sin cierre'}</span></div><h2>${esc(call.call_id || call.case_id)}</h2><p class="meta">${esc(call.profile)} · ${esc(call.scenario)} · ${esc(formatDate(call.started_at))}</p></div><button id="call-detail-close" type="button" aria-label="Cerrar detalle">Cerrar</button></div>
+    <div class="quality-strip"><div><span>Calidad</span><strong>${call.judgment?.quality ?? '—'}<small>/5</small></strong></div><div><span>Primera voz</span><strong>${metrics.first_audio_ms == null ? '—' : `${Math.round(metrics.first_audio_ms)} ms`}</strong></div><div><span>Respuestas medidas</span><strong>${metrics.response_ms?.length ?? 0}</strong></div><div><span>Interrupciones</span><strong>${metrics.interruptions ?? 0}</strong></div></div>
+    ${incidents.length ? `<section class="call-incidents"><h3>Requiere atención</h3>${incidents.map(item => `<div><span class="incident-level ${esc(item.severity)}">${item.severity === 'high' ? 'Alta' : 'Revisar'}</span><p><strong>${esc(item.title)}</strong> · ${esc(item.detail)}</p></div>`).join('')}</section>` : ''}
     <div class="detail-grid"><section><h3>Resultado</h3><p>${result}</p><p class="meta">${esc(evidenceText(call.evidence))}</p></section><section><h3>Audio</h3>${audio}</section></div>
-    <section class="judgment"><h3>Valoración del juez LLM</h3><div id="call-judgment"></div><div class="judge-actions"><button id="judge-call" class="primary" ${!call.ended || !events.length ? 'disabled' : ''}>${call.judgment ? 'Verificar valoración' : 'Evaluar llamada'}</button><span id="judge-call-state" role="status"></span></div><p class="meta">Se envían la transcripción y las acciones a NaN. Se ocultan DNI, teléfonos y correos detectables; el texto puede contener nombres y datos clínicos. No se envía audio.</p></section>
+    <section class="judgment"><h3>Valoración de calidad</h3><div id="call-judgment"></div><div class="judge-actions"><button id="judge-call" class="primary" ${!call.ended || !events.length ? 'disabled' : ''}>${call.judgment ? 'Verificar valoración' : 'Evaluar llamada'}</button><span id="judge-call-state" role="status"></span></div><p class="meta">Se analizan transcripción y acciones con la rúbrica versionada del evaluador. No se envía audio.</p></section>
     <h3>Conversación registrada</h3>${call.transcript_order_known === false ? '<p class="hint">Este registro antiguo no conserva el orden entre interlocutores.</p>' : ''}<ol class="transcript">${transcript}</ol>
-    <h3>Acciones y submissions</h3><div class="actions">${actions}</div>
+    <h3>Acciones y envíos</h3><div class="actions">${actions}</div>
+    <details class="timeline"><summary>Diagnóstico técnico · ${(call.timeline || []).length} eventos</summary>${timeline ? `<ol>${timeline}</ol>` : '<p class="meta">No hay eventos técnicos registrados.</p>'}</details>
     ${call.errors?.length ? `<h3>Errores del rig</h3><pre class="log">${esc(call.errors.join("\n"))}</pre>` : ""}`;
   $("call-detail-close").addEventListener("click", () => ($("call-detail").hidden = true));
   function showJudgment(judgment) {
+    const labels = { task_completion: 'Resolución', conversation: 'Conversación', efficiency: 'Eficiencia', safety: 'Seguridad', recovery: 'Recuperación' };
+    const scores = judgment?.scores ? `<div class="call-scorecard">${Object.entries(judgment.scores).map(([key, value]) => `<div><span>${esc(labels[key] || key)}</span><strong>${value == null ? 'No observable' : `${esc(value)} / 5`}</strong></div>`).join('')}</div>` : '';
     $("call-judgment").innerHTML = judgment
-      ? `<p>${verdictBadge(judgment.outcome)} · Calidad conversacional ${esc(judgment.quality ?? '—')}/5</p><p>${esc(judgment.reason)}</p><p>${judgment.evidence_indices.map(i => `<a href="#fragment-${i}">Fragmento #${i}</a>`).join(' · ')}</p><p class="hint">${judgment.limitations.map(esc).join(' · ')}</p><p class="meta">${esc(judgment.model)} · ${esc(judgment.rubric)} · ${esc(formatDate(judgment.evaluated_at))}</p>`
+      ? `<p>${verdictBadge(judgment.outcome)} · Calidad global ${esc(judgment.quality ?? '—')}/5</p>${scores}<p>${esc(judgment.reason)}</p><p>${judgment.evidence_indices.map(i => `<a href="#fragment-${i}">Fragmento #${i}</a>`).join(' · ')}</p><p class="hint">${judgment.limitations.map(esc).join(' · ')}</p><p class="meta">${esc(judgment.model)} · ${esc(judgment.rubric)} · ${esc(formatDate(judgment.evaluated_at))}</p>`
       : '<p>Sin valoración. Solo se puntúan conclusiones que tengan evidencia; lo demás queda sin determinar.</p>';
   }
   showJudgment(call.judgment);
@@ -330,6 +353,33 @@ $("calls-list").addEventListener("click", (event) => {
   api.getHistoryCall(button.dataset.callDetail)
     .then((call) => renderCallDetail(toCallRecord(call)))
     .catch(showError);
+});
+
+document.querySelectorAll('[data-cohort]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-cohort]').forEach(item => {
+    const on = item === button;
+    item.classList.toggle('on', on);
+    item.setAttribute('aria-pressed', String(on));
+  });
+  $('call-origin').value = button.dataset.cohort;
+  callsPage = 0;
+  renderCalls();
+}));
+
+$("judge-pending").addEventListener("click", async () => {
+  const button = $("judge-pending");
+  button.disabled = true;
+  const previous = button.textContent;
+  button.textContent = "Evaluando…";
+  try {
+    const result = await api.judgePending({ source: $('call-origin').value, limit: 20 });
+    callsLoaded = false;
+    await loadCalls();
+    $("calls-status").textContent = result.selected
+      ? `${result.evaluated} de ${result.selected} llamadas evaluadas${result.failed.length ? ` · ${result.failed.length} con error` : ''}.`
+      : "No hay llamadas pendientes con transcripción completa.";
+  } catch (error) { showError(error); }
+  finally { button.disabled = false; button.textContent = previous; }
 });
 
 // ---- experiments -----------------------------------------------------------

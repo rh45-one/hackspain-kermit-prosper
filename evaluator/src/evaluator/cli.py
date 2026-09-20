@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 
@@ -86,6 +87,16 @@ def main() -> None:
     p.add_argument("--results", default="evaluator/experiments/results")
     p.add_argument("--web", default="evaluator/web")
     p.add_argument("--audit-data", default="backend/data", help="backend DATA_DIR or its calls/ directory")
+    p.add_argument(
+        "--production-url",
+        default=os.environ.get("EVALUATOR_PRODUCTION_URL", "https://prosper-clinicreflow.fly.dev"),
+        help="production HTTP origin used to import completed calls",
+    )
+    p.add_argument(
+        "--production-token",
+        default=os.environ.get("EVALUATOR_PRODUCTION_TOKEN", ""),
+        help="service token for production (prefer EVALUATOR_PRODUCTION_TOKEN)",
+    )
 
     p = sub.add_parser("chat", help="manual tester: type to a live agent and read its replies")
     p.add_argument(
@@ -225,7 +236,13 @@ def main() -> None:
 
         from evaluator.api.app import create_app
 
-        console = create_app(args.results, args.web, audit_root=args.audit_data)
+        console = create_app(
+            args.results,
+            args.web,
+            audit_root=args.audit_data,
+            production_url=args.production_url,
+            production_token=args.production_token,
+        )
         print(f"consola de developer: http://{args.host}:{args.port}/  (API en /api/docs)")
         print(f"corridas leídas de: {args.results}")
         uvicorn.run(console, host=args.host, port=args.port, log_level="warning")

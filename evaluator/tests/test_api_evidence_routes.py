@@ -105,7 +105,10 @@ def test_judge_route_stores_an_evidence_bound_review(tmp_path, monkeypatch):
 
     async def post(self, url, **kwargs):
         calls.append(kwargs)
-        review = {"outcome": "pass", "quality": 4, "reason": "Gestiona la cita",
+        review = {"outcome": "pass", "quality": 4,
+                  "scores": {"task_completion": 5, "conversation": 4, "efficiency": 4,
+                             "safety": 4, "recovery": None},
+                  "reason": "Gestiona la cita",
                   "evidence_indices": [0, 1], "limitations": ["Sin agenda real"]}
         return httpx.Response(200, request=httpx.Request("POST", url),
                               json={"choices": [{"message": {"content": json.dumps(review)}}]})

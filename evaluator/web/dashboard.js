@@ -16,6 +16,29 @@
   function coverage(label, value, total) {
     return `<div class="coverage-row"><div class="coverage-label"><span>${esc(label)}</span><b>${fmt(value)} / ${fmt(total)}</b></div><progress aria-label="${esc(label)}" value="${value}" max="${total || 1}"></progress></div>`;
   }
+  const dimensionLabels = {
+    task_completion: 'Resolución', conversation: 'Conversación', efficiency: 'Eficiencia',
+    safety: 'Seguridad', recovery: 'Recuperación',
+  };
+  function renderQuality(s) {
+    const reviewed = s.judged || 0;
+    const enough = reviewed >= SMALL_SAMPLE;
+    $('quality-coverage').textContent = reviewed
+      ? `${reviewed} de ${s.calls} llamadas revisadas (${pct(s.review_coverage)}). ${enough ? 'Muestra descriptiva.' : 'Muestra aún insuficiente para resumir el modelo.'}`
+      : 'Ninguna llamada revisada todavía. La ausencia de nota no es una nota baja.';
+    $('quality-dimensions').innerHTML = Object.entries(s.quality_dimensions || {}).map(([name, item]) => {
+      const value = item.value;
+      return `<div class="dimension${item.n < SMALL_SAMPLE ? ' is-thin' : ''}"><div><span>${esc(dimensionLabels[name] || name)}</span><b>${item.n < SMALL_SAMPLE || value == null ? 'Pendiente' : `${fmt(value, 1)} / 5`}</b></div><progress aria-label="${esc(dimensionLabels[name] || name)}" value="${value || 0}" max="5"></progress><small>${item.n ? `n=${fmt(item.n)}` : 'Sin observaciones'}</small></div>`;
+    }).join('');
+  }
+  function renderIncidents() {
+    const items = data.incidents || [];
+    const actionable = items.filter(item => item.severity !== 'telemetry');
+    const telemetry = items.filter(item => item.severity === 'telemetry');
+    $('incident-list').innerHTML = actionable.length
+      ? `<div class="incident-summary"><strong>${fmt(data.summary.high_incident_calls)}</strong><span>llamadas con incidencia crítica</span><strong>${fmt(actionable.length)}</strong><span>señales accionables</span></div><ol class="incident-list">${actionable.slice(0, 8).map(item => `<li><span class="incident-level ${esc(item.severity)}">${item.severity === 'high' ? 'Prioridad alta' : 'Revisar'}</span><div><strong>${esc(item.title)}</strong><p>${esc(item.detail)}</p><button type="button" data-incident-call="${esc(item.record_id)}">${esc(item.call_id)}</button></div></li>`).join('')}</ol>${telemetry.length ? `<details><summary>${fmt(telemetry.length)} huecos de telemetría</summary><p class="hint">No afectan a la nota: indican que esa señal no puede comprobarse.</p></details>` : ''}`
+      : blank('Sin incidencias accionables', telemetry.length ? `${telemetry.length} llamadas tienen señales sin instrumentación suficiente, pero no se consideran fallos.` : 'No se detectaron fallos con la evidencia disponible.');
+  }
   function renderTrend() {
     if (!data) return;
     const key = $('trend-metric').value;
@@ -47,21 +70,26 @@
   function render() {
     const s = data.summary;
     $('source-status').dataset.ready = String(data.source.available);
+    const production = data.source.production || {};
     $('source-status').textContent = data.source.available
-      ? `Historial sincronizado · ${fmt(s.calls)} llamadas en esta selección · ${new Date(data.source.updated_at).toLocaleTimeString('es-ES')}`
-      : 'Fuente de llamadas no disponible. Arranca el laboratorio con --audit-data apuntando al DATA_DIR del backend.';
+      ? `${production.available ? 'Producción sincronizada' : 'Historial local listo'} · ${fmt(s.calls)} llamadas en esta selección · ${new Date(data.source.updated_at).toLocaleTimeString('es-ES')}`
+      : production.configured
+        ? `No se pudo sincronizar producción: ${production.last_error || 'comprueba la conexión y el token'}. Se conserva el último historial importado.`
+        : 'Producción sin configurar. Define EVALUATOR_PRODUCTION_TOKEN en el servidor del evaluador.';
     $('analytics-metrics').innerHTML = [
-      metric('Llamadas registradas', fmt(s.calls), `${fmt(s.completed)} con cierre registrado`),
-      metric('Acierto · juez LLM', pct(s.pass_rate), `${fmt(s.passed)} correctas / ${fmt(s.evaluated)} evaluables`, s.evaluated),
-      metric('Primer audio · p50', ms(s.first_audio_p50_ms), `Conexión → emisión · ${fmt(s.first_audio_n)} llamadas`),
-      metric('Calidad conversacional', s.quality == null ? '—' : `${fmt(s.quality, 1)} / 5`, `${fmt(s.quality_n)} valoraciones LLM`, s.quality_n),
-      metric('Recuperación de voz', s.recovered == null ? '—' : `${s.recovered} / ${s.recovery_observed}`, `${fmt(s.interruptions)} interrupciones registradas${s.recovered == null ? ' · recuperación sin medir' : ''}`, s.recovery_observed),
+      metric('Llamadas finalizadas', fmt(s.completed), `${fmt(s.calls)} registradas en la selección`),
+      metric('Pendientes de revisión', fmt(Math.max(0, s.calls - s.judged)), `${fmt(s.judged)} analizadas por el juez`),
+      metric('Tiempo hasta el saludo', ms(s.first_audio_p50_ms), `Mediana · cobertura ${fmt(s.first_audio_n)} de ${fmt(s.calls)}`),
+      metric('Calidad global', s.quality_n >= SMALL_SAMPLE ? `${fmt(s.quality, 1)} / 5` : 'Muestra insuficiente', s.quality_n ? `Basada en ${fmt(s.quality_n)} revisiones` : 'Sin llamadas evaluadas', s.quality_n),
+      metric('Atención prioritaria', fmt(s.high_incident_calls), `${fmt(s.incident_calls)} llamadas con alguna señal`),
     ].join('');
+    renderQuality(s);
+    renderIncidents();
     $('coverage-chart').innerHTML = coverage('Transcripción', s.transcripts, s.calls) + coverage('Primer audio', s.first_audio_n, s.calls) + coverage('Latencia por respuesta', s.response_calls, s.calls) + coverage('Evaluación LLM', s.judged, s.calls) + `<p class="chart-caption">${s.transcript_gap_n ? `Intervalo entre transcripciones: ${ms(s.transcript_gap_p50_ms)} p50 (${fmt(s.transcript_gap_n)} pares). No mide la latencia audible.` : 'Los datos ausentes se muestran como —, nunca como cero.'}</p>`;
-    $('model-benchmark').innerHTML = data.models.length ? `<div class="tablewrap">${table(['Motor / modelo', 'Versión', 'Llamadas', 'Acierto LLM', 'Calidad / 5', 'Primer audio p50', 'Latencia p95'], data.models.map(m => [
+    $('model-benchmark').innerHTML = data.models.length ? `<div class="tablewrap">${table(['Motor / modelo', 'Versión', 'Llamadas', 'Resolución estimada', 'Calidad / 5', 'Primer audio p50', 'Latencia p95'], data.models.map(m => [
       `<strong>${esc(m.model || m.engine)}</strong><br><span class="meta">${esc(m.model ? m.engine : 'Modelo no registrado')}</span>`,
-      esc(m.version || 'No registrada'), fmt(m.calls), `${pct(m.pass_rate)}<br><span class="meta">n=${fmt(m.evaluated)}</span>`,
-      `${fmt(m.quality, 1)}<br><span class="meta">n=${fmt(m.quality_n)}</span>`, `${ms(m.first_audio_p50_ms)}<br><span class="meta">n=${fmt(m.first_audio_n)}</span>`, `${ms(m.response_p95_ms)}<br><span class="meta">n=${fmt(m.response_n)} respuestas</span>`,
+      esc(m.version || 'No registrada'), fmt(m.calls), `${m.evaluated >= SMALL_SAMPLE ? pct(m.pass_rate) : '—'}<br><span class="meta">n=${fmt(m.evaluated)}${m.evaluated < SMALL_SAMPLE ? ' · muestra insuficiente' : ''}</span>`,
+      `${m.quality_n >= SMALL_SAMPLE ? fmt(m.quality, 1) : '—'}<br><span class="meta">n=${fmt(m.quality_n)}${m.quality_n < SMALL_SAMPLE ? ' · muestra insuficiente' : ''}</span>`, `${ms(m.first_audio_p50_ms)}<br><span class="meta">n=${fmt(m.first_audio_n)}</span>`, `${ms(m.response_p95_ms)}<br><span class="meta">n=${fmt(m.response_n)} respuestas</span>`,
     ]))}</div>` : blank('Sin llamadas en esta selección', 'Amplía el periodo o comprueba la fuente del backend.');
     $('comparison-note').textContent = data.comparison_note;
     $('latency-chart').innerHTML = s.response_n ? `<div class="histogram">${s.response_distribution.map(b => `<div class="hist-bin"><b>${fmt(b.count)}</b><i style="height:${120 * b.count / Math.max(1, ...s.response_distribution.map(x => x.count))}px"></i><span>${esc(b.label)}</span></div>`).join('')}</div><p class="chart-caption">p50 ${ms(s.response_p50_ms)} · p95 ${ms(s.response_p95_ms)} · ${fmt(s.response_n)} respuestas</p>` : blank('Latencia por turno no registrada', 'Estas llamadas no contienen marcas de fin de habla y primer audio de respuesta. El primer audio de la llamada sí se muestra cuando está disponible.');
@@ -73,7 +101,8 @@
     loading = true;
     $('analytics-filters').setAttribute('aria-busy', 'true');
     try {
-      const query = new URLSearchParams({ origin: $('analytics-origin').value });
+      const cohort = $('analytics-origin').value;
+      const query = new URLSearchParams(cohort === 'production' ? { origin: 'real', source: 'production' } : { origin: '', source: 'tests' });
       if ($('analytics-model').value) query.set('candidate', $('analytics-model').value);
       if ($('analytics-from').value) query.set('from', $('analytics-from').value);
       if ($('analytics-to').value) query.set('to', `${$('analytics-to').value}T23:59:59.999999Z`);
@@ -87,8 +116,24 @@
   };
   $('analytics-filters').addEventListener('submit', event => { event.preventDefault(); clearError(); window.refreshAnalytics(); });
   $('trend-metric').addEventListener('change', renderTrend);
+  $('quality-review').addEventListener('click', () => {
+    document.querySelector('[data-tab="calls"]').click();
+    setTimeout(() => $('judge-pending').focus(), 0);
+  });
+  $('open-incidents').addEventListener('click', () => document.querySelector('[data-tab="calls"]').click());
+  $('incident-list').addEventListener('click', event => {
+    const button = event.target.closest('[data-incident-call]');
+    if (!button) return;
+    document.querySelector('[data-tab="calls"]').click();
+    api.getHistoryCall(button.dataset.incidentCall).then(call => renderCallDetail(toCallRecord(call))).catch(showError);
+  });
   for (const id of ['open-history', 'judge-history']) $(id).addEventListener('click', () => {
     $('call-origin').value = $('analytics-origin').value;
+    document.querySelectorAll('[data-cohort]').forEach(button => {
+      const on = button.dataset.cohort === $('analytics-origin').value;
+      button.classList.toggle('on', on);
+      button.setAttribute('aria-pressed', String(on));
+    });
     document.querySelector('[data-tab="calls"]').click();
   });
   $('reload').addEventListener('click', () => { window.refreshAnalytics(); if (!$('tab-calls').hidden) loadCalls().catch(showError); });

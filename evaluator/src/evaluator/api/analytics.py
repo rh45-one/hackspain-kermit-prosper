@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -75,6 +76,53 @@ def call_metrics(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def call_incidents(row: dict[str, Any]) -> list[dict[str, str]]:
+    """Observed, actionable call problems; telemetry gaps are labelled separately."""
+    incidents: list[dict[str, str]] = []
+    events = row.get("transcript_events") or []
+    metrics = call_metrics(row)
+    roles = {event.get("role") for event in events}
+    timeline = row.get("timeline") or []
+
+    def add(code: str, severity: str, title: str, detail: str) -> None:
+        incidents.append({"code": code, "severity": severity, "title": title, "detail": detail})
+
+    if not row.get("ended"):
+        add("no_close", "high", "Llamada sin cierre", "No existe un evento de finalización registrado.")
+    if not events:
+        add("no_transcript", "high", "Sin transcripción", "No se registró ninguna intervención de la conversación.")
+    elif "caller" not in roles:
+        add("caller_silent", "high", "No se oyó al paciente", "La transcripción solo contiene intervenciones del agente.")
+    elif not roles.intersection({"agent", "assistant"}):
+        add("agent_silent", "high", "El agente no respondió", "La transcripción solo contiene intervenciones del paciente.")
+
+    first_audio = metrics["first_audio_ms"]
+    if first_audio is not None and first_audio >= 5000:
+        add("slow_greeting", "high", "Saludo muy tardío", f"El primer audio tardó {first_audio / 1000:.1f} s.")
+    elif first_audio is not None and first_audio >= 2500:
+        add("slow_greeting", "medium", "Saludo tardío", f"El primer audio tardó {first_audio / 1000:.1f} s.")
+
+    if any(event.get("event") == "interruption_unrecovered" for event in timeline):
+        add("barge_in_failed", "high", "No recuperó una interrupción", "Hay evidencia explícita de voz sin reanudación posterior.")
+    elif metrics["interruptions"] and not metrics["recovery_observed"]:
+        add("recovery_unknown", "telemetry", "Recuperación sin medir", "Se registraron resets, pero no un resultado correlacionado de recuperación.")
+
+    if row.get("errors") or any(attempt.get("failed") for attempt in row.get("submit_attempts", [])):
+        add("submission_failed", "high", "Error al registrar la gestión", "El backend registró un error o un envío rechazado.")
+
+    agent_lines = [re.sub(r"\s+", " ", str(event.get("text", "")).strip().lower())
+                   for event in events if event.get("role") in {"agent", "assistant"}]
+    if any(text and text == agent_lines[index - 1] for index, text in enumerate(agent_lines) if index):
+        add("repeated_reply", "medium", "Respuesta repetida", "El agente repitió consecutivamente la misma intervención.")
+
+    judgment = row.get("judgment") or {}
+    scores = judgment.get("scores") or {}
+    weak = [name for name, value in scores.items() if isinstance(value, (int, float)) and value <= 2]
+    if weak:
+        add("low_quality", "medium", "Dimensión de calidad baja", "El juez marcó 2/5 o menos en: " + ", ".join(weak) + ".")
+    return incidents
+
+
 def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     metrics = [call_metrics(row) for row in rows]
     response = [v for m in metrics for v in m["response_ms"]]
@@ -83,6 +131,14 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     judgments = [r["judgment"] for r in rows if r.get("judgment")]
     evaluated = [j for j in judgments if j.get("outcome") in {"pass", "fail"}]
     quality = [float(j["quality"]) for j in judgments if j.get("quality") is not None]
+    dimension_names = ("task_completion", "conversation", "efficiency", "safety", "recovery")
+    dimensions = {
+        name: [float(j["scores"][name]) for j in judgments
+               if isinstance(j.get("scores", {}).get(name), (int, float))]
+        for name in dimension_names
+    }
+    all_incidents = [incident for row in rows for incident in call_incidents(row)]
+    incidents = [incident for incident in all_incidents if incident["severity"] != "telemetry"]
     recovered = [m for m in metrics if m["recovered"] is not None]
     duration = [v for r in rows if (v := number(r.get("duration_s"))) is not None]
     return {
@@ -92,6 +148,15 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "pass_rate": sum(j["outcome"] == "pass" for j in evaluated) / len(evaluated) if evaluated else None,
         "quality": round(sum(quality) / len(quality), 2) if quality else None,
         "quality_n": len(quality),
+        "quality_dimensions": {
+            name: {"value": round(sum(values) / len(values), 2) if values else None, "n": len(values)}
+            for name, values in dimensions.items()
+        },
+        "review_coverage": len(judgments) / len(rows) if rows else None,
+        "incident_calls": sum(any(item["severity"] != "telemetry" for item in call_incidents(row)) for row in rows),
+        "high_incident_calls": sum(any(item["severity"] == "high" for item in call_incidents(row)) for row in rows),
+        "incidents": len(incidents),
+        "telemetry_gaps": sum(item["severity"] == "telemetry" for item in all_incidents),
         "response_p50_ms": percentile(response, .5), "response_p95_ms": percentile(response, .95),
         "response_n": len(response), "response_calls": sum(bool(m["response_ms"]) for m in metrics),
         "transcript_gap_p50_ms": percentile(gaps, .5), "transcript_gap_n": len(gaps),
@@ -118,11 +183,19 @@ def dashboard(rows: list[dict[str, Any]]) -> dict[str, Any]:
             days[str(row["started_at"])[:10]].append(row)
         models[(row.get("candidate") or "desconocido", row.get("model") or "",
                 row.get("candidate_version") or "")].append(row)
+    incidents = []
+    for row in rows:
+        for incident in call_incidents(row):
+            incidents.append({**incident, "call_id": row.get("call_id"), "record_id": row.get("id"),
+                              "started_at": row.get("started_at")})
+    severity_order = {"high": 0, "medium": 1, "telemetry": 2}
+    incidents.sort(key=lambda item: (severity_order.get(item["severity"], 9), item.get("started_at") or ""))
     return {
         "summary": aggregate(rows),
         "daily": [{"date": day, **aggregate(items)} for day, items in sorted(days.items())],
         "models": [{"engine": key[0], "model": key[1] or None, "version": key[2] or None,
                     **aggregate(items)} for key, items in sorted(models.items())],
         "comparison_note": "Muestras de llamadas distintas: comparación descriptiva, no experimento A/B controlado.",
+        "incidents": incidents,
         "undated": sum(seconds(r.get("started_at")) is None for r in rows),
     }

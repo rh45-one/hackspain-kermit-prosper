@@ -78,18 +78,12 @@ def _queue_action(data: dict[str, Any], call: BackendCall) -> None:
     call.actions.append(canonical_action({"action": verb, **fields}))
 
 
-def load_backend_call(path: Path) -> BackendCall:
-    """Read one `calls/<call_id>.jsonl`, tolerating corrupt or partial lines."""
-    call = BackendCall(call_id=path.stem, path=path)
+def load_backend_records(call_id: str, records: list[dict[str, Any]]) -> BackendCall:
+    """Parse already-decoded audit records, including remote production exports."""
+    call = BackendCall(call_id=call_id, path=Path(f"remote/{call_id}.jsonl"))
     caller_parts: list[str] = []
     assistant_parts: list[str] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if not line.strip():
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for record in records:
         if not isinstance(record, dict):
             continue
         event = record.get("event")
@@ -146,6 +140,23 @@ def load_backend_call(path: Path) -> BackendCall:
             call.elapsed_s = elapsed if isinstance(elapsed, (int, float)) else None
     call.caller_text = "".join(caller_parts)
     call.assistant_text = "".join(assistant_parts)
+    return call
+
+
+def load_backend_call(path: Path) -> BackendCall:
+    """Read one `calls/<call_id>.jsonl`, tolerating corrupt or partial lines."""
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            records.append(value)
+    call = load_backend_records(path.stem, records)
+    call.path = path
     return call
 
 

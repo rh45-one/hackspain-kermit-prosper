@@ -21,6 +21,7 @@ window.LabApi = (() => {
     getAnalytics: (query) => request(`/api/analytics?${query}`),
     getJudge: () => request("/api/judge"),
     judgeCall: (id) => request(`/api/history/calls/${encodeURIComponent(id)}/judge`, { method: "POST" }),
+    judgePending: (body) => request("/api/history/judge-pending", json("POST", body)),
     getRun: (id) => request(`/api/runs/${encodeURIComponent(id)}`),
     getCases: (id) => request(`/api/runs/${encodeURIComponent(id)}/cases`),
     getRealCalls: (id) => request(`/api/runs/${encodeURIComponent(id)}/real-calls`),

@@ -5,6 +5,9 @@ import pytest
 
 from evaluator.api.judge import KEY_ENV_VARS, Judge, JudgeError, evidence
 
+SCORES = {"task_completion": 3, "conversation": 3, "efficiency": 3,
+          "safety": 3, "recovery": None}
+
 
 def clear_judge_key(monkeypatch):
     for name in KEY_ENV_VARS:
@@ -23,6 +26,28 @@ def test_judge_evidence_minimizes_identifiers():
     assert "12345678Z" not in serialized and "600 123 456" not in serialized
     assert "sensitive-id" not in serialized
     assert evidence(row())["transcript"][0]["index"] == 0
+
+
+def test_streaming_fragments_are_joined_into_turns():
+    value = row()
+    value["transcript_events"] = [
+        {"role": "agent", "text": "Buenos"}, {"role": "agent", "text": " días"},
+        {"role": "caller", "text": "Hola"},
+    ]
+    assert evidence(value)["transcript"] == [
+        {"index": 0, "indices": [0, 1], "role": "agent", "text": "Buenos días"},
+        {"index": 2, "indices": [2], "role": "caller", "text": "Hola"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_one_sided_transcript_is_not_scored(tmp_path, monkeypatch):
+    clear_judge_key(monkeypatch)
+    value = {"ended": True, "transcript_events": [{"role": "agent", "text": "Buenos días"}]}
+    result = await Judge(tmp_path).evaluate(value)
+    assert result["quality"] is None
+    assert all(score is None for score in result["scores"].values())
+    assert result["source"] == "evidence_gate"
 
 
 @pytest.mark.asyncio
@@ -56,7 +81,8 @@ async def test_judge_cached_per_evidence_and_rubric(tmp_path, monkeypatch):
     responses = []
     async def post(self, url, **kwargs):
         responses.append(kwargs)
-        content = {"outcome": "unknown", "quality": 3, "reason": "Falta el resultado final",
+        content = {"outcome": "unknown", "quality": 3, "scores": SCORES,
+                   "reason": "Falta el resultado final",
                    "evidence_indices": [1], "limitations": ["Conversación incompleta"]}
         return httpx.Response(200, request=httpx.Request("POST", url),
                               json={"choices": [{"message": {"content": json.dumps(content)}}]})
@@ -76,7 +102,7 @@ async def test_judge_cached_per_evidence_and_rubric(tmp_path, monkeypatch):
 async def test_judge_discards_invented_citations(tmp_path, monkeypatch):
     monkeypatch.setenv("EVALUATOR_JUDGE_API_KEY", "test-key")
     async def post(self, url, **kwargs):
-        content = {"outcome": "pass", "quality": 5, "reason": "Correcto",
+        content = {"outcome": "pass", "quality": 5, "scores": SCORES, "reason": "Correcto",
                    "evidence_indices": [100], "limitations": []}
         return httpx.Response(200, request=httpx.Request("POST", url),
                               json={"choices": [{"message": {"content": json.dumps(content)}}]})
