@@ -74,6 +74,7 @@ def score_call(call: BackendCall, scenario: Any) -> tuple[CaseResult, list[str]]
         notes.append("el audit no registra el cierre de la llamada: el veredicto no es fiable")
 
     case = CaseResult(
+        origin="real",
         case_id=f"{_candidate_name(call)}/{scenario.id}/obs-{call.call_id[:8]}",
         call_id=call.call_id,
         scenario_id=scenario.id,
@@ -109,6 +110,11 @@ def _real_call_row(
     return {
         "call_id": call.call_id,
         "engine": call.engine,
+        "model": call.model,
+        "version": call.version,
+        "org_id": call.org_id,
+        "transcript_events": call.transcript_events,
+        "timeline": call.timeline,
         "from_number": call.from_number,
         "started_at": call.started_at,
         "last_event_at": call.last_event_at,

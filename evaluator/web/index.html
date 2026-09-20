@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
-    <title>Pronto · consola de developer</title>
+    <title>Pronto · Voice Lab</title>
     <link rel="icon" href="/static/mark.svg" />
     <link rel="stylesheet" href="/static/styles.css" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="/static/lab.css" />
   </head>
   <body>
     <header class="bar" id="bar">
@@ -20,14 +20,14 @@
         </span>
         <span class="names">
           <span class="overline">pronto</span>
-          <span class="product">consola de developer</span>
+          <span class="product">Voice Lab</span>
         </span>
       </div>
 
         <nav class="tabs" id="tabs" aria-label="Secciones">
         <button data-tab="overview" class="on">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/></svg>
-          Resumen
+          Seguimiento
         </button>
         <button data-tab="calls">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
@@ -35,7 +35,7 @@
         </button>
         <button data-tab="experiments">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M13 6h8M13 18h8M9 6l4 12"/></svg>
-          Experimentos
+          Ejecuciones
         </button>
         <button data-tab="compare">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -63,33 +63,32 @@
     </header>
 
     <main>
-      <p id="error" class="error" hidden></p>
+      <p id="error" class="error" role="alert" hidden></p>
 
       <section id="tab-overview" class="panel">
         <header class="page-head">
-          <p class="kicker">Observatorio local</p>
-          <h1 id="bench-title">Laboratorio local</h1>
-          <p class="lead">
-            Cada cifra trae su numerador y denominador; <code>n/d</code> significa que el
-            dato no existe, nunca cero.
-          </p>
-          <div class="facts" id="bench-facts"></div>
+          <h1>El agente, en cada llamada.</h1>
+          <p class="lead">Actividad, calidad y tiempos de respuesta a partir de las llamadas registradas.</p>
+          <p id="source-status" class="source-status" role="status">Conectando con el historial del backend…</p>
         </header>
-
-          <h2>Resumen por candidato</h2>
-        <div id="bench-cards" class="cards"></div>
-
-        <h2>Matriz por problema</h2>
-        <p class="hint">
-          Filas = familia de problema, con su peso. Verde = todo correcto dentro de lo
-          evaluable; ámbar = parcial; rojo = ninguna.
-        </p>
-        <div id="matrix" class="tablewrap"></div>
+        <form id="analytics-filters" class="analytics-filters">
+          <label class="field">Origen<select id="analytics-origin"><option value="real">Llamadas del backend</option><option value="manual">Pruebas manuales</option></select></label>
+          <label class="field">Motor<select id="analytics-model"><option value="">Todos los motores</option></select></label>
+          <label class="field">Desde<input type="date" id="analytics-from" /></label>
+          <label class="field">Hasta<input type="date" id="analytics-to" /></label>
+          <button type="submit">Aplicar filtros</button>
+        </form>
+        <div id="analytics-metrics" class="metric-row" aria-live="polite"><p>Cargando métricas…</p></div>
+        <div class="chart-grid">
+          <section class="chart-panel"><div class="section-heading"><h2>Evolución diaria</h2><label class="field"><span class="sr-only">Métrica de evolución</span><select id="trend-metric"><option value="calls">Volumen de llamadas</option><option value="pass_rate">Acierto · juez LLM</option><option value="quality">Calidad conversacional</option><option value="first_audio_p50_ms">Primer audio · p50</option></select></label></div><div id="trend-chart"></div></section>
+          <section class="chart-panel"><h2>Cobertura de evidencia</h2><p class="hint">Qué podemos medir en esta selección.</p><div id="coverage-chart"></div></section>
+        </div>
+        <section class="benchmark-panel"><div class="section-heading"><div><h2>Comparación de modelos</h2><p class="hint">Cada fila conserva el motor, modelo y versión que registró la llamada.</p></div><button type="button" id="open-history">Explorar llamadas</button></div><div id="model-benchmark"></div><p class="hint" id="comparison-note"></p></section>
+        <div class="chart-grid secondary-charts"><section class="chart-panel"><h2>Latencia por respuesta</h2><p class="hint">Fin del habla → primer audio. Solo mediciones registradas.</p><div id="latency-chart"></div></section><section class="chart-panel"><h2>Evaluación de calidad</h2><div id="judge-status"></div><p class="hint">El juez analiza transcripción y acciones. Sus valoraciones no son resultados oficiales ni una evaluación acústica.</p><button type="button" id="judge-history">Revisar llamadas pendientes</button></section></div>
       </section>
 
       <section id="tab-calls" class="panel" hidden>
         <header class="page-head">
-          <p class="kicker">Evidencia de conversación</p>
           <h1>Histórico de llamadas</h1>
           <p class="lead">
             Reales, simuladas y manuales se distinguen siempre. Los filtros no convierten
@@ -97,10 +96,10 @@
           </p>
         </header>
         <form id="call-filters" class="filterbar">
-          <label class="field">origen<select id="call-origin"><option value="">todos</option><option value="real">reales</option><option value="simulated">simuladas</option><option value="manual">manuales</option></select></label>
+          <label class="field">origen<select id="call-origin"><option value="real">Backend</option><option value="manual">Manuales</option><option value="simulated">Simuladas</option><option value="">Todos</option></select></label>
           <label class="field">resultado<select id="call-result"><option value="">todos</option><option value="pass">correcta</option><option value="fail">incorrecta</option><option value="invalid_evaluation">no evaluable</option><option value="informative">informativa</option></select></label>
           <label class="field">perfil / candidato<input id="call-profile" type="search" placeholder="Filtrar" /></label>
-          <label class="field">escenario<input id="call-scenario" type="search" placeholder="Filtrar" /></label>
+          <label class="field">Buscar llamada<input id="call-scenario" type="search" placeholder="ID de llamada o escenario" /></label>
           <button type="reset">Limpiar</button>
         </form>
         <p id="calls-status" class="hint" role="status"></p>
@@ -115,8 +114,7 @@
 
       <section id="tab-experiments" class="panel" hidden>
         <header class="page-head">
-          <p class="kicker">Ejecuciones controladas</p>
-          <h1>Experimentos</h1>
+          <h1>Ejecuciones</h1>
           <p class="lead">Seleccioná perfiles y escenarios, comprobá la configuración y seguí la evidencia parcial de cada ejecución.</p>
         </header>
         <div id="experiment-contract" class="banner quiet">
@@ -133,11 +131,11 @@
         </form>
         <h2>Corridas disponibles</h2>
         <div id="experiment-runs"></div>
+        <section class="run-summary"><h2 id="bench-title">Resultado de la ejecución</h2><div class="facts" id="bench-facts"></div><div id="bench-cards" class="cards"></div><h3>Resultados por escenario</h3><div id="matrix" class="tablewrap"></div></section>
       </section>
 
       <section id="tab-compare" class="panel" hidden>
         <header class="page-head">
-          <p class="kicker">Alternativas</p>
           <h1>Comparar</h1>
           <p class="lead">
             Primero las alternativas de la misma corrida, lado a lado. Después, dos
@@ -168,7 +166,6 @@
 
       <section id="tab-chat" class="panel" hidden>
         <header class="page-head">
-          <p class="kicker">Línea en vivo</p>
           <h1>Probar el agente</h1>
           <p class="lead">
             Abre una llamada real contra el WebSocket del agente y la clínica local. El
@@ -176,7 +173,11 @@
             transcribe. Al cerrar, muestra submissions y diagnóstico.
           </p>
         </header>
-
+        <section class="live-console" aria-label="Llamada por micrófono">
+          <div><h2>Micrófono en directo</h2><p>Habla y escucha al mismo tiempo. Puedes interrumpir al agente durante su respuesta.</p><label class="field">Perfil de voz<select id="live-profile"></select></label><p id="live-state" role="status">Línea disponible · audio de 8 kHz</p></div>
+          <div class="live-controls"><button type="button" id="live-start" class="primary">Iniciar llamada</button><button type="button" id="live-mute" disabled aria-pressed="false">Silenciar micrófono</button><button type="button" id="live-stop" disabled>Colgar</button><span id="live-time" class="mono">00:00</span></div>
+        </section>
+        <details class="text-tester"><summary>Prueba por turnos con texto o grabación</summary>
         <div class="well">
           <div class="grid">
             <label class="field">Agente (perfil del servidor)<select id="profile"></select></label>
@@ -213,10 +214,13 @@
         </form>
 
         <div id="chat-result"></div>
+        </details>
       </section>
     </main>
 
     <script src="/static/api.js"></script>
     <script src="/static/app.js"></script>
+    <script src="/static/dashboard.js"></script>
+    <script src="/static/live.js"></script>
   </body>
 </html>

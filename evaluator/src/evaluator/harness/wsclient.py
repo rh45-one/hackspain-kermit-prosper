@@ -36,7 +36,7 @@ import base64
 import json
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
@@ -125,12 +125,14 @@ class CallSession:
         frame_interval_s: float = 0.02,
         open_timeout_s: float = 10.0,
         max_call_s: float = 180.0,
+        event_sink: Callable[[dict], Awaitable[None]] | None = None,
     ) -> None:
         self.ws_url = ws_url
         self.from_number = from_number
         self.frame_interval_s = frame_interval_s
         self.open_timeout_s = open_timeout_s
         self.max_call_s = max_call_s
+        self.event_sink = event_sink
         self.evidence = CallEvidence(call_id=call_id, connected_at=time.monotonic())
         self._ws: Any = None
         self._recv_task: asyncio.Task[None] | None = None
@@ -298,6 +300,16 @@ class CallSession:
         self.evidence.frames_sent += 1
         self.evidence.caller_audio += frame
 
+    async def send_live_frame(self, frame: bytes) -> None:
+        """Browser-paced 20 ms audio, without inventing a new turn per packet."""
+        if len(frame) != FRAME_BYTES:
+            raise ValueError("cada paquete debe contener 160 bytes de audio mu-law")
+        await self._send_media(frame)
+
+    async def wait_remote(self) -> None:
+        if self._recv_task is not None:
+            await asyncio.shield(self._recv_task)
+
     # ---- agent side ------------------------------------------------------
     async def inbound(self) -> AsyncIterator[bytes]:
         """Agent µ-law bytes as they arrive; ends when the session closes."""
@@ -345,6 +357,8 @@ class CallSession:
             except json.JSONDecodeError:
                 continue
             event = msg.get("event")
+            if self.event_sink is not None and event in {"media", "clear", "mark"}:
+                await self.event_sink(msg)
             if event == "media":
                 now = time.monotonic()
                 self._last_inbound_at = now
@@ -361,7 +375,8 @@ class CallSession:
                     chunk = b""  # malformed payload: count kept, bytes skipped
                 if chunk:
                     self.evidence.agent_audio += chunk
-                    await self._inbound.put(chunk)
+                    if self.event_sink is None:
+                        await self._inbound.put(chunk)
                 if self._awaiting_reply_at is not None:
                     self.evidence.turn_latencies_ms.append(
                         round((now - self._awaiting_reply_at) * 1000, 1)

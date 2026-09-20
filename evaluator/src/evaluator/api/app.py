@@ -21,16 +21,20 @@ Four rules:
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
+from evaluator.api.analytics import call_metrics, dashboard
 from evaluator.api.chat import ChatSessionManager, create_chat_router
 from evaluator.api.history import HistoryStore
 from evaluator.api.history import summary as history_summary
 from evaluator.api.jobs import JobError, JobStore
+from evaluator.api.judge import Judge, JudgeError
+from evaluator.api.live import create_live_router
 from evaluator.api.redact import redact_secrets, redact_text
 from evaluator.models import CaseResult
 from evaluator.profiles import ProfileCatalog
@@ -159,11 +163,57 @@ def create_app(
     catalog = profiles or ProfileCatalog.builtin()
     sessions = ChatSessionManager(session_root or root / "_chat-sessions", catalog, archive_root=root)
     history = HistoryStore(root)
+    judge = Judge(root)
     audit = Path(audit_root) if audit_root else None
     scenarios = Path(scenario_root) if scenario_root else Path(__file__).parents[3] / "scenarios"
     jobs = JobStore(root, catalog, scenarios)
     app = FastAPI(title="Pronto evaluator - developer console", docs_url="/api/docs")
     app.include_router(create_chat_router(sessions))
+    app.include_router(create_live_router(catalog, root))
+
+    def refresh_history():
+        history.import_runs()
+        if audit:
+            history.import_backend_audits(audit)
+
+    @app.get("/api/analytics")
+    def analytics(origin: str = "real", candidate: str | None = None,
+                  from_: str | None = Query(None, alias="from"), to: str | None = None):
+        refresh_history()
+        rows = history.calls({"origin": origin, "candidate": candidate, "from": from_, "to": to})
+        for row in rows:
+            row["judgment"] = judge.cached(row)
+        result = dashboard(rows)
+        result["source"] = {"configured": audit is not None,
+                            "available": bool(audit and audit.is_dir()),
+                            "origin": origin, "updated_at": datetime.now(UTC).isoformat()}
+        result["judge"] = judge.status()
+        return result
+
+    @app.get("/api/judge")
+    def judge_status():
+        return judge.status()
+
+    @app.post("/api/history/calls/{record_id}/judge")
+    async def judge_call(record_id: str):
+        row = history.call(record_id)
+        if row is None:
+            raise HTTPException(404, "llamada desconocida")
+        try:
+            return await judge.evaluate(row)
+        except JudgeError as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    @app.get("/api/history/calls/{record_id}/audio/{stream}")
+    def history_audio(record_id: str, stream: str):
+        row = history.call(record_id)
+        name = (row or {}).get("audio_files", {}).get(stream)
+        if not name:
+            raise HTTPException(404, "Esta llamada no tiene grabación disponible")
+        path = (root / name).resolve()
+        if root.resolve() not in path.parents or not path.is_file() or path.suffix != ".wav":
+            raise HTTPException(404, "Audio no disponible")
+        return FileResponse(path, media_type="audio/wav")
 
     @app.get("/healthz")
     def healthz() -> dict[str, Any]:
@@ -223,9 +273,12 @@ def create_app(
         if audit:
             history.import_backend_audits(audit)
         rows = history.calls(filters)
+        for row in rows:
+            row["judgment"] = judge.cached(row)
+            row["metrics"] = call_metrics(row)
         start = (page - 1) * page_size
         return {
-            "items": rows[start : start + page_size], "page": page, "page_size": page_size,
+            "items": redact_secrets(rows[start : start + page_size]), "page": page, "page_size": page_size,
             "total": len(rows), "next_page": page + 1 if start + page_size < len(rows) else None,
         }
 
@@ -236,6 +289,8 @@ def create_app(
         row = history.call(record_id)
         if row is None:
             raise HTTPException(404, "llamada desconocida")
+        row["judgment"] = judge.cached(row)
+        row["metrics"] = call_metrics(row)
         return redact_secrets(row)
 
     @app.get("/api/history/summary")

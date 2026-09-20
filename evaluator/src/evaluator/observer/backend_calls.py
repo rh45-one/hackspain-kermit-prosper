@@ -34,6 +34,11 @@ class BackendCall:
     call_id: str
     path: Path
     engine: str | None = None
+    model: str | None = None
+    version: str | None = None
+    org_id: str | None = None
+    transcript_events: list[dict[str, Any]] = field(default_factory=list)
+    timeline: list[dict[str, Any]] = field(default_factory=list)
     from_number: str | None = None
     started_at: str | None = None
     last_event_at: str | None = None
@@ -94,16 +99,29 @@ def load_backend_call(path: Path) -> BackendCall:
         if isinstance(ts, str):
             call.started_at = call.started_at or ts
             call.last_event_at = ts
+        # Preserve the recorded order; fragments are not invented conversation turns.
+        if event in {"barge_in_reset", "call_ended", "socket_stop", "audio_bridge_metrics",
+                     "response_latency", "interruption_recovered", "interruption_unrecovered", "agent_audio_started",
+                     "pipeline_stage", "wire_audio_metrics", "call_outcome_summary"}:
+            call.timeline.append({"event": event, "timestamp": ts, "data": data})
         if event == "engine_selected":
             engine = data.get("engine")
             call.engine = engine if isinstance(engine, str) else None
+            call.model = data.get("model") if isinstance(data.get("model"), str) else None
+            call.version = data.get("version") if isinstance(data.get("version"), str) else None
         elif event == "call_context_created":
             number = data.get("from_number")
             call.from_number = number if isinstance(number, str) else None
+            call.org_id = data.get("org_id") if isinstance(data.get("org_id"), str) else None
         elif event == "transcript":
             text = _text(data)
             if not text:
                 continue
+            if data.get("role") in {"caller", "assistant", "agent"}:
+                call.transcript_events.append({
+                    "role": "caller" if data["role"] == "caller" else "agent",
+                    "text": text, "timestamp": ts, "fragment": True, "source": "backend-audit",
+                })
             # The audit streams transcript fragments; the wire-level turn
             # boundaries are unreliable, so the leak check reads each side as
             # one continuous string (a conservative local approximation).
@@ -116,6 +134,9 @@ def load_backend_call(path: Path) -> BackendCall:
         elif event == "submitted":
             route = data.get("route")
             call.submissions.append({"route": route, "ts": ts})
+        elif event == "submit_failed":
+            call.submissions.append({"route": data.get("route"), "ts": ts, "failed": True})
+            call.problems.append("Envío de acción rechazado por el backend")
         elif event == "identity_confirmed":
             patient = data.get("patient_id")
             call.identity_patient_id = patient if isinstance(patient, str) else None
@@ -131,13 +152,16 @@ def load_backend_call(path: Path) -> BackendCall:
 def load_backend_calls(calls_dir: Path | str) -> list[BackendCall]:
     """Load every `*.jsonl` in the agent's `calls/` dir (or the DATA_DIR itself)."""
     base = Path(calls_dir)
-    if any(base.glob("*.jsonl")):
-        directory = base
-    elif (base / "calls").is_dir():
-        directory = base / "calls"
-    else:
+    # Both legacy DATA_DIR/calls and current DATA_DIR/<org>/calls exist.
+    # Never recursively read unrelated JSONL files (results, transcripts, etc.).
+    paths = set(base.glob("*.jsonl")) if base.name == "calls" else set()
+    paths.update((base / "calls").glob("*.jsonl"))
+    paths.update(base.glob("*/calls/*.jsonl"))
+    if not paths:
+        paths.update(base.glob("*.jsonl"))  # explicitly supplied legacy audit directory
+    if not paths and not base.is_dir():
         raise FileNotFoundError(f"no hay audit de llamadas en {base} ni en {base / 'calls'}")
-    return [load_backend_call(p) for p in sorted(directory.glob("*.jsonl"))]
+    return [load_backend_call(p) for p in sorted(paths) if not p.is_symlink()]
 
 
 def _resolve_scenario_path(base: Path, scenario_path: str) -> Path:

@@ -85,7 +85,7 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8099)
     p.add_argument("--results", default="evaluator/experiments/results")
     p.add_argument("--web", default="evaluator/web")
-    p.add_argument("--audit-data", default=None, help="backend DATA_DIR or its calls/ directory")
+    p.add_argument("--audit-data", default="backend/data", help="backend DATA_DIR or its calls/ directory")
 
     p = sub.add_parser("chat", help="manual tester: type to a live agent and read its replies")
     p.add_argument(

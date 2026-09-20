@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,14 @@ from evaluator.models import CaseResult
 from evaluator.observer.backend_calls import load_backend_calls
 from evaluator.observer.run import _real_call_row
 from evaluator.report.side_by_side import load_cases
+
+
+def synchronized(method):
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return locked
 
 
 def _availability(value: Any, *, unknown: bool = False) -> str:
@@ -48,6 +58,7 @@ class HistoryStore:
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
         self.path = self.root / "_history" / "calls-v1.json"
+        self._lock = threading.RLock()
 
     def _load(self) -> dict[str, dict[str, Any]]:
         try:
@@ -63,6 +74,7 @@ class HistoryStore:
         tmp.write_text(json.dumps({"schema_version": 1, "calls": calls}, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.path)
 
+    @synchronized
     def import_runs(self) -> dict[str, int]:
         calls = self._load()
         before = dict(calls)
@@ -113,6 +125,7 @@ class HistoryStore:
         self._save(calls)
         return {"indexed": len(calls), "created": created, "updated": updated, "skipped": skipped}
 
+    @synchronized
     def import_backend_audits(self, data_dir: Path | str) -> dict[str, int]:
         """Synchronize live backend audits without creating a static report."""
         try:
@@ -128,7 +141,8 @@ class HistoryStore:
         self._save(calls)
         created = sum(1 for key in calls if key not in before)
         updated = sum(1 for key in calls if key in before and calls[key] != before[key])
-        return {"indexed": len(calls), "created": created, "updated": updated, "skipped": len(backend_calls) - updated}
+        return {"indexed": len(calls), "created": created, "updated": updated,
+                "skipped": max(0, len(backend_calls) - created - updated)}
 
     def _run_ids(self) -> set[str]:
         if not self.root.is_dir():
@@ -151,12 +165,15 @@ class HistoryStore:
             "transcript_fragments": case.transcript if not events else [],
             "actions": case.submitted, "submit_attempts": case.submit_attempts,
             "audio": case.audio, "errors": case.errors, "notes": case.notes,
+            "ended": bool(case.ended_at) or case.verdict != "invalid_evaluation",
+            "turn_latencies_ms": case.turn_latencies_ms,
+            "first_audio_ms": case.first_audio_ms,
         }
 
     def _real_row(self, raw: dict[str, Any], run_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
         call_id = str(raw.get("call_id") or "unknown")
         transcript = raw.get("transcript") if isinstance(raw.get("transcript"), dict) else {}
-        fragments = [
+        fragments = raw.get("transcript_events") or [
             {"role": role, "text": text, "fragment": True, "source": "observer"}
             for role, text in (("caller", transcript.get("caller")), ("agent", transcript.get("assistant")))
             if isinstance(text, str) and text.strip()
@@ -165,7 +182,10 @@ class HistoryStore:
         return {
             "id": _record_id("real", run_id, call_id), "call_id": call_id, "origin": "real",
             "run_id": run_id, "case_id": None, "candidate": raw.get("engine") or "backend-real",
-            "candidate_version": None, "candidate_kind": "external",
+            "candidate_version": raw.get("version"), "candidate_kind": "external",
+            "model": raw.get("model"), "org_id": raw.get("org_id"),
+            "ended": raw.get("ended", False), "timeline": raw.get("timeline") or [],
+            "transcript_order_known": bool(raw.get("transcript_events")),
             "scenario_id": raw.get("tagged_scenario"), "problem_id": None, "verdict": verdict,
             "evaluated": verdict in {"pass", "fail"}, "started_at": raw.get("started_at") or manifest.get("started_at"),
             "ended_at": raw.get("last_event_at"), "duration_s": raw.get("elapsed_s"), "cost": None,
@@ -185,18 +205,36 @@ class HistoryStore:
             "run_id": None, "case_id": None, "candidate": raw.get("profile_id") or "manual-agent",
             "candidate_version": None, "candidate_kind": "external", "scenario_id": scenario.get("id"),
             "problem_id": None, "verdict": verdict, "evaluated": bool(scenario),
-            "started_at": raw.get("started_at"), "ended_at": raw.get("ended_at"), "duration_s": None,
+            "started_at": raw.get("started_at"), "ended_at": raw.get("ended_at"),
             "cost": None, "evidence": raw.get("evidence") or {"audio": "unknown", "transcript": "unknown", "cost": "unknown", "outcome": "unknown"},
             "transcript_events": raw.get("turns") or [], "transcript_fragments": [],
             "actions": raw.get("submissions") or [], "submit_attempts": raw.get("rejected") or [],
             "audio": {}, "errors": [raw["transport_error"]] if raw.get("transport_error") else [], "notes": [],
+            "ended": True, "duration_s": raw.get("duration_s"),
+            "audio_files": raw.get("audio_files") or {},
+            "timeline": raw.get("timeline") or [],
+            "first_audio_ms": raw.get("first_audio_ms"),
         }
 
+    @synchronized
     def calls(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
         rows = list(self._load().values())
+        # Observer snapshots and the live audit are the same call, not new samples.
+        real: dict[tuple[str, str], dict[str, Any]] = {}
+        other = []
+        for row in rows:
+            if row.get("origin") != "real":
+                other.append(row)
+                continue
+            key = (row.get("org_id") or "", row["call_id"])
+            previous = real.get(key)
+            if previous is None or row.get("run_id") == "live-backend":
+                real[key] = row
+        rows = other + list(real.values())
         rows = [row for row in rows if _matches(row, filters)]
         return sorted(rows, key=lambda row: (row.get("started_at") or "", row["id"]), reverse=True)
 
+    @synchronized
     def call(self, record_id: str) -> dict[str, Any] | None:
         return self._load().get(record_id)
 

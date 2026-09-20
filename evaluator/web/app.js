@@ -20,7 +20,7 @@ let mic = null;
 function esc(value) {
   const node = document.createElement("div");
   node.textContent = value == null ? "" : String(value);
-  return node.innerHTML;
+  return node.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
 function table(headers, rows) {
@@ -44,6 +44,7 @@ function verdictBadge(verdict) {
     fail: ["incorrecta", "fail"],
     invalid_evaluation: ["no evaluable", "invalid"],
     informative: ["informativa", "neutral"],
+    unknown: ["sin evaluar", "neutral"],
   };
   const [label, style] = labels[verdict] || [verdict || "sin resultado", "neutral"];
   return `<span class="badge ${style}">${esc(label)}</span>`;
@@ -73,6 +74,7 @@ $("tabs").addEventListener("click", (event) => {
   if (!button) return;
   const tab = button.dataset.tab;
   $("tabs").querySelectorAll("button").forEach((item) => item.classList.toggle("on", item === button));
+  $("tabs").querySelectorAll("button").forEach((item) => item.setAttribute("aria-current", item === button ? "page" : "false"));
   TABS.forEach((name) => ($(`tab-${name}`).hidden = name !== tab));
   if (tab === "calls") loadCalls().catch(showError);
   if (tab === "experiments") renderExperimentRuns().catch(showError);
@@ -210,9 +212,9 @@ function filteredCalls() {
   const scenario = $("call-scenario").value.trim().toLocaleLowerCase();
   return calls.filter((call) =>
     (!origin || call.origin === origin) &&
-    (!result || (result === "informative" ? !call.verdict : call.verdict === result)) &&
+    (!result || (result === "informative" ? (!call.verdict || call.verdict === "unknown") : (call.judgment?.outcome || call.verdict) === result)) &&
     (!profile || String(call.profile).toLocaleLowerCase().includes(profile)) &&
-    (!scenario || String(call.scenario).toLocaleLowerCase().includes(scenario)),
+    (!scenario || `${call.scenario} ${call.call_id}`.toLocaleLowerCase().includes(scenario)),
   );
 }
 
@@ -225,14 +227,14 @@ function renderCalls() {
     ? `${filtered.length} llamada(s) en la población filtrada. Evidencia parcial sigue indicada por llamada.`
     : "No hay llamadas que coincidan con estos filtros.";
   $("calls-list").innerHTML = page.length ? `<div class="tablewrap">${table(
-    ["origen", "inicio", "perfil", "escenario", "resultado", "evidencia", ""],
+    ["Inicio / llamada", "Origen", "Motor / modelo", "Duración", "Resultado", "Transcripción", ""],
     page.map((call) => [
+      `${esc(formatDate(call.started_at))}<br><span class="meta">${esc(call.call_id)}</span>`,
       originBadge(call.origin),
-      esc(formatDate(call.started_at)),
-      esc(call.profile),
-      `<code>${esc(call.scenario)}</code>`,
-      verdictBadge(call.verdict || "informative"),
-      `<span class="meta">${esc(evidenceText(call.evidence))}</span>`,
+      `${esc(call.model || call.profile)}<br><span class="meta">${esc(call.candidate_version || 'Versión no registrada')}</span>`,
+      call.duration_s == null ? '—' : `${Math.round(call.duration_s)} s`,
+      `${verdictBadge(call.judgment?.outcome || call.verdict || "informative")}${call.judgment ? '<br><span class="meta">juez LLM</span>' : ''}`,
+      call.transcript_events?.length ? `${call.transcript_events.length} fragmentos` : 'No disponible',
       `<button class="small" data-call-detail="${esc(call.id)}" type="button">Ver detalle</button>`,
     ]),
   )}</div>` : '<div class="empty"><h3>Sin evidencia para mostrar</h3><p>Probá otro filtro o recargá las corridas. Una respuesta de API vacía no se rellena con ejemplos ficticios.</p></div>';
@@ -249,13 +251,14 @@ function actionHtml(action) {
 
 function renderCallDetail(call) {
   const events = call.transcript_events || call.transcript_fragments || [];
-  const audio = Object.entries(call.audio || {}).map(([stream]) => {
+  const historicalAudio = Object.keys(call.audio_files || {}).map(stream => `<label>${esc(stream)}<audio controls preload="none" src="/api/history/calls/${encodeURIComponent(call.id)}/audio/${encodeURIComponent(stream)}"></audio></label>`).join('');
+  const audio = historicalAudio || Object.entries(call.audio || {}).map(([stream]) => {
     if (!call.run_id || !call.case_id) return "";
     const url = `/api/runs/${encodeURIComponent(call.run_id)}/evidence/${encodeURIComponent(stream)}?case_id=${encodeURIComponent(call.case_id)}`;
     return `<label>${esc(stream)}<audio controls preload="none" src="${url}"></audio></label>`;
   }).join("") || '<p class="meta">Audio no disponible para esta llamada.</p>';
   const transcript = events.length
-    ? events.map((event) => `<li class="transcript-${esc(event.role)}"><span>${esc(event.role)}</span><p>${esc(event.text)}</p><small>${esc(event.timestamp || (event.offset_s != null ? `${event.offset_s}s` : "sin marca"))}${event.fragment ? " · fragmento" : ""}</small></li>`).join("")
+    ? events.map((event, index) => `<li id="fragment-${index}" class="transcript-${esc(event.role)}"><span>${event.role === 'caller' ? 'Paciente' : 'Agente'}</span><p>${esc(event.text)}</p><small>#${index} · ${esc(event.timestamp ? new Date(event.timestamp).toLocaleTimeString('es-ES') : (event.offset_s != null ? `${event.offset_s}s` : "sin marca"))}${event.fragment ? " · fragmento" : ""}</small></li>`).join("")
     : '<li class="empty-line">Transcripción no disponible. La ausencia de texto no implica silencio.</li>';
   const actions = call.actions.length ? call.actions.map(actionHtml).join("") : '<p class="meta">No hay acciones registradas.</p>';
   const result = call.verdict
@@ -264,10 +267,33 @@ function renderCallDetail(call) {
   $("call-detail").hidden = false;
   $("call-detail").innerHTML = `<div class="detail-head"><div><p class="kicker">${originBadge(call.origin)} detalle</p><h2>${esc(call.call_id || call.case_id)}</h2><p class="meta">${esc(call.profile)} · ${esc(call.scenario)} · ${esc(formatDate(call.started_at))}</p></div><button id="call-detail-close" type="button" aria-label="Cerrar detalle">Cerrar</button></div>
     <div class="detail-grid"><section><h3>Resultado</h3><p>${result}</p><p class="meta">${esc(evidenceText(call.evidence))}</p></section><section><h3>Audio</h3>${audio}</section></div>
-    <h3>Conversación registrada</h3><ol class="transcript">${transcript}</ol>
+    <section class="judgment"><h3>Valoración del juez LLM</h3><div id="call-judgment"></div><div class="judge-actions"><button id="judge-call" class="primary" ${!call.ended || !events.length ? 'disabled' : ''}>${call.judgment ? 'Verificar valoración' : 'Evaluar llamada'}</button><span id="judge-call-state" role="status"></span></div><p class="meta">Se envían la transcripción y las acciones a NaN. Se ocultan DNI, teléfonos y correos detectables; el texto puede contener nombres y datos clínicos. No se envía audio.</p></section>
+    <h3>Conversación registrada</h3>${call.transcript_order_known === false ? '<p class="hint">Este registro antiguo no conserva el orden entre interlocutores.</p>' : ''}<ol class="transcript">${transcript}</ol>
     <h3>Acciones y submissions</h3><div class="actions">${actions}</div>
     ${call.errors?.length ? `<h3>Errores del rig</h3><pre class="log">${esc(call.errors.join("\n"))}</pre>` : ""}`;
   $("call-detail-close").addEventListener("click", () => ($("call-detail").hidden = true));
+  function showJudgment(judgment) {
+    $("call-judgment").innerHTML = judgment
+      ? `<p>${verdictBadge(judgment.outcome)} · Calidad conversacional ${esc(judgment.quality ?? '—')}/5</p><p>${esc(judgment.reason)}</p><p>${judgment.evidence_indices.map(i => `<a href="#fragment-${i}">Fragmento #${i}</a>`).join(' · ')}</p><p class="hint">${judgment.limitations.map(esc).join(' · ')}</p><p class="meta">${esc(judgment.model)} · ${esc(judgment.rubric)} · ${esc(formatDate(judgment.evaluated_at))}</p>`
+      : '<p>Sin valoración. Solo se puntúan conclusiones que tengan evidencia; lo demás queda sin determinar.</p>';
+  }
+  showJudgment(call.judgment);
+  $("judge-call").addEventListener("click", async () => {
+    const button = $('judge-call');
+    button.disabled = true;
+    $('judge-call-state').textContent = 'Evaluando evidencia…';
+    try {
+      const judgment = await api.judgeCall(call.id);
+      call.judgment = judgment;
+      const listed = calls.find(c => c.id === call.id);
+      if (listed) listed.judgment = judgment;
+      showJudgment(judgment);
+      renderCalls();
+      $('judge-call-state').textContent = 'Valoración guardada';
+      window.refreshAnalytics?.();
+    } catch (error) { $('judge-call-state').textContent = error.message; }
+    finally { button.disabled = false; }
+  });
   $("call-detail").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -291,7 +317,7 @@ async function renderExperimentRuns() {
     ? `<div class="tablewrap">${table(["corrida", "inicio", "casos", "resultado", "estado"], runs.map((run) => [
       `<code>${esc(run.run_id)}</code>`, esc(formatDate(run.started_at)), esc(run.cases),
       `${esc(run.passed)} correctas · ${esc(run.failed)} incorrectas · ${esc(run.invalid)} no evaluables`,
-      '<span class="badge neutral">histórica</span>',
+      `<button class="small" data-run-open="${esc(run.run_id)}">Ver resultados</button>`,
     ]))}</div>`
     : '<div class="empty"><h3>No hay ejecuciones registradas</h3><p>Creá una ejecución con perfiles y escenarios declarados en el servidor.</p></div>';
   const active = jobs.length ? `<h2>Trabajos</h2><div class="tablewrap">${table(["id", "estado", "progreso", "acción"], jobs.map((job) => [
@@ -300,6 +326,11 @@ async function renderExperimentRuns() {
   ]))}</div>` : "";
   $("experiment-runs").innerHTML = active + '<h2>Corridas disponibles</h2>' + historical;
 }
+
+$("experiment-runs").addEventListener("click", event => {
+  const button = event.target.closest('[data-run-open]');
+  if (button) selectRun(button.dataset.runOpen).then(() => document.querySelector('.run-summary').scrollIntoView({ behavior: 'smooth' })).catch(showError);
+});
 
 // ---- comparison ------------------------------------------------------------
 
