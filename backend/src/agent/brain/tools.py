@@ -63,6 +63,14 @@ def _build_jev_client(settings: Any) -> Any | None:
         return None
 
 
+def _plan_name(cache: Any, plan_id: str | None) -> str:
+    """El nombre del plan, para enseñarlo. Vacío cuando el catálogo no lo sabe."""
+    if cache is None or not plan_id:
+        return ""
+    plan = cache.plan_by_id(plan_id)
+    return str(getattr(plan, "name", "") or "") if plan is not None else ""
+
+
 def _lookup_note(summary: list[dict[str, Any]], national_id: str | None) -> str:
     """What the count means, and what asking again would and would not fix.
 
@@ -87,23 +95,37 @@ def _lookup_note(summary: list[dict[str, Any]], national_id: str | None) -> str:
     """
     count = len(summary)
     if count == 0:
+        # Y lo primero que hay que decir aquí es que se puede dar de alta.
+        #
+        # Esta nota decía "termina con patient_not_found" y no nombraba el
+        # alta. En una llamada de verdad eso salió exactamente como estaba
+        # escrito: seis búsquedas seguidas, cero resultados, y el agente
+        # contestando "no puedo confirmar la cita porque no he podido
+        # registrar su paciente" — sin haberlo intentado una sola vez.
+        # `patient_not_found` es el final de una llamada sobre alguien que ya
+        # debería estar; alguien que llama por primera vez no está perdido,
+        # está sin dar de alta.
+        offer = (
+            "Nobody is found because nobody is on file yet, which is what a first call "
+            "looks like. If the caller is the patient, or is calling for somebody they "
+            "can give the details of, OFFER TO REGISTER THEM and call "
+            "register_new_patient with name, surnames, document number, date of birth, "
+            "phone, email and insurer. Do not end the call as patient_not_found until "
+            "they decline to be registered or cannot give the details."
+        )
         if national_id:
             return (
                 "You searched and the register has nobody with that document number. "
                 "SAY THAT FIRST, plainly and without alarm — you have looked, and there "
-                "is no record. THEN, in the same breath, question the premise rather than "
-                "repeating the request: ask whether that is the document they are "
-                "registered with here, or whether they might be registered under "
-                "another one. Only if they confirm it is right, ask ONCE for the full "
-                "name and date of birth. Asking for the same document again returns the "
-                "same nothing. If nothing finds them, end with patient_not_found."
+                "is no record. THEN question the premise rather than repeating the "
+                "request: ask whether that is the document they are registered with "
+                "here. " + offer + " Asking for the same document again returns the "
+                "same nothing."
             )
         return (
             "You searched and nobody in the register matches. SAY THAT FIRST — you have "
-            "looked and found no record — and then ask whether they are registered at "
-            "this clinic at all, or under a different name. Only then ask ONCE for the "
-            "document number or date of birth. Repeating the same question returns the "
-            "same nothing. If nothing finds them, end with patient_not_found."
+            "looked and found no record — and then ask whether they have been seen here "
+            "before. " + offer + " Repeating the same question returns the same nothing."
         )
     if count == 1:
         return "One person. Confirm them with confirm_patient before doing anything else."
@@ -1342,6 +1364,24 @@ class ToolBox:
         self.ctx.audit(
             "action_queued",
             {"route": "register", **{k: v for k, v in self.ctx.queued_actions[-1].items() if k != "route"}},
+        )
+        # Y en la tabla de la clínica, ya. El envío a Prosper ocurre al colgar
+        # y una llamada de navegador no lo hace nunca —sus acciones no cuelgan
+        # de ninguna llamada que la plataforma conozca— así que sin esto un
+        # alta hecha en una demostración no existía en ninguna pantalla.
+        # Aquí sí existe, y el panel dice de dónde viene.
+        self._remember_them(
+            [
+                {
+                    "patient_id": f"alta-{normalized_id[-4:]}" if normalized_id else "",
+                    "given_name": given_name.strip(),
+                    "first_surname": first_surname.strip(),
+                    "second_surname": second_surname.strip(),
+                    "date_of_birth": date_of_birth.strip(),
+                    "insurer": _plan_name(self.cache, plan_id),
+                    "note": "Alta tomada por teléfono.",
+                }
+            ]
         )
         plan = self.cache.plan_by_id(plan_id or "") if self.cache is not None else None
         await params.result_callback(

@@ -1419,6 +1419,13 @@ def test_a_lookup_that_found_nobody_rules_out_asking_again():
     note = _lookup_note([], "77992528B")
     assert "again returns the same nothing" in note
     assert "patient_not_found" in note
+    # Y lo más importante: que ofrezca darle de alta. Sin esto, una llamada
+    # de verdad hizo seis búsquedas seguidas y contestó "no he podido
+    # registrar su paciente" sin haberlo intentado una sola vez. Alguien que
+    # llama por primera vez no está perdido: está sin dar de alta.
+    assert "register_new_patient" in note
+    assert "OFFER TO REGISTER THEM" in note
+    assert "until they decline" in note
     # And the order: say you looked before you ask for anything else. A
     # receptionist who goes quiet and asks again sounds like they did not
     # hear; one who says "he mirado y no me sale nadie" sounds like they
@@ -1441,3 +1448,10 @@ def test_one_match_is_sent_to_confirmation():
     from agent.brain.tools import _lookup_note
 
     assert "confirm_patient" in _lookup_note([{"patient_id": "P1"}], None)
+
+
+def test_nobody_found_without_a_document_also_offers_the_registration():
+    from agent.brain.tools import _lookup_note
+
+    note = _lookup_note([], None)
+    assert "register_new_patient" in note
