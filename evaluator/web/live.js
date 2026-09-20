@@ -102,8 +102,59 @@
   });
   mute.addEventListener('click', () => { muted = !muted; mute.setAttribute('aria-pressed', String(muted)); mute.textContent = muted ? 'Activar micrófono' : 'Silenciar micrófono'; });
   window.addEventListener('pagehide', () => { if (ws?.readyState === WebSocket.OPEN) ws.send('stop'); release('Llamada finalizada.'); });
+  // Context under the live card. It repeats only what /api/profiles declares:
+  // an endpoint the server never announced stays absent instead of being filled in.
+  const profileFacts = $('live-profile-facts');
+  const profileEngine = $('live-profile-engine');
+  const profileLaunch = $('live-profile-launch');
+  let profileList = [];
+  const chips = items => `<div class="chips">${items.map(item => `<span class="chip">${esc(item)}</span>`).join('')}</div>`;
+  const fact = (label, value) => `<div class="brief-fact"><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
+  const absent = text => `<span class="meta">${esc(text)}</span>`;
+  function renderProfileContext() {
+    const selected = profileList.find(item => item.id === $('live-profile').value);
+    if (!selected) {
+      profileEngine.textContent = 'sin perfil';
+      profileEngine.className = 'badge neutral';
+      profileFacts.innerHTML = fact('Perfil', 'El servidor no declara ningún perfil de voz disponible para esta prueba.');
+      profileLaunch.textContent = '';
+      return;
+    }
+    const endpoints = selected.endpoints || {};
+    const laboratory = selected.laboratory || {};
+    const stack = selected.providers?.stack?.length ? selected.providers.stack : [selected.providers?.name].filter(Boolean);
+    const enabled = Object.entries(selected.capabilities || {}).filter(([, on]) => on).map(([name]) => name);
+    profileEngine.textContent = selected.engine || 'motor no declarado';
+    profileEngine.className = 'badge neutral';
+    profileFacts.innerHTML = [
+      fact('Perfil', `<code>${esc(selected.id)}</code>`),
+      fact('Motor', esc([selected.engine, selected.version].filter(Boolean).join(' · ') || 'no declarado')),
+      fact('Proveedores', stack.length ? chips(stack) : absent('no declarados')),
+      fact('Capacidades', enabled.length ? chips(enabled) : absent('ninguna declarada')),
+      fact('WebSocket', endpoints.ws_url ? `<code>${esc(endpoints.ws_url)}</code>` : absent('no declarado')),
+      fact('Texto', endpoints.text_url ? `<code>${esc(endpoints.text_url)}</code>` : absent('sin endpoint de texto')),
+      fact('Laboratorio', `puerto ${esc(laboratory.voice_port ?? 'n/d')} · TTS ${esc(laboratory.tts || 'no declarado')}`),
+    ].join('');
+    profileLaunch.innerHTML = laboratory.has_start_command
+      ? `El perfil declara comando de arranque: el runner del laboratorio puede levantar el proceso en el puerto ${esc(laboratory.voice_port ?? 'n/d')}.`
+      : `Sin comando de arranque declarado: el agente tiene que estar escuchando en <code>${esc(endpoints.ws_url || 'el WebSocket declarado')}</code> antes de iniciar la llamada.`;
+  }
+  $('live-profile').addEventListener('change', renderProfileContext);
+  $('brief-open-calls').addEventListener('click', () => document.querySelector('[data-tab="calls"]').click());
   api.getProfiles().then(items => {
-    $('live-profile').innerHTML = items.filter(p => p.capabilities?.voice && !p.refusals?.length).map(p => `<option value="${esc(p.id)}">${esc(p.id)} · ${esc(p.engine)}</option>`).join('');
-    if (!$('live-profile').options.length) { start.disabled = true; state.textContent = 'Configura un perfil de voz local para probar el agente.'; }
-  }).catch(error => { state.textContent = error.message; start.disabled = true; });
+    profileList = items;
+    const usable = items.filter(p => p.capabilities?.voice && !p.refusals?.length);
+    $('live-profile').innerHTML = usable.map(p => `<option value="${esc(p.id)}">${esc(p.id)} · ${esc(p.engine)}</option>`).join('');
+    renderProfileContext();
+    if (!usable.length) {
+      start.disabled = true;
+      state.textContent = items.length ? 'Ningún perfil declara voz disponible sin bloqueos. Revisa /api/profiles.' : 'Configura un perfil de voz local para probar el agente.';
+    }
+  }).catch(error => {
+    state.textContent = error.message;
+    start.disabled = true;
+    profileEngine.textContent = 'sin datos';
+    profileFacts.innerHTML = fact('Perfil', `<span class="bad">No se pudo leer /api/profiles: ${esc(error.message)}</span>`);
+    profileLaunch.textContent = '';
+  });
 })();

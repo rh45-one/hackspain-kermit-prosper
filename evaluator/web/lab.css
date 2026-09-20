@@ -11,6 +11,9 @@ main { max-width: 1440px; padding: 32px 32px 64px; }
 h1 { font-size: 2rem; line-height: 1.2; letter-spacing: -.03em; font-weight: 600; }
 h2 { font-size: 1.125rem; margin: 0; line-height: 1.4; padding: 0; font-weight: 600; }
 h3 { font-size: 1rem; }
+/* Headings that start a block inside a panel get the separation the card
+   headings above them do not need. */
+.panel > h2, #experiment-runs > h2 { margin-top: var(--section-gap); }
 .page-head { margin-bottom: 24px; }
 .lead { margin: 8px 0; max-width: 75ch; }
 .source-status { color: var(--steel); font-size: 12px; margin: 12px 0 0; }
@@ -23,7 +26,11 @@ label.field { color: var(--steel); font-size: 12px; }
 .metric { padding: 20px 16px; border-left: 1px solid var(--mist); }
 .metric:first-child { border-left: 0; padding-left: 0; }
 .metric dt { font-size: 12px; color: var(--steel); }
-.metric dd { margin: 5px 0; font-size: 28px; font-weight: 550; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.metric dd { display: flex; align-items: baseline; gap: 8px; margin: 5px 0; font-size: 28px; font-weight: 550; line-height: 1.3; font-variant-numeric: tabular-nums; }
+/* Small samples are labelled in place: the number keeps its value and stops
+   reading as a headline when it rests on two observations or none. */
+.metric-sample { padding: 1px 7px; border: 1px solid var(--mist); border-radius: 999px; background: var(--fog); color: var(--quiet); font-size: 11px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.metric.is-thin .metric-value { color: var(--quiet); }
 .metric small { display: block; color: var(--quiet); font-size: 11px; line-height: 1.5; }
 .metric dl { margin: 0; }
 .chart-grid { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(280px,1fr); gap: 20px; }
@@ -76,11 +83,37 @@ th, td { font-variant-numeric: tabular-nums; }
 .live-controls { display: flex; flex-direction: column; justify-content: center; min-width: 185px; gap: 12px; }
 #live-time { text-align: center; font-size: 22px; }
 #live-state { margin-bottom: 0; color: var(--steel); }
+/* Live-call context: what the server declares and what closing the call leaves
+   behind. Read-only text, same card vocabulary as the rest of the console. */
+.live-brief { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 20px; margin-top: 20px; }
+.brief-card { display: flex; flex-direction: column; min-width: 0; padding: 20px 22px; background: var(--canvas); border: 1px solid var(--mist); border-radius: var(--radius-xl); }
+.brief-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.brief-head h2 { margin: 0; }
+.brief-facts { display: grid; gap: 9px; margin: 0; }
+.brief-fact { display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 12px; align-items: baseline; }
+.brief-fact dt { color: var(--quiet); font-size: 12px; }
+.brief-fact dd { margin: 0; font-size: 12.5px; color: var(--steel); overflow-wrap: anywhere; }
+.brief-fact code { font-size: 12px; color: var(--graphite); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border: 1px solid var(--mist); border-radius: 999px; background: var(--fog); color: var(--steel); font-size: 11.5px; line-height: 1; white-space: nowrap; }
+.brief-launch { margin: 14px 0 0; font-size: 12px; color: var(--quiet); }
+.brief-launch:empty { display: none; }
+.brief-launch code { color: var(--graphite); }
+.brief-steps { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.brief-steps li { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 12px; }
+.brief-steps .step-index { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--mist); border-radius: 50%; background: var(--fog); color: var(--steel); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.brief-steps b { display: block; font-size: 13.5px; font-weight: 500; color: var(--graphite); }
+.brief-steps p { margin: 2px 0 0; font-size: 12.5px; color: var(--steel); overflow-wrap: anywhere; }
+.brief-actions { margin-top: auto; padding-top: 16px; }
+/* The compare panel is a task flow, not a page: its empty states stay short. */
+#tab-compare .empty { padding: 18px 22px; gap: 4px; }
 .text-tester { margin-top: 28px; }
 .text-tester > summary { font-size: 14px; color: var(--graphite); padding: 12px 0; }
 .kicker { display: none; }
 button:hover:not(:disabled), .button:hover, button:active:not(:disabled) { transform: none; }
 :focus-visible { outline: 2px solid var(--success); outline-offset: 3px; }
+/* Form controls also get a keyboard ring the box-shadow tint cannot carry. */
+select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--success); outline-offset: 2px; }
 input, textarea { caret-color: var(--success); }
 ::placeholder { color: var(--quiet); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -106,6 +139,8 @@ input, textarea { caret-color: var(--success); }
   .filterbar { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .live-console { grid-template-columns: 1fr; padding: 20px; gap: 20px; }
   .live-controls { min-width: 0; }
+  .live-brief { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .brief-card { padding: 16px 18px; }
   .line { grid-template-columns: 48px minmax(0,1fr); }
   .analytics-filters .field { min-width: calc(50% - 12px); }
 }

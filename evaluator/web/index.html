@@ -129,7 +129,6 @@
           </div>
           <div class="row"><button id="experiment-create" class="primary" type="submit" disabled>Crear experimento</button><span class="meta">Los trabajos solo pueden usar perfiles y escenarios declarados localmente.</span></div>
         </form>
-        <h2>Corridas disponibles</h2>
         <div id="experiment-runs"></div>
         <section class="run-summary"><h2 id="bench-title">Resultado de la ejecución</h2><div class="facts" id="bench-facts"></div><div id="bench-cards" class="cards"></div><h3>Resultados por escenario</h3><div id="matrix" class="tablewrap"></div></section>
       </section>
@@ -176,6 +175,27 @@
         <section class="live-console" aria-label="Llamada por micrófono">
           <div><h2>Micrófono en directo</h2><p>Habla y escucha al mismo tiempo. Puedes interrumpir al agente durante su respuesta.</p><label class="field">Perfil de voz<select id="live-profile"></select></label><p id="live-state" role="status">Línea disponible · audio de 8 kHz</p></div>
           <div class="live-controls"><button type="button" id="live-start" class="primary">Iniciar llamada</button><button type="button" id="live-mute" disabled aria-pressed="false">Silenciar micrófono</button><button type="button" id="live-stop" disabled>Colgar</button><span id="live-time" class="mono">00:00</span></div>
+        </section>
+        <section class="live-brief" aria-label="Contexto de la llamada manual">
+          <article class="brief-card">
+            <div class="brief-head">
+              <h2>Perfil seleccionado</h2>
+              <span id="live-profile-engine" class="badge neutral">cargando</span>
+            </div>
+            <dl class="brief-facts" id="live-profile-facts">
+              <div class="brief-fact"><dt>Perfil</dt><dd class="meta">Consultando los perfiles que declara el servidor…</dd></div>
+            </dl>
+            <p class="brief-launch" id="live-profile-launch"></p>
+          </article>
+          <article class="brief-card">
+            <div class="brief-head"><h2>Qué vas a ver al cerrar</h2></div>
+            <ol class="brief-steps">
+              <li><span class="step-index" aria-hidden="true">1</span><div><b>Llamada</b><p>Se abre contra el WebSocket del agente y la clínica local: el micrófono y el audio del agente viajan por el mismo socket que usan las corridas.</p></div></li>
+              <li><span class="step-index" aria-hidden="true">2</span><div><b>Evidencia en el historial</b><p>Al colgar, la llamada queda en Llamadas con origen manual, junto a transcripción, audio y submissions: solo lo que el servidor haya registrado.</p></div></li>
+              <li><span class="step-index" aria-hidden="true">3</span><div><b>Veredicto del juez</b><p>El detalle de la llamada permite pedir la valoración del juez LLM sobre esa transcripción. Sin evidencia suficiente queda sin evaluar.</p></div></li>
+            </ol>
+            <div class="brief-actions"><button type="button" id="brief-open-calls">Abrir Llamadas</button></div>
+          </article>
         </section>
         <details class="text-tester"><summary>Prueba por turnos con texto o grabación</summary>
         <div class="well">

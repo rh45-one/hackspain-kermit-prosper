@@ -5,8 +5,13 @@
   const ms = (n) => n == null ? '—' : `${fmt(n / 1000, 2)} s`;
   const pct = (n) => n == null ? '—' : `${fmt(n * 100, 1)} %`;
   const blank = (title, reason) => `<div class="empty-chart"><h3>${esc(title)}</h3><p>${esc(reason)}</p></div>`;
-  function metric(label, value, note) {
-    return `<div class="metric"><dl><dt>${esc(label)}</dt><dd>${esc(value)}</dd></dl><small>${esc(note)}</small></div>`;
+  // Below this many observations the KPI keeps its exact value but is labelled
+  // and de-emphasised: an honest zero from a sample of two is not a headline.
+  const SMALL_SAMPLE = 5;
+  function metric(label, value, note, sample) {
+    const thin = sample != null && sample < SMALL_SAMPLE;
+    const badge = thin ? `<span class="metric-sample">n=${fmt(sample)}</span>` : '';
+    return `<div class="metric${thin ? ' is-thin' : ''}"><dl><dt>${esc(label)}</dt><dd><span class="metric-value">${esc(value)}</span>${badge}</dd></dl><small>${esc(note)}</small></div>`;
   }
   function coverage(label, value, total) {
     return `<div class="coverage-row"><div class="coverage-label"><span>${esc(label)}</span><b>${fmt(value)} / ${fmt(total)}</b></div><progress aria-label="${esc(label)}" value="${value}" max="${total || 1}"></progress></div>`;
@@ -47,10 +52,10 @@
       : 'Fuente de llamadas no disponible. Arranca el laboratorio con --audit-data apuntando al DATA_DIR del backend.';
     $('analytics-metrics').innerHTML = [
       metric('Llamadas registradas', fmt(s.calls), `${fmt(s.completed)} con cierre registrado`),
-      metric('Acierto · juez LLM', pct(s.pass_rate), `${fmt(s.passed)} correctas / ${fmt(s.evaluated)} evaluables`),
+      metric('Acierto · juez LLM', pct(s.pass_rate), `${fmt(s.passed)} correctas / ${fmt(s.evaluated)} evaluables`, s.evaluated),
       metric('Primer audio · p50', ms(s.first_audio_p50_ms), `Conexión → emisión · ${fmt(s.first_audio_n)} llamadas`),
-      metric('Calidad conversacional', s.quality == null ? '—' : `${fmt(s.quality, 1)} / 5`, `${fmt(s.quality_n)} valoraciones LLM`),
-      metric('Recuperación de voz', s.recovered == null ? '—' : `${s.recovered} / ${s.recovery_observed}`, `${fmt(s.interruptions)} interrupciones registradas${s.recovered == null ? ' · recuperación sin medir' : ''}`),
+      metric('Calidad conversacional', s.quality == null ? '—' : `${fmt(s.quality, 1)} / 5`, `${fmt(s.quality_n)} valoraciones LLM`, s.quality_n),
+      metric('Recuperación de voz', s.recovered == null ? '—' : `${s.recovered} / ${s.recovery_observed}`, `${fmt(s.interruptions)} interrupciones registradas${s.recovered == null ? ' · recuperación sin medir' : ''}`, s.recovery_observed),
     ].join('');
     $('coverage-chart').innerHTML = coverage('Transcripción', s.transcripts, s.calls) + coverage('Primer audio', s.first_audio_n, s.calls) + coverage('Latencia por respuesta', s.response_calls, s.calls) + coverage('Evaluación LLM', s.judged, s.calls) + `<p class="chart-caption">${s.transcript_gap_n ? `Intervalo entre transcripciones: ${ms(s.transcript_gap_p50_ms)} p50 (${fmt(s.transcript_gap_n)} pares). No mide la latencia audible.` : 'Los datos ausentes se muestran como —, nunca como cero.'}</p>`;
     $('model-benchmark').innerHTML = data.models.length ? `<div class="tablewrap">${table(['Motor / modelo', 'Versión', 'Llamadas', 'Acierto LLM', 'Calidad / 5', 'Primer audio p50', 'Latencia p95'], data.models.map(m => [

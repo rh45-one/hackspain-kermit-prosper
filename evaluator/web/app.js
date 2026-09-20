@@ -99,13 +99,36 @@ function syncCandidateSelect(side) {
   $(`diff-cand-${side}`).innerHTML = `${candidates.length > 1 ? '<option value="">elegir</option>' : ""}${candidates.map((candidate) => `<option value="${esc(candidate)}">${esc(candidate)}</option>`).join("")}`;
 }
 
+function candidateSignature(run) {
+  return [...(run.candidates || [])].sort().join("|");
+}
+
+// Opens the compare panel ready: A and B land on the two most recent runs whose
+// candidates differ. The pairing is still declared by the operator — the diff
+// itself never guesses which candidate meets which.
+function prefillDiffRuns() {
+  const recent = runs
+    .map((run, index) => ({ run, index }))
+    .sort((a, b) => String(b.run.started_at || "").localeCompare(String(a.run.started_at || "")) || a.index - b.index)
+    .map((entry) => entry.run);
+  for (let i = 0; i < recent.length; i += 1) {
+    for (let j = i + 1; j < recent.length; j += 1) {
+      if (candidateSignature(recent[i]) === candidateSignature(recent[j])) continue;
+      $("diff-a").value = recent[i].run_id;
+      $("diff-b").value = recent[j].run_id;
+      return true;
+    }
+  }
+  return false;
+}
+
 async function loadRuns() {
   runs = await api.getRuns();
   const options = runOptions() || '<option value="">sin corridas</option>';
   $("run").innerHTML = options;
   $("diff-a").innerHTML = options;
   $("diff-b").innerHTML = options;
-  if (runs.length > 1) $("diff-b").selectedIndex = 1;
+  if (!prefillDiffRuns() && runs.length > 1) $("diff-b").selectedIndex = 1;
   syncCandidateSelect("a");
   syncCandidateSelect("b");
   await renderExperimentRuns();
