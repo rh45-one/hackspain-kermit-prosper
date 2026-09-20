@@ -151,6 +151,39 @@ def build_cover_question(people: Mapping[str, str]) -> dict[str, JsonValue]:
     }
 
 
+TRIAGE_KEY = "likely_specialty"
+TRIAGE_UNCLEAR = "unclear"
+TRIAGE_INSTRUCTIONS = (
+    "From this patient's record, which of the clinic's specialties is the most "
+    "likely reason they will call next? Judge only from what the record says — "
+    "past visits, referrals on file, their plan, their age. Choose 'unclear' "
+    "whenever the record does not point anywhere in particular, which is the "
+    "normal case for a healthy adult who has never been seen."
+)
+
+
+def build_triage_question(specialties: Mapping[str, str]) -> dict[str, JsonValue]:
+    """A closed choice over the specialties THIS clinic actually offers.
+
+    The escape hatch matters more here than anywhere else. A record with
+    nothing in it points nowhere, and a panel that answers "cardiology" for
+    everybody who has never been seen is worse than a blank column: it looks
+    like knowledge and it is noise.
+    """
+    criteria: dict[str, str] = dict(specialties)
+    criteria[TRIAGE_UNCLEAR] = (
+        "The record does not point at any specialty in particular. Healthy, "
+        "no referrals, nothing recurring."
+    )
+    return {
+        TRIAGE_KEY: {
+            "type": "choice",
+            "instructions": TRIAGE_INSTRUCTIONS,
+            "criteria": criteria,
+        }
+    }
+
+
 def intent_choice_labels() -> frozenset[str]:
     """The labels a Jev choice answer is allowed to return."""
     return frozenset(INTENT_CRITERIA)
@@ -172,8 +205,11 @@ __all__ = [
     "PLAN_KEY",
     "PLAN_UNCLEAR",
     "QUESTION_KEYS",
+    "TRIAGE_KEY",
+    "TRIAGE_UNCLEAR",
     "build_cover_question",
     "build_plan_question",
     "build_questions",
+    "build_triage_question",
     "intent_choice_labels",
 ]

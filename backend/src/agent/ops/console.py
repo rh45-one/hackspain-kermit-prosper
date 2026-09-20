@@ -280,6 +280,7 @@ from agent.ops.agent_config import router as agent_config_router
 from agent.ops.auth import router as auth_router
 from agent.ops.cover import router as cover_router
 from agent.ops.incidents import router as incidents_router
+from agent.ops.triage import router as triage_router
 from agent.ops.directory import router as directory_router
 from agent.ops.frontdesk import router as frontdesk_router
 from agent.ops.graph import router as graph_router
@@ -307,6 +308,9 @@ app.include_router(cover_router)
 # se la asigna a quien dicen las rutas — la misma persona a la que llamaría el
 # agente. Antes eso sólo existía como línea de auditoría en un volumen.
 app.include_router(incidents_router)
+# Por qué es más probable que llame cada paciente, decidido por Jev sobre las
+# especialidades que esta clínica publica. Una pantalla, nunca una llamada.
+app.include_router(triage_router)
 # Sign in, sign out, switch clinic, and write a clinic's Prosper key. The only
 # routes here that are NOT behind `require_ops_access`: /ops/login cannot be,
 # or nobody could ever reach it. Every route on it that does anything checks

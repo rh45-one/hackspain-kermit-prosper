@@ -307,6 +307,56 @@ class JevClient:
         """
         return (await self.choose_cover(situation, people, timeout_seconds=timeout_seconds)).slug
 
+    async def triage_patient(
+        self,
+        record: str,
+        specialties: Mapping[str, str],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> CoverChoice:
+        """Por qué especialidad es más probable que llame este paciente.
+
+        Misma forma que `choose_cover` y por la misma razón: una elección
+        cerrada sobre algo que la clínica ya publica, con abstención. Aquí la
+        abstención es el caso normal — un adulto sano que nunca ha venido no
+        apunta a ninguna parte, y una columna que contesta "cardiología" para
+        todo el mundo parece conocimiento y es ruido.
+        """
+        from agent.decision.questions import TRIAGE_KEY, TRIAGE_UNCLEAR, build_triage_question
+
+        started = self._clock()
+        if not record.strip() or not specialties or not self._api_key:
+            return CoverChoice(None, 0.0, "not_asked", self._min_confidence)
+        payload: dict[str, JsonValue] = {
+            "state": {"record": record.strip()},
+            "model": self._model,
+            "questions": build_triage_question(specialties),
+        }
+        try:
+            response = await self._post_with_controls(payload, None, timeout_seconds)
+        except (_CancelledError, TimeoutError, httpx.HTTPError, httpx.TransportError):
+            return CoverChoice(None, 0.0, "unreachable", self._min_confidence)
+        if response.status_code != 200:
+            return CoverChoice(None, 0.0, "http_error", self._min_confidence)
+        try:
+            parsed = SystemOneResponse.model_validate(response.json())
+        except (ValidationError, ValueError):
+            return CoverChoice(None, 0.0, "malformed", self._min_confidence)
+        answer = parsed.answers.get(TRIAGE_KEY)
+        if not isinstance(answer, ChoiceAnswer):
+            return CoverChoice(None, 0.0, "malformed", self._min_confidence)
+        self._logger.info(
+            "jev triage choice=%s confidence=%.2f latency_ms=%.0f",
+            answer.choice,
+            answer.confidence,
+            self._latency_ms(started),
+        )
+        if answer.choice == TRIAGE_UNCLEAR or answer.choice not in specialties:
+            return CoverChoice(None, answer.confidence, "unclear", self._min_confidence)
+        if answer.confidence < self._min_confidence:
+            return CoverChoice(None, answer.confidence, "not_confident", self._min_confidence)
+        return CoverChoice(answer.choice, answer.confidence, "chosen", self._min_confidence)
+
     async def choose_cover(
         self,
         situation: str,
