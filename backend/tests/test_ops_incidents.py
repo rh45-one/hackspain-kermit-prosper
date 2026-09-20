@@ -230,3 +230,43 @@ def test_a_cold_catalogue_opens_nothing(accounts_db, monkeypatch):
     monkeypatch.setattr(deps, "try_catalogue_cache", lambda org_id=None: None)
 
     assert asyncio.run(sweep_for_absences(DEFAULT_ORG_ID)) == 0
+
+
+# ---- el calendario de la casa ---------------------------------------------
+def test_a_booking_is_on_the_calendar_before_prosper_sees_it(accounts_db):
+    """Una cita cogida en una demostración no existía en ninguna pantalla.
+
+    Prosper sólo acepta acciones de llamadas que ella misma ha creado —
+    cualquier otro identificador es un 404— así que una llamada de navegador
+    no puede enviar nada. Eso no es un error: es su contrato. Lo que sí era un
+    error es que la cita no se viera en ningún sitio.
+    """
+    from agent.accounts.store import Booking, Store
+
+    shop = Store(accounts_db)
+    shop.record_booking(
+        DEFAULT_ORG_ID,
+        Booking(
+            id="",
+            patient_name="Hannah",
+            provider_name="Dra. Nuria Peral",
+            location_name="Arenal Norte",
+            starts_at="2026-09-21T10:15",
+            call_id="browser-1",
+        ),
+    )
+
+    row = shop.list_bookings(DEFAULT_ORG_ID)[0]
+    assert row.patient_name == "Hannah"
+    assert row.submitted is False
+
+    # Y cuando Prosper acepta las acciones de esa llamada, deja de ser sólo
+    # nuestra: la pantalla puede distinguir las dos cosas.
+    assert shop.mark_bookings_submitted(DEFAULT_ORG_ID, "browser-1") == 1
+    assert shop.list_bookings(DEFAULT_ORG_ID)[0].submitted is True
+
+
+def test_marking_a_call_that_booked_nothing_changes_nothing(accounts_db):
+    from agent.accounts.store import Store
+
+    assert Store(accounts_db).mark_bookings_submitted(DEFAULT_ORG_ID, "sin-citas") == 0

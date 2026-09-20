@@ -200,6 +200,41 @@ async def sweep_for_absences(org_id: str = DEFAULT_ORG_ID) -> int:
         return 0
 
 
+@router.get("/bookings")
+async def bookings(
+    request: Request,
+    org_id: str = DEFAULT_ORG_ID,
+    _: None = Depends(_access),
+) -> dict[str, Any]:
+    """El calendario de la casa: lo que el agente ha cogido en las llamadas.
+
+    `submitted` distingue una cita que existe también en Prosper de una que
+    sólo existe aquí — y una que sólo existe aquí no es un error: es una
+    llamada de navegador, que Prosper no acepta por contrato.
+    """
+    platform = accounts_store.store()
+    if not platform.exists:
+        return {"bookings": [], "total": 0, "submitted": 0}
+    rows = platform.list_bookings(org_id)
+    return {
+        "bookings": [
+            {
+                "id": row.id,
+                "patient_name": row.patient_name,
+                "provider_name": row.provider_name or row.provider_id,
+                "location_name": row.location_name,
+                "type_name": row.type_name,
+                "starts_at": row.starts_at,
+                "submitted": row.submitted,
+                "call_id": row.call_id,
+            }
+            for row in rows
+        ],
+        "total": len(rows),
+        "submitted": sum(1 for row in rows if row.submitted),
+    }
+
+
 @router.get("/shifts")
 async def cover_shifts(
     request: Request,

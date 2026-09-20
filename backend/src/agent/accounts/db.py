@@ -60,7 +60,7 @@ from agent.orgs import DEFAULT_ORG_ID
 
 # Bumped by appending to _MIGRATIONS. Never by editing one in place: the
 # volume already holds a database that has run the old ones.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
     (
@@ -325,6 +325,42 @@ _MIGRATIONS: list[tuple[int, tuple[str, ...]]] = [
             )
             """,
             "CREATE INDEX IF NOT EXISTS idx_patients_seen ON patients(org_id, last_seen_at)",
+        ),
+    ),
+    (
+        8,
+        (
+            # Las citas que ha cogido el agente, en el calendario de la casa.
+            #
+            # Una cita se envía a Prosper al colgar. Eso está bien para la
+            # llamada puntuada y deja fuera todo lo demás: una llamada de
+            # navegador no puede enviar nada —Prosper sólo acepta acciones de
+            # llamadas que ella misma ha creado, cualquier otro identificador
+            # es un 404— así que una cita cogida en una demostración no
+            # existía en ninguna pantalla.
+            #
+            # Esta tabla se escribe en el momento de cogerla, y guarda si
+            # llegó a enviarse. Así el calendario enseña lo que ha pasado en
+            # las llamadas, y dice cuáles además están en Prosper.
+            """
+            CREATE TABLE IF NOT EXISTS bookings (
+                id            TEXT PRIMARY KEY,
+                org_id        TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                patient_id    TEXT NOT NULL DEFAULT '',
+                patient_name  TEXT NOT NULL DEFAULT '',
+                provider_id   TEXT NOT NULL DEFAULT '',
+                provider_name TEXT NOT NULL DEFAULT '',
+                location_id   TEXT NOT NULL DEFAULT '',
+                location_name TEXT NOT NULL DEFAULT '',
+                type_name     TEXT NOT NULL DEFAULT '',
+                starts_at     TEXT NOT NULL DEFAULT '',
+                call_id       TEXT NOT NULL DEFAULT '',
+                -- 0 mientras sólo existe aquí; 1 cuando Prosper la aceptó.
+                submitted     INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_bookings_org ON bookings(org_id, starts_at)",
         ),
     ),
 ]

@@ -90,6 +90,24 @@ def _incident_row(row: Any) -> Incident:
 
 
 @dataclass(frozen=True)
+class Booking:
+    """Una cita que ha cogido el agente, vista desde la clínica."""
+
+    id: str
+    patient_id: str = ""
+    patient_name: str = ""
+    provider_id: str = ""
+    provider_name: str = ""
+    location_id: str = ""
+    location_name: str = ""
+    type_name: str = ""
+    starts_at: str = ""
+    call_id: str = ""
+    submitted: bool = False
+    created_at: str = ""
+
+
+@dataclass(frozen=True)
 class PatientRow:
     """Un paciente que la clínica ha visto de verdad.
 
@@ -646,6 +664,84 @@ class Store:
                 (normalize_org_id(org_id), incident_id),
             ).fetchone()
         return _incident_row(row) if row is not None else None
+
+    # ---- citas cogidas ---------------------------------------------------
+    def record_booking(self, org_id: str, booking: Booking) -> Booking:
+        """Apunta una cita en el momento de cogerla, enviada o no."""
+        row = Booking(
+            id=booking.id or f"apt-{uuid.uuid4().hex[:12]}",
+            patient_id=booking.patient_id,
+            patient_name=booking.patient_name,
+            provider_id=booking.provider_id,
+            provider_name=booking.provider_name,
+            location_id=booking.location_id,
+            location_name=booking.location_name,
+            type_name=booking.type_name,
+            starts_at=booking.starts_at,
+            call_id=booking.call_id,
+            submitted=booking.submitted,
+            created_at=now_iso(),
+        )
+        with connect(self.path) as db:
+            db.execute(
+                """INSERT INTO bookings (id, org_id, patient_id, patient_name, provider_id,
+                                         provider_name, location_id, location_name, type_name,
+                                         starts_at, call_id, submitted, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row.id,
+                    normalize_org_id(org_id),
+                    row.patient_id,
+                    row.patient_name,
+                    row.provider_id,
+                    row.provider_name,
+                    row.location_id,
+                    row.location_name,
+                    row.type_name,
+                    row.starts_at,
+                    row.call_id,
+                    1 if row.submitted else 0,
+                    row.created_at,
+                ),
+            )
+        return row
+
+    def mark_bookings_submitted(self, org_id: str, call_id: str) -> int:
+        """Cuando Prosper acepta las acciones de una llamada, sus citas lo dicen."""
+        if not call_id:
+            return 0
+        with connect(self.path) as db:
+            return int(
+                db.execute(
+                    "UPDATE bookings SET submitted = 1 WHERE org_id = ? AND call_id = ?",
+                    (normalize_org_id(org_id), call_id),
+                ).rowcount
+            )
+
+    def list_bookings(self, org_id: str, *, limit: int = 200) -> list[Booking]:
+        """Las próximas primero: un calendario se lee hacia delante."""
+        with connect(self.path) as db:
+            rows = db.execute(
+                "SELECT * FROM bookings WHERE org_id = ? ORDER BY starts_at ASC LIMIT ?",
+                (normalize_org_id(org_id), max(1, min(int(limit), 500))),
+            ).fetchall()
+        return [
+            Booking(
+                id=r["id"],
+                patient_id=r["patient_id"],
+                patient_name=r["patient_name"],
+                provider_id=r["provider_id"],
+                provider_name=r["provider_name"],
+                location_id=r["location_id"],
+                location_name=r["location_name"],
+                type_name=r["type_name"],
+                starts_at=r["starts_at"],
+                call_id=r["call_id"],
+                submitted=bool(r["submitted"]),
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
 
     # ---- pacientes vistos ------------------------------------------------
     def remember_patient(self, org_id: str, row: PatientRow) -> None:

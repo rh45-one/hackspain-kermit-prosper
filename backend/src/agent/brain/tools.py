@@ -547,6 +547,54 @@ class ToolBox:
             {"matches": summary, "count": len(summary), "note": _lookup_note(summary, national_id)}
         )
 
+    def _write_the_booking_down(
+        self, action: dict[str, Any], slot: dict[str, Any], patient: dict[str, Any]
+    ) -> None:
+        """Deja la cita en el calendario de la clínica, marcada como no enviada.
+
+        Con los nombres puestos, no con los identificadores: un calendario que
+        dice `PR02` obliga a quien lo lee a traducirlo, y el catálogo ya tiene
+        los nombres aquí mismo.
+
+        No levanta. Una cita apuntada de más es un renglón en una pantalla;
+        una llamada rota por apuntarla es una cita perdida.
+        """
+        try:
+            from agent.accounts import store as accounts_store
+            from agent.accounts.store import Booking
+            from agent.orgs import normalize_org_id
+
+            platform = accounts_store.store()
+            if not platform.exists:
+                return
+            provider = (
+                self.cache.provider_by_id(str(action.get("provider_id") or ""))
+                if self.cache is not None
+                else None
+            )
+            name = " ".join(
+                str(patient.get(part) or "")
+                for part in ("given_name", "first_surname", "second_surname")
+            ).strip()
+            platform.record_booking(
+                normalize_org_id(getattr(self.ctx, "org_id", "") or ""),
+                Booking(
+                    id="",
+                    patient_id=str(action.get("patient_id") or ""),
+                    patient_name=name,
+                    provider_id=str(action.get("provider_id") or ""),
+                    provider_name=str(getattr(provider, "name", "") or ""),
+                    location_id=str(action.get("location_id") or ""),
+                    location_name=str(slot.get("location_name") or ""),
+                    type_name=str(slot.get("appointment_type_name") or ""),
+                    starts_at=str(action.get("slot") or ""),
+                    call_id=str(getattr(self.ctx, "call_id", "") or ""),
+                    submitted=False,
+                ),
+            )
+        except Exception:  # noqa: BLE001 - nunca por delante de una cita
+            return
+
     def _remember_them(self, matches: list[dict[str, Any]]) -> None:
         """Apunta a quien ha aparecido. Sin documento ni teléfono, nunca.
 
@@ -1200,6 +1248,10 @@ class ToolBox:
         }
         self.ctx.queued_actions.append(action)
         self.ctx.audit("action_queued", action)
+        # Y en el calendario de la casa, ya. El envío a Prosper ocurre al
+        # colgar y sólo en una llamada que ella misma haya creado, así que
+        # una cita cogida en una demostración no existía en ninguna pantalla.
+        self._write_the_booking_down(action, slot, patient)
         reading = self.ctx.latest_decision
         await params.result_callback(
             {

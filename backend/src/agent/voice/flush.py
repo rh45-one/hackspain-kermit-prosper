@@ -23,6 +23,24 @@ ROUTES = {
 }
 
 
+def _mark_the_calendar(ctx: CallContext) -> None:
+    """Las citas de esta llamada pasan a "enviada" en el calendario de la casa.
+
+    El calendario las apunta al cogerlas, sin saber todavía si llegarán a
+    Prosper. Esto es lo que cierra esa duda, y por eso la pantalla puede
+    distinguir una cita que existe en los dos sitios de una que sólo existe
+    aquí. Nunca levanta: un renglón de una pantalla no puede impedir un envío.
+    """
+    try:
+        from agent.accounts import store as accounts_store
+
+        platform = accounts_store.store()
+        if platform.exists:
+            platform.mark_bookings_submitted(getattr(ctx, "org_id", ""), ctx.call_id)
+    except Exception:  # noqa: BLE001
+        return
+
+
 async def flush_call(ctx: CallContext, settings: Any) -> None:
     """Submit queued actions for a finished call. Flushes exactly once."""
     if ctx.submitted:
@@ -51,6 +69,7 @@ async def flush_call(ctx: CallContext, settings: Any) -> None:
         logger.error("scheduling submitter unavailable ({}); actions NOT submitted", exc)
 
     ctx.audit("flush_start", {"actions": len(ctx.queued_actions)})
+    _mark_the_calendar(ctx)
     try:
         for action in ctx.queued_actions:
             route = ROUTES.get(action.get("route", ""))

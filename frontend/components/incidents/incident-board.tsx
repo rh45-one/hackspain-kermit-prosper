@@ -45,6 +45,16 @@ const URGENCY: Record<string, { word: string; dot: string; rank: number }> = {
   queue: { word: "En cola", dot: "bg-steel/60", rank: 2 },
 };
 
+type Booking = {
+  id: string;
+  patient_name: string;
+  provider_name: string;
+  location_name: string;
+  type_name: string;
+  starts_at: string;
+  submitted: boolean;
+};
+
 type Shift = {
   id: string;
   person_name: string;
@@ -65,6 +75,7 @@ export function IncidentBoard({ callBase }: { callBase: string }) {
   const [auto, setAuto] = useState(false);
   const [lastDecision, setLastDecision] = useState<string>("");
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -82,6 +93,10 @@ export function IncidentBoard({ callBase }: { callBase: string }) {
       const covered = await fetch("/api/live/shifts", { cache: "no-store" });
       if (covered.ok) {
         setShifts(((await covered.json()) as { shifts?: Shift[] }).shifts ?? []);
+      }
+      const booked = await fetch("/api/live/bookings", { cache: "no-store" });
+      if (booked.ok) {
+        setBookings(((await booked.json()) as { bookings?: Booking[] }).bookings ?? []);
       }
     } catch {
       setError("No se puede hablar con el agente.");
@@ -274,6 +289,52 @@ export function IncidentBoard({ callBase }: { callBase: string }) {
           );
         })}
       </ul>
+
+      {bookings.length > 0 ? (
+        <section className="mt-10">
+          <h2 className="mb-1 font-heading text-[11px] tracking-[0.08em] text-brass uppercase">
+            Citas cogidas · {bookings.length}
+          </h2>
+          <p className="mb-3 text-[13px] text-steel">
+            Lo que el agente ha reservado en las llamadas, apuntado en el momento de cogerlo.
+            Las marcadas <span className="text-graphite">en Prosper</span> son las de una
+            llamada de la plataforma; el resto son de navegador, que Prosper no acepta por
+            contrato y por eso sólo viven aquí.
+          </p>
+          <ul className="grid gap-2">
+            {bookings.slice(0, 12).map((booking) => (
+              <li
+                key={booking.id}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-mist bg-canvas-white px-4 py-3"
+              >
+                <span className="font-mono text-[12px] tabular-nums text-graphite">
+                  {booking.starts_at.replace("T", " ").slice(0, 16) || "sin hora"}
+                </span>
+                <span className="font-heading text-[15px] text-graphite">
+                  {booking.patient_name || "paciente sin nombre"}
+                </span>
+                <span className="text-[13px] text-steel">
+                  con {booking.provider_name}
+                  {booking.location_name ? ` · ${booking.location_name}` : ""}
+                </span>
+                {booking.type_name ? (
+                  <span className="text-[12px] text-quiet">{booking.type_name}</span>
+                ) : null}
+                <span
+                  className={cn(
+                    "ml-auto rounded-full px-2.5 py-0.5 text-[11px]",
+                    booking.submitted
+                      ? "bg-graphite text-white"
+                      : "border border-mist text-steel",
+                  )}
+                >
+                  {booking.submitted ? "en Prosper" : "sólo aquí"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {shifts.length > 0 ? (
         <section className="mt-10">
